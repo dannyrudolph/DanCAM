@@ -1,0 +1,3 @@
+# Codex: run this skill only when the user names it ($jgl-setup-testing).
+policy:
+  allow_implicit_invocation: false

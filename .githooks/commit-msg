@@ -1,0 +1,31 @@
+#!/bin/sh
+# commit-msg — rejects AI attribution in commit messages (GIT-1 in AGENTS.md).
+#
+# Catches a Co-Authored-By trailer naming an AI tool or model, a
+# "Generated with/by <tool>" line, and the 🤖 marker. A human co-author passes.
+# Works the same whichever agent (or person) runs `git commit`.
+#
+# Activate once per clone:  git config core.hooksPath .githooks
+# (If the repo already uses Husky/lefthook, call this script from there.)
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+tools='claude|anthropic|openai|chatgpt|codex|gpt-?[0-9]|copilot|gemini|antigravity|cursor|devin|windsurf|aider|jules|ai assistant'
+pattern="^[[:space:]]*co-authored-by:.*($tools)|generated (with|by) (.*[^a-z])?($tools|ai)([^a-z]|$)|🤖"
+
+# Lines starting with # are git's own comments and never reach the commit.
+hits=$(grep -v '^#' "$msg_file" | grep -inE "$pattern")
+[ -z "$hits" ] && exit 0
+
+echo "commit-msg: commit rejected — the message carries AI attribution (GIT-1):" >&2
+printf '%s\n' "$hits" | sed 's/^/    line /' >&2
+cat >&2 <<'MSG'
+
+Remove those lines and commit again. A commit message records what changed;
+it doesn't credit the tool that typed it. If your AI tool adds this trailer by
+default, turn that off — in Claude Code, set
+  "attribution": { "commit": "", "pr": "", "sessionUrl": false }
+in .claude/settings.json.
+MSG
+exit 1

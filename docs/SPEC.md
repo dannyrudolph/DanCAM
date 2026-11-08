@@ -1,0 +1,249 @@
+# Browser 2D CAD — Claude Code Project Plan
+
+Nov 8, 2026 · @Dan Rudolph
+
+## How to use this doc
+
+This spec lives at `docs/SPEC.md`; its project rules are in `AGENTS.md` ("Project context").
+
+```text
+Read docs/SPEC.md in full. We are building a browser-based 2D drafting
+application in the style of AutoCAD LT (late 1990s): explicit geometry,
+command line plus toolbar, object snaps, trim/extend/fillet, and
+print-quality dimensioning. It is for sketching CNC turning and live-tool
+milling geometry for small medical device parts.
+
+Hard rules:
+- No parametric constraint solver. Geometry is edited by commands and by
+  typing exact values, never by solving relationships.
+- The geometry kernel is pure TypeScript with no DOM access and full unit
+  test coverage.
+- Every operation that changes the drawing is undoable.
+
+Start with Phase 0 from the roadmap. Before writing code, propose the
+folder structure, the core data types (entities, document, commands), and
+the list of npm dependencies, and wait for my approval. Then implement
+Phase 0, run the tests, and stop for my review. Do one phase at a time and
+never start the next phase without my go-ahead. Also create CLAUDE.md
+from the last section of the spec.
+```
+
+For each later phase, a short prompt is enough: "Implement Phase 2 from docs/SPEC.md. Propose the plan first, then build it, run all tests, and summarize what to try by hand."
+
+## Overview and principles
+
+The goal is a self-owned 2D drafting tool that replaces Solid Edge 2D Drafting for turning profiles and live-tool features. It runs in the browser from local files, works offline, and has no accounts or licenses.
+
+- **Drafting, not modeling.** Like AutoCAD LT: you place lines, arcs and circles at exact values, then trim, fillet and dimension them. Changing a dimension's value never moves geometry.
+- **Keyboard first.** A command line takes typed commands and aliases (`L`, `C`, `A`, `TR`, `EX`, `F`, `O`, `DIM`). It also takes coordinates and values at any prompt, with toolbar buttons as a second path.
+- **Exactness.** Coordinates are stored as 64-bit floats in drawing units. Display rounding never changes stored values. Geometric comparisons use one shared tolerance (default 1e-9 drawing units).
+- **Lathe-aware.** An optional lathe mode labels axes Z (horizontal) and X (vertical). It treats the X axis as a centerline and allows diameter entry for X values. Milling sketches use a normal X/Y view.
+- **Micro-part friendly.** Smooth zoom from a 0.0005" feature to a 2" overall part. Prints at enlarged scales such as 5:1, 10:1 and 20:1, with dimension text sized for the sheet, not the part.
+- **Single user, local data.** Drawings are saved as files on your machine. Nothing is sent to a server.
+
+## Tech stack and architecture
+
+TypeScript, built with Vite, drawn on an HTML Canvas 2D context. The result is a folder of static files you can open locally or host anywhere. Keep dependencies minimal so the project still builds years from now.
+
+| Layer | Choice | Notes |
+| --- | --- | --- |
+| Language / build | TypeScript (strict), Vite | Static output; optional PWA manifest for offline install |
+| Rendering | Canvas 2D, redrawn on change | Screen-space line widths; world-to-screen transform for pan/zoom |
+| UI | Plain TypeScript + DOM, or a light framework | Toolbar, command line, properties panel, status bar |
+| Tests | Vitest; Playwright later | Unit tests for geometry; screenshots for dimension rendering |
+| DXF | Hand-written R12 writer; evaluate an npm DXF parser for import | Writing DXF is simple; reading it is where a library helps |
+| PDF | jsPDF or browser print of an SVG render | Must keep true scale on paper |
+
+Modules, with dependencies pointing downward only:
+
+1. `geometry/`: pure math. Vectors, lines, arcs, circles, intersections, tangents, offsets, fillets, projections. No DOM.
+2. `model/`: the drawing document. Entities with stable ids, layers, dimension styles, units, and an undo/redo stack built on reversible change records.
+3. `snap/`: finds snap candidates near the cursor and ranks them.
+4. `commands/`: each command is a small state machine that asks for points, values, selections and options, like AutoCAD prompts.
+5. `render/`: draws entities, dimensions, snap markers, grips and rubber-band previews.
+6. `ui/`: input handling, command line, panels, and file dialogs.
+7. `io/`: native JSON, DXF, SVG and PDF.
+
+## Units, precision and dimension resolution
+
+Each drawing has one unit, inch or mm, chosen at creation. Typed values may override it with a suffix, and dimensions can show the other unit alongside.
+
+- **Drawing units:** inch or mm, stored in the file. A `UNITS` command converts the drawing (scale by 25.4) or just relabels it, and asks which.
+- **Value entry:** accepts decimals (`.250`), fractions (`3/8`), unit suffixes (`6.35mm`, `0.25in`) and simple arithmetic (`1.5/2`, `0.375+0.010`).
+- **Display precision** for coordinates and the properties panel is set separately from dimension precision. It is 0–8 decimals and never rounds stored values.
+- **Dimension precision** is set per dimension style, 0–8 decimals for linear and decimal degrees or D°M'S for angles, with a per-dimension override.
+- **Zero rules by unit, per ASME Y14.5 defaults (editable):**
+  - Inch: no leading zero (`.250`); trailing zeros kept to the stated precision.
+  - Millimetre: leading zero kept (`0.25`); trailing zeros suppressed unless a tolerance needs them.
+- **Tolerances** per dimension: none, symmetric (`.250 ±.001`), deviation (`+.002/-.000`) or limits (`.251/.249`), each with its own precision.
+- **Dual units:** optional alternate value in brackets, such as `.250 [6.35]`, with its own precision.
+- **Dimension scale:** text height, arrow size and gaps are set in sheet units and multiplied by the print scale, like AutoCAD's DIMSCALE. A 10:1 detail still prints 0.12" text.
+
+## Drawing entities, input and snaps
+
+The entity set stays small: point, line, construction line (xline), ray, circle, arc and single-line text. Centerlines and center marks are line or annotation entities on their own layer. Polylines can come later if needed.
+
+**Creation methods**
+
+| Command | Methods |
+| --- | --- |
+| Line | Point to point, chained; Close; Undo last segment |
+| Circle | Center + radius, Center + diameter, 2-point, 3-point, Tangent-Tangent-Radius, Tangent-Tangent-Tangent |
+| Arc | 3-point, Start-Center-End, Start-End-Radius, Start-Center-Angle, Continue tangent from last |
+| Construction line | Horizontal, Vertical, Angle, Through two points, Offset from a line |
+
+**Point entry at any prompt**
+
+- Absolute `x,y` (lathe mode `z,x`, with X typed as diameter when diameter mode is on).
+- Relative `@dx,dy` and polar `@length<angle`, with angles counter-clockwise from +X.
+- Direct distance: aim with the cursor, type a length, press Enter.
+- Angle lock: type `<30` to lock the next segment's angle, then click or type a length.
+- Ortho (F8) and polar tracking (F10) at a set increment, 15° by default.
+- The status bar shows live cursor coordinates, plus length and angle from the last point.
+
+**Object snaps** (running snaps toggled with F3; a single snap can be typed at a prompt, such as `END` or `TAN`)
+
+- Endpoint, Midpoint, Center, Quadrant, Intersection, Perpendicular, Tangent, Nearest, Node
+- Extension and object snap tracking, which line up with a point's X or Y, added in a later phase
+- Each snap has a distinct marker glyph, with a tooltip naming the snap
+
+**Selection and grips**
+
+- Click to pick; drag left-to-right for a window, right-to-left for a crossing; Shift-click removes.
+- A selected entity shows grips. Dragging an endpoint grip stretches it and respects snaps; dragging a center grip moves it.
+- The properties panel lists exact values (endpoints, center, radius, start and end angles, length) and accepts typed edits. This is how you change a drawn size without a solver.
+- Inquiry commands: `DIST`, `ID` (point coordinates), `LIST` and angle measure.
+
+## Modify commands
+
+Trim, extend and fillet are the core of the tool and get the most tests. Every command below is undoable, and each works on lines, arcs and circles unless noted.
+
+| Command | Alias | Behavior |
+| --- | --- | --- |
+| Trim | TR | Select cutting edges (Enter = all), then pick the pieces to remove. Shift-pick extends instead. Trimming a circle turns it into an arc. |
+| Extend | EX | Select boundaries (Enter = all), then pick near the end to extend. Arcs extend along their circle. Shift-pick trims instead. |
+| Fillet | F | Radius option; picks two entities and keeps the picked sides. Radius 0 makes a sharp corner. Trim mode on/off. |
+| Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45° |
+| Offset | O | By distance or through a point; arcs and circles offset concentrically |
+| Break | BR | At a point, or between two points |
+| Join | J | Collinear lines into one line; arcs on the same circle into one arc |
+| Lengthen | LEN | Delta, total length or percent, for lines and arcs |
+| Move / Copy | M / CO | Base point and second point, with full snap and typed entry |
+| Rotate | RO | Base point and angle, or a reference angle |
+| Mirror | MI | Two-point mirror line; option to keep or erase the source |
+| Scale | SC | Base point and factor, or a reference length |
+| Array | AR | Rectangular, or polar (count + angle), for bolt circles and flats |
+| Stretch | S | Crossing selection moves the endpoints inside the window |
+| Erase | E / Del | Removes the selection |
+
+Edge cases to handle on purpose: tangent intersections, endpoints that land within tolerance of an edge, arcs crossing 0°, and trims that would leave zero-length pieces.
+
+## Dimensioning
+
+Dimensions are annotation entities linked to the geometry they measure. When a modify command moves that geometry, the dimension re-measures. Its value is only ever a readout, never an input.
+
+**Dimension types**
+
+| Type | Picks | Shows |
+| --- | --- | --- |
+| Linear | Two points or one line; horizontal or vertical decided by drag direction, or forced | Distance along the axis |
+| Aligned | Two points or one line | True length |
+| Radius | Arc or circle | `R.015` |
+| Diameter | Circle or arc | `Ø.125` |
+| Angular | Two lines, an arc, or vertex + two points | Angle, with quadrant chosen by cursor |
+| Symmetric diameter | Centerline (axis), then one or more feature points or edges | `Ø` + twice the distance from the axis |
+| Ordinate | Origin set once, then feature points | X or Z (Y) coordinate from the origin |
+| Baseline / Continue | Starts from an existing linear dimension | Stacked or chained linear dimensions |
+| Leader / note | Arrow point, then text | Free text, such as `.010 X 45°` or `2X` callouts |
+| Center mark / centerline | Circle or arc; two lines | Annotation lines |
+
+**Symmetric diameter (lathe)**
+
+- Pick the part centerline once. Each later pick places a diameter dimension for a feature on one side of the axis. The value is twice the perpendicular distance.
+- The command stays active for consecutive picks, like Solid Edge, so a full turned profile can be dimensioned in one pass.
+- Two display styles, set per dimension style:
+  - Half style: arrow and extension line at the feature only, with the dimension line running past the centerline.
+  - Full style: mirrored extension lines on both sides of the axis.
+- Diameter mode in lathe view also applies `Ø` automatically to linear dimensions measured across the centerline.
+
+**Ordinate**
+
+- `DIMORIGIN` sets the datum, usually the part face and centerline. It is stored in the drawing and shown with a marker.
+- Each pick creates an X or Z ordinate, chosen by drag direction or forced. Leaders jog automatically when text would overlap.
+- Ordinate text lines up on a common baseline, and an "align ordinates" command restacks a set evenly.
+- Option to show ordinate X values as diameters in lathe mode.
+
+**Dimension styles**
+
+- Named styles (for example `INCH-3PL`, `INCH-4PL`, `MM-2PL`) control text height, font, arrow type and size, extension line offset and overshoot, text placement, precision, zero rules, tolerance format, dual units, and prefix or suffix.
+- Any single dimension can override precision, tolerance or text. Text overrides use `<>` to stand for the measured value, as in `<> THRU` or `2X <>`.
+- Text and dimension-line position can be dragged by grips after placement, and snap to sensible offsets from the geometry.
+
+## Files, saving and printing
+
+The native format is a versioned JSON file that you own and that stays readable without the app. DXF is the bridge to Solid Edge, CAM and customers.
+
+- **Native file:** `.cad2d.json` with a `schemaVersion` field and migration functions, so old drawings always open.
+- **Saving:** Save and Save As use the browser's File System Access API where supported (Chrome, Edge), with a download fallback. Autosave keeps a crash-recovery copy in IndexedDB.
+- **DXF export:** ASCII DXF with units set in the header and layers kept. LINE, CIRCLE, ARC, POINT and TEXT are written natively. Dimensions export as exploded lines and text by default, with native DIMENSION entities as an option.
+- **DXF import:** lines, arcs, circles, polylines (split into lines and arcs) and text, so existing Solid Edge drawings can be brought in. Imported dimensions come in as plain geometry.
+- **Print / PDF:** paper sizes Letter, Tabloid, A4 and A3. Plot scale is 1:1, 2:1, 5:1, 10:1, 20:1 or custom. A simple title block template holds part number, revision, material, units, scale and date. Line weights are set by layer.
+- **SVG export** for quick sharing or pasting into documents.
+
+## Phased roadmap
+
+Each phase ends with something you can use and check by hand. Phases 1–3 already give a working sketcher; Phases 4–5 make it a drafting tool.
+
+1. **Phase 0: Canvas and shell**
+   - Vite + TypeScript project, test runner, canvas with grid, wheel zoom at the cursor, middle-drag pan, Zoom Extents, live coordinate readout, command line, empty undo stack.
+   - Done when: zooming from 2" to 0.001" across the screen stays smooth and lines stay crisp.
+2. **Phase 1: Drawing and typed input**
+   - Line, circle, arc, xline and point with all creation methods; absolute, relative, polar and direct-distance entry; ortho and polar tracking; inch/mm; layers; JSON save and load.
+   - Done when: a turned profile typed from a print matches its coordinates exactly in the properties panel.
+3. **Phase 2: Snaps, selection, grips, basic edits**
+   - All object snaps with markers; window and crossing selection; grips; properties panel editing; erase, move, copy, rotate, mirror, scale; DIST, ID, LIST.
+   - Done when: tangent and intersection snaps land exactly, checked with ID, on line-arc and arc-arc cases.
+4. **Phase 3: Trim, extend, fillet and friends**
+   - Trim, extend, fillet, chamfer, offset, break, join, lengthen, array, stretch.
+   - Done when: a full turned profile with corner radii and chamfers can be built from construction lines by trimming alone.
+5. **Phase 4: Core dimensions**
+   - Linear, aligned, radius, diameter, angular, leader; dimension styles; precision, zero rules, tolerances, dual units; text overrides; dimension grips.
+   - Done when: a dimensioned drawing matches a Solid Edge print value for value at 3 and 4 places.
+6. **Phase 5: Lathe dimensioning**
+   - Symmetric diameter (both styles), ordinate with origin and auto-jog, baseline and continue, center marks and centerlines, associativity with geometry edits, lathe mode and diameter entry.
+   - Done when: one of your real lathe parts can be dimensioned the way you do it in Solid Edge today.
+7. **Phase 6: Output**
+   - DXF export and import, PDF and SVG at scale, title block, PWA offline install.
+   - Done when: an exported DXF opens in Solid Edge with correct units and sizes, and a 10:1 PDF measures true with calipers.
+8. **Later, optional**
+   - Lathe G-code export from a selected profile, blocks or symbols, hatching, more linetypes, multiple views or sheets.
+
+## Testing and CLAUDE.md
+
+The geometry kernel is where silent errors would cost you parts, so it carries the heaviest tests. Your own drawings are the final check.
+
+- **Unit tests** for every geometry function, using known answers: line-arc intersections, tangent-tangent-radius circles, fillet centers, offsets, and trim results.
+- **Property tests** (for example with fast-check) on random geometry. Trim never lengthens an entity, offset distance always holds, and intersection points lie on both entities.
+- **Round-trip tests:** save then load, and DXF export then import, return identical geometry within tolerance.
+- **Screenshot tests** (Playwright) for dimension rendering in each style, so layout changes are seen.
+- **Reference parts:** put 3–5 of your real drawings, exported from Solid Edge as DXF and PDF, in `reference/`. Each phase is checked against them.
+
+Contents for `CLAUDE.md` at the project root:
+
+```markdown
+# 2D CAD project rules
+
+Spec: docs/SPEC.md. Re-read the relevant section before each phase.
+
+- AutoCAD LT-style drafting. NEVER add a constraint solver or
+  dimension-driven geometry. Dimensions only read geometry.
+- geometry/ is pure TypeScript: no DOM, no imports from model/ or ui/.
+- Every drawing change goes through the undo stack as a reversible record.
+- One shared tolerance constant for comparisons; never hard-code epsilons.
+- Stored coordinates are never rounded. Rounding happens only at display.
+- Add or update unit tests with every geometry or command change.
+  Run `npm test` and `npm run typecheck` before saying a task is done.
+- Work one roadmap phase at a time; propose a plan and wait for approval.
+- Keep dependencies minimal; ask before adding any npm package.
+- Commit in small steps with clear messages.
+```

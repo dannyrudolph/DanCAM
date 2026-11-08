@@ -1,0 +1,46 @@
+# Codex execution-policy rules — the Codex half of optional/agent-guards.
+# Copy to <repo>/.codex/rules/guards.rules (loads once the project is trusted).
+#
+# Codex rules match a command's PREFIX, so they catch `git push --force …` but
+# not `git push origin main --force`. The Claude Code hook in ../hooks/ matches
+# anywhere in the command; this file is the closest Codex allows. Check a
+# command with:  codex execpolicy check --pretty --rules .codex/rules/guards.rules -- git push -f
+
+prefix_rule(
+    pattern = ["git", "push", ["--force", "-f", "--force-with-lease"]],
+    decision = "forbidden",
+    justification = "Force push rewrites shared history. If the user really wants it, they run it themselves.",
+    match = ["git push --force origin main", "git push -f"],
+    not_match = ["git push origin main"],
+)
+
+prefix_rule(
+    pattern = ["git", ["push", "commit"], "--no-verify"],
+    decision = "forbidden",
+    justification = "--no-verify skips the repo's git hooks. Fix what the hook reports instead.",
+    match = ["git push --no-verify", "git commit --no-verify -m wip"],
+    not_match = ["git commit -m wip"],
+)
+
+prefix_rule(
+    pattern = ["sops", ["-d", "--decrypt"]],
+    decision = "forbidden",
+    justification = "Decrypting prints secret values into the transcript (SEC-2). Use scripts/secrets.sh exec <env> -- <cmd>.",
+    match = ["sops -d secrets/prod.enc.env", "sops --decrypt x.enc.yaml"],
+    not_match = ["sops --encrypt x.dec.yaml"],
+)
+
+prefix_rule(
+    pattern = [["cat", "less", "more", "head", "tail"], [".env", ".env.local", ".env.production", ".dev.vars"]],
+    decision = "forbidden",
+    justification = "Reading a plaintext secret file puts its values in the transcript (SEC-2). Use the names in .env.example.",
+    match = ["cat .env", "head .env.local"],
+    not_match = ["cat .env.example"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Pushing leaves this machine (AUTO-2, GIT-2). Ask the user first.",
+    match = ["git push", "git push -u origin feature/x"],
+)
