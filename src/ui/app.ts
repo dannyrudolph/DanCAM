@@ -13,7 +13,7 @@ import * as vp from '../render/viewport';
 import { ContextMenu, type MenuItem } from './contextMenu';
 import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
-import { bindCanvasInput } from './input';
+import { type ScrollMode, bindCanvasInput } from './input';
 import { PropertiesPanel } from './propertiesPanel';
 import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
 
@@ -26,6 +26,25 @@ export const TOOLS: readonly ToolDef[] = [lineTool, pointTool];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
+
+const SCROLL_MODE_KEY = 'dancam.scrollMode';
+
+/** The viewer's scroll preference; a convenience, so storage failures just fall back to Pan. */
+function loadScrollMode(): ScrollMode {
+  try {
+    return localStorage.getItem(SCROLL_MODE_KEY) === 'zoom' ? 'zoom' : 'pan';
+  } catch {
+    return 'pan';
+  }
+}
+
+function saveScrollMode(mode: ScrollMode): void {
+  try {
+    localStorage.setItem(SCROLL_MODE_KEY, mode);
+  } catch {
+    // Private mode or blocked storage: the setting just won't persist.
+  }
+}
 
 function el<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -57,7 +76,13 @@ export class App {
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
-  private readonly settings: StatusSettings = { ortho: false, polar: true, polarIncrementDeg: 15, precision: DEFAULT_PRECISION };
+  private readonly settings: StatusSettings = {
+    scrollMode: loadScrollMode(),
+    ortho: false,
+    polar: true,
+    polarIncrementDeg: 15,
+    precision: DEFAULT_PRECISION,
+  };
 
   private view: vp.Viewport = { center: { x: 1.5, y: 1 }, scale: INITIAL_SCALE, widthPx: 1, heightPx: 1 };
   private cursorScreen: Vec2 | undefined;
@@ -85,7 +110,10 @@ export class App {
     };
     this.runner = new ToolRunner(ctx);
 
-    this.status = new StatusBar(el('status'), this.settings, () => this.refresh());
+    this.status = new StatusBar(el('status'), this.settings, () => {
+      saveScrollMode(this.settings.scrollMode);
+      this.refresh();
+    });
     this.status.setUnits(drawing.units);
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
@@ -352,6 +380,7 @@ export class App {
       contextMenu: (x, y) => this.menu.open(x, y, this.contextItems()),
       leftDragPans: () => this.panMode || this.spaceHeld,
       panningChanged: (panning) => this.updateCanvasCursor(panning),
+      scrollMode: () => this.settings.scrollMode,
     });
 
     window.addEventListener('keydown', (e) => this.onKey(e));

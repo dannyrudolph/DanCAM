@@ -229,3 +229,54 @@ test.describe('panning without a middle button', () => {
     await expect(page.getByTestId('tool-line')).toHaveClass(/active/);
   });
 });
+
+test.describe('trackpad and wheel', () => {
+  const coordsAt = async (page: Page, x: number, y: number): Promise<string> => {
+    await page.mouse.move(x, y);
+    return (await page.locator('.status-coords').textContent()) ?? '';
+  };
+  // Synthetic wheel events carry whole-pixel positions, so test at whole pixels.
+  const roundedCenter = async (page: Page) => {
+    const c = await canvasCenter(page);
+    return { x: Math.round(c.x), y: Math.round(c.y) };
+  };
+  type WheelInit = { deltaX?: number; deltaY?: number; ctrlKey?: boolean };
+  const wheel = (page: Page, x: number, y: number, init: WheelInit): Promise<void> =>
+    page.evaluate(
+      (a: { x: number; y: number; init: WheelInit }) => {
+        document.getElementById('canvas')!.dispatchEvent(
+          new WheelEvent('wheel', { clientX: a.x, clientY: a.y, bubbles: true, cancelable: true, ...a.init }),
+        );
+      },
+      { x, y, init },
+    );
+
+  test('two-finger scroll pans by default', async ({ page }) => {
+    const c = await roundedCenter(page);
+    const before = await coordsAt(page, c.x, c.y);
+    await wheel(page, c.x, c.y, { deltaX: -120, deltaY: -80 });
+    // Fingers moved right and down: the drawing follows them.
+    expect(await coordsAt(page, c.x + 120, c.y + 80)).toBe(before);
+  });
+
+  test('pinch zooms about the cursor', async ({ page }) => {
+    const c = await roundedCenter(page);
+    const at = await coordsAt(page, c.x, c.y);
+    const off = await coordsAt(page, c.x + 200, c.y);
+    await wheel(page, c.x, c.y, { deltaY: -50, ctrlKey: true });
+    expect(await coordsAt(page, c.x, c.y)).toBe(at);
+    expect(await coordsAt(page, c.x + 200, c.y)).not.toBe(off);
+  });
+
+  test('Scroll: Zoom makes the wheel zoom instead, and is remembered', async ({ page }) => {
+    await page.getByTestId('scroll-mode').selectOption('zoom');
+    await page.reload();
+    await expect(page.getByTestId('scroll-mode')).toHaveValue('zoom');
+    const c = await roundedCenter(page);
+    const at = await coordsAt(page, c.x, c.y);
+    const off = await coordsAt(page, c.x + 200, c.y);
+    await wheel(page, c.x, c.y, { deltaY: -100 });
+    expect(await coordsAt(page, c.x, c.y)).toBe(at);
+    expect(await coordsAt(page, c.x + 200, c.y)).not.toBe(off);
+  });
+});

@@ -19,7 +19,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 
 ## In flight
 
-- Waiting for the user's hand review of 1a before starting 1b.
+- 1a reviewed and approved by the user. Starting 1b.
 
 ## Next: Phase 1b
 
@@ -32,6 +32,6 @@ space for deep zoom.
 
 ## Open questions
 
-- Trackpad: two-finger scroll currently zooms (like a mouse wheel). Ask
-  whether it should pan instead, with pinch to zoom.
+- Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
+  status bar restores mouse-wheel zoom (remembered per browser).
 - Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 6.

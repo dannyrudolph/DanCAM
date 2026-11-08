@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { wheelZoomFactor } from './input';
+import { wheelAction, wheelZoomFactor } from './input';
 import { formatFromBase, formatNumber, formatReadout } from './statusBar';
 
 describe('coordinate readout', () => {
@@ -39,5 +39,27 @@ describe('wheelZoomFactor', () => {
 describe('formatFromBase', () => {
   it('shows length and angle from the base point', () => {
     expect(formatFromBase({ x: 1, y: 2 }, { x: 4, y: 6 }, 3)).toBe('L 5.000  ∠ 53.130°');
+  });
+});
+
+describe('wheelAction', () => {
+  it('a pinch (ctrlKey) zooms in either mode, spreading fingers zooms in', () => {
+    for (const mode of ['pan', 'zoom'] as const) {
+      const a = wheelAction(0, -10, 0, true, mode);
+      expect(a.kind).toBe('zoom');
+      if (a.kind === 'zoom') expect(a.factor).toBeCloseTo(Math.exp(0.1), 12);
+    }
+  });
+
+  it('in pan mode, two-finger scroll moves the drawing with the fingers', () => {
+    expect(wheelAction(30, -20, 0, false, 'pan')).toEqual({ kind: 'pan', dx: -30, dy: 20 });
+  });
+
+  it('in pan mode, line-mode deltas are converted to pixels', () => {
+    expect(wheelAction(0, 3, 1, false, 'pan')).toEqual({ kind: 'pan', dx: -0, dy: -48 });
+  });
+
+  it('in zoom mode, the wheel zooms exactly as before', () => {
+    expect(wheelAction(0, -100, 0, false, 'zoom')).toEqual({ kind: 'zoom', factor: wheelZoomFactor(-100, 0) });
   });
 });

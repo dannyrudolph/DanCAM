@@ -1,6 +1,7 @@
 import { angleDeg } from '../commands/pointInput';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
+import type { ScrollMode } from './input';
 
 export const DEFAULT_PRECISION = 4;
 export const MAX_PRECISION = 8;
@@ -27,6 +28,7 @@ export function formatFromBase(base: Vec2, p: Vec2, decimals: number): string {
 }
 
 export type StatusSettings = {
+  scrollMode: ScrollMode;
   ortho: boolean;
   polar: boolean;
   polarIncrementDeg: number;
@@ -79,9 +81,19 @@ export class StatusBar {
       (v) => (settings.precision = Number(v)),
     );
     this.precision.dataset.testid = 'precision';
+    const scroll = this.select(
+      [
+        ['pan', 'Scroll: Pan'],
+        ['zoom', 'Scroll: Zoom'],
+      ],
+      settings.scrollMode,
+      'Two-finger scroll or mouse wheel: pan (trackpad) or zoom (mouse). Pinch always zooms.',
+      (v) => (settings.scrollMode = v as ScrollMode),
+    );
+    scroll.dataset.testid = 'scroll-mode';
 
     const right = span('status-right');
-    right.append(this.ortho, this.polar, this.increment, this.precision, this.units);
+    right.append(scroll, this.ortho, this.polar, this.increment, this.precision, this.units);
     root.append(this.prompt, this.coords, this.fromBase, right);
     this.refreshToggles();
   }

@@ -18,6 +18,32 @@ export function wheelZoomFactor(deltaY: number, deltaMode: number): number {
   return Math.exp(-px * ZOOM_PER_PIXEL);
 }
 
+/** Zoom per pixel of a trackpad pinch, which sends much smaller deltas than a wheel. */
+const PINCH_ZOOM_PER_PIXEL = 0.01;
+
+/** What plain two-finger scroll (or a mouse wheel) does. Pinch always zooms. */
+export type ScrollMode = 'pan' | 'zoom';
+
+export type WheelAction = { readonly kind: 'zoom'; readonly factor: number } | { readonly kind: 'pan'; readonly dx: number; readonly dy: number };
+
+/**
+ * Maps a wheel event to a view change. A trackpad pinch arrives as a wheel
+ * event with ctrlKey set and always zooms. Otherwise `mode` decides: 'pan'
+ * suits a trackpad (content follows the fingers), 'zoom' suits a mouse wheel.
+ */
+export function wheelAction(
+  deltaX: number,
+  deltaY: number,
+  deltaMode: number,
+  ctrlKey: boolean,
+  mode: ScrollMode,
+): WheelAction {
+  const k = deltaMode === DOM_DELTA_LINE ? PIXELS_PER_LINE : 1;
+  if (ctrlKey) return { kind: 'zoom', factor: Math.exp(-deltaY * k * PINCH_ZOOM_PER_PIXEL) };
+  if (mode === 'zoom') return { kind: 'zoom', factor: wheelZoomFactor(deltaY, deltaMode) };
+  return { kind: 'pan', dx: -deltaX * k, dy: -deltaY * k };
+}
+
 export type CanvasHandlers = {
   zoomAt(screen: Vec2, factor: number): void;
   pan(dxPx: number, dyPx: number): void;
@@ -31,13 +57,14 @@ export type CanvasHandlers = {
   leftDragPans(): boolean;
   /** Called when panning starts or stops, to show a grab cursor. */
   panningChanged(panning: boolean): void;
+  scrollMode(): ScrollMode;
 };
 
 /** A left press that moves less than this many pixels counts as a click. */
 const CLICK_SLOP_PX = 4;
 
 /**
- * Wheel zoom at the cursor; pan by middle-drag, or left-drag while Space is
+ * Wheel or pinch zoom at the cursor; two-finger scroll pan; pan by middle-drag, or left-drag while Space is
  * held or the Pan button is on; double-middle-click Zoom Extents; left click;
  * right-click menu.
  */
@@ -69,7 +96,9 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
     'wheel',
     (e) => {
       e.preventDefault();
-      h.zoomAt(local(e), wheelZoomFactor(e.deltaY, e.deltaMode));
+      const a = wheelAction(e.deltaX, e.deltaY, e.deltaMode, e.ctrlKey, h.scrollMode());
+      if (a.kind === 'zoom') h.zoomAt(local(e), a.factor);
+      else h.pan(a.dx, a.dy);
     },
     { passive: false },
   );
