@@ -341,3 +341,8 @@ input {
 .context-menu button:disabled {
   opacity: 0.4;
 }
+
+.option-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

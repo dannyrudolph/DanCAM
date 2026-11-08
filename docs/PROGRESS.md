@@ -36,8 +36,16 @@ Five steps, one commit each:
    nearer end), render via `arcScreenPieces` (0.25px chord error) with dash
    offsets and tangent end gaps (`insetArc`), xline dashes anchored at the base
    point, properties rows. The `?demo` drawing has an end view with all three.
-3. **Next: tools** — — `entity` and `value` requests; Circle (C), Arc (A), Xline (X).
-4. Layers — undoable layer records, layers panel, current layer.
+3. **Tools — done.** `value` requests (one box at the cursor: R, Ø, ∠, Dist;
+   click takes the cursor's value, typing locks one) and `entity` requests
+   (click an object; candidates highlight on hover). `MethodChoice` puts a
+   tool's methods in the options bar and keeps the choice between runs.
+   Circle (C): Center-Radius/Diameter, 2P, 3P, TTR, TTT. Arc (A): 3P, S-C-E,
+   S-E-R (bulges toward the cursor), S-C-Angle (negative = clockwise),
+   Continue (from `ToolContext.continuation`, set by Line and Arc; falls back
+   to 3P when the last one was undone). Xline (X): H, V, Angle (point then
+   angle), 2P, Offset (pick a line or xline; distance and side from the cursor).
+4. **Next: layers** — undoable layer records, layers panel, current layer.
 5. Units and files — new drawing, convert/relabel, `.cad2d.json` save/load.
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
@@ -46,6 +54,10 @@ layer is saved in the file but not undoable; ray and IndexedDB autosave are
 deferred (ray to Phase 2, autosave to Phase 6).
 
 ## Open questions
+
+- TTR between two parallel lines finds nothing: the kernel treats the
+  coincident offset lines as having no intersection, where AutoCAD places the
+  circle nearest the picks. Fix in `tangentTangentRadius` when it matters.
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).

@@ -24,12 +24,14 @@ export function distanceToEntity(p: Vec2, e: Entity): number {
 /**
  * The visible entity nearest to `p` within `radius` drawing units, or
  * undefined. Ties go to the entity drawn last, which is the one on top.
+ * `accepts` limits the pick to the entities a tool step can use.
  */
-export function pickEntity(d: Drawing, p: Vec2, radius: number): EntityId | undefined {
+export function pickEntity(d: Drawing, p: Vec2, radius: number, accepts?: (e: Entity) => boolean): EntityId | undefined {
   let best: EntityId | undefined;
   let bestDist = radius;
   for (const e of d.entities.values()) {
     if (d.layers.get(e.layer)?.visible === false) continue;
+    if (accepts && !accepts(e)) continue;
     const dist = distanceToEntity(p, e);
     if (dist <= bestDist) {
       best = e.id;

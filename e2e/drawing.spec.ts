@@ -189,6 +189,88 @@ test('a focused box that has not been typed in keeps following the cursor', asyn
   await expect(angle).toHaveValue('180.0000');
 });
 
+/** Screen position of a world point after Zoom Extents fits `extents` into the canvas. */
+async function extentsMapper(page: Page, extents: { minX: number; maxX: number; minY: number; maxY: number }) {
+  const box = await page.locator('#canvas').boundingBox();
+  if (!box) throw new Error('canvas has no box');
+  const w = extents.maxX - extents.minX;
+  const h = extents.maxY - extents.minY;
+  const scale = Math.min(w > 0 ? (box.width * 0.9) / w : Infinity, h > 0 ? (box.height * 0.9) / h : Infinity);
+  const cx = (extents.minX + extents.maxX) / 2;
+  const cy = (extents.minY + extents.maxY) / 2;
+  return (x: number, y: number) => ({ x: box.x + box.width / 2 + (x - cx) * scale, y: box.y + box.height / 2 - (y - cy) * scale });
+}
+
+test.describe('circle, arc and xline tools', () => {
+  test('a circle from a typed center and radius', async ({ page }) => {
+    await page.keyboard.press('c');
+    await expect(page.locator('[data-option="method:cr"]')).toHaveClass(/active/);
+    await typeValues(page, '0.5', '0.5'); // center
+    await expect(page.locator('#status .status-prompt')).toHaveText('Circle: pick or type the radius');
+    await expect(page.locator('.input-field span')).toHaveText(['R']);
+    await typeValues(page, '1/4');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: 0.25, maxX: 0.75, minY: 0.25, maxY: 0.75 });
+    const p = at(0.75, 0.5);
+    await page.mouse.click(p.x, p.y);
+    await expect(prop(page, 'Radius')).toHaveText('0.2500');
+    await expect(prop(page, 'Center X')).toHaveText('0.5000');
+  });
+
+  test('Arc Continue, chosen in the options bar, starts tangent to the last line', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+
+    await page.keyboard.press('a');
+    await page.locator('[data-option="method:continue"]').click();
+    await expect(page.locator('[data-option="method:continue"]')).toHaveClass(/active/);
+    await typeValues(page, '2', '90'); // end point 2 straight up from (1, 0): a half circle
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: 0, maxX: 2, minY: 0, maxY: 2 });
+    const p = at(2, 1);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Arc /);
+    await expect(prop(page, 'Center X')).toHaveText('1.0000');
+    await expect(prop(page, 'Center Y')).toHaveText('1.0000');
+    await expect(prop(page, 'Included angle')).toHaveText('180.0000°');
+  });
+
+  test('an offset xline from a picked line, on the side of the cursor', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: 0, maxX: 1, minY: 0, maxY: 0 });
+
+    await page.keyboard.press('x');
+    await page.locator('[data-option="method:offset"]').click();
+    const onLine = at(0.5, 0);
+    await page.mouse.click(onLine.x, onLine.y); // pick the line
+    await expect(page.locator('#status .status-prompt')).toHaveText(/offset distance/);
+    await page.mouse.move(onLine.x, onLine.y + 80); // below the line
+    await typeValues(page, '0.25');
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    const onXline = at(0.9, -0.25);
+    await page.mouse.click(onXline.x, onXline.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Xline /);
+    await expect(prop(page, 'Base Y')).toHaveText('-0.2500');
+    await expect(prop(page, 'Angle')).toHaveText('0.0000°');
+  });
+});
+
 test.describe('right-click menu', () => {
   test('closes after choosing an item', async ({ page }) => {
     const c = await canvasCenter(page);

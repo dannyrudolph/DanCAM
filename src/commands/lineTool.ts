@@ -62,4 +62,5 @@ export const lineTool: ToolDef = {
 function commitSegment(ctx: ToolContext, start: Vec2, end: Vec2): void {
   const line = makeLine(ctx, newEntityId(ctx.drawing), start, end);
   ctx.undo.commit({ label: 'Line', changes: [{ op: 'add', entity: line }] });
+  ctx.continuation = { id: line.id, end, dir: { x: end.x - start.x, y: end.y - start.y } };
 }

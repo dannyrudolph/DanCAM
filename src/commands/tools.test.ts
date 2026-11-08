@@ -1,30 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createDrawing } from '../model/drawing';
-import type { Entity, LineEntity } from '../model/entity';
-import { UndoStack } from '../model/undo';
+import type { Entity } from '../model/entity';
 import { lineTool } from './lineTool';
 import { pointTool } from './pointTool';
-import { type ToolContext, type ToolDef, ToolRunner } from './tool';
-
-function setup(style?: 'hidden') {
-  const drawing = createDrawing('in');
-  const undo = new UndoStack(drawing);
-  const messages: string[] = [];
-  const ctx: ToolContext = {
-    drawing,
-    undo,
-    newProps: () => (style ? { layer: '0', style } : { layer: '0' }),
-    message: (m) => messages.push(m),
-  };
-  const runner = new ToolRunner(ctx);
-  const click = (x: number, y: number): void => runner.send({ kind: 'point', at: { x, y } });
-  const option = (key: string): void => runner.send({ kind: 'option', key });
-  const lines = (): [number, number, number, number][] =>
-    [...drawing.entities.values()]
-      .filter((e): e is LineEntity => e.kind === 'line')
-      .map((l) => [l.start.x, l.start.y, l.end.x, l.end.y]);
-  return { drawing, undo, messages, runner, click, option, lines };
-}
+import type { ToolDef } from './tool';
+import { setup } from './toolHarness';
 
 describe('Line tool', () => {
   it('chains segments from each end point, one undo step per segment', () => {
@@ -47,7 +26,8 @@ describe('Line tool', () => {
     const t = setup();
     t.runner.start(lineTool);
     t.click(0, 0);
-    const preview = t.runner.request?.preview?.({ x: 2, y: 1 }) as Entity[];
+    const req = t.runner.request;
+    const preview = (req?.kind === 'point' ? req.preview?.({ x: 2, y: 1 }) : []) as Entity[];
     expect(preview).toHaveLength(1);
     expect(preview[0]).toMatchObject({ kind: 'line', start: { x: 0, y: 0 }, end: { x: 2, y: 1 } });
     expect(t.drawing.entities.size).toBe(0);

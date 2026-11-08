@@ -7,11 +7,14 @@ import {
   fieldsFor,
   resolvePoint,
 } from '../commands/pointInput';
-import type { PointRequest } from '../commands/tool';
+import type { Request } from '../commands/tool';
 import { type ParseResult, parseAngle, parseLength } from '../commands/valueExpr';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
 import { formatNumber } from './statusBar';
+
+/** A point's fields, or the single box of a value request. */
+type BoxKey = FieldKey | 'value';
 
 const LABELS: Record<FieldKey, string> = { x: 'X', y: 'Y', dx: 'ΔX', dy: 'ΔY', length: 'L', angle: '∠' };
 const MODE_LABELS: Record<EntryMode, string> = { polar: 'L∠', delta: 'ΔXY', absolute: 'XY' };
@@ -32,18 +35,19 @@ export type InputBoxesHost = {
   escape(): void;
 };
 
-type Field = { key: FieldKey; input: HTMLInputElement; dirty: boolean };
+type Field = { key: BoxKey; input: HTMLInputElement; dirty: boolean };
 
 /**
- * The input boxes that follow the cursor while a tool asks for a point. Typing
- * a value and pressing Tab locks it; locked values constrain the point.
+ * The input boxes that follow the cursor while a tool asks for a point or a
+ * value. Typing a value and pressing Tab locks it; locked values constrain the
+ * point. An entity pick has no boxes.
  */
 export class InputBoxes {
   private readonly root: HTMLElement;
   private readonly modeButton: HTMLButtonElement;
   private fields: Field[] = [];
-  private request: PointRequest | undefined;
-  private locks: Locks = {};
+  private request: Request | undefined;
+  private locks: Partial<Record<BoxKey, number>> = {};
   private mode: EntryMode = 'polar';
 
   constructor(
@@ -72,7 +76,7 @@ export class InputBoxes {
   }
 
   /** Shows the boxes for a new step, or hides them. A new step clears locks. */
-  setRequest(req: PointRequest | undefined): void {
+  setRequest(req: Request | undefined): void {
     if (req === this.request) return;
     this.request = req;
     this.locks = {};
@@ -91,8 +95,21 @@ export class InputBoxes {
     return resolvePoint(cursor, this.request?.base, this.effectiveMode(), this.provisionalLocks(), tracking);
   }
 
-  /** Moves the boxes next to the cursor and refreshes the live values. */
+  /** The value a click or Enter would give a value request now: typed, else from the cursor. */
+  resolveValue(cursor: Vec2): number | undefined {
+    if (this.request?.kind !== 'value') return undefined;
+    return this.provisionalLocks().value ?? this.request.fromCursor?.(cursor);
+  }
+
+  /**
+   * Moves the boxes next to the cursor and refreshes the live values. `point`
+   * is the resolved point for a point request, the cursor for a value request.
+   */
   update(cursorScreen: Vec2 | undefined, point: Vec2 | undefined): void {
+    if (this.fields.length === 0) {
+      this.root.hidden = true;
+      return;
+    }
     if (!this.request || !cursorScreen || !point) {
       this.root.hidden = !this.request || !this.focused;
       if (!this.request) return;
@@ -104,7 +121,7 @@ export class InputBoxes {
       const locked = this.locks[f.key];
       f.input.classList.toggle('locked', locked !== undefined);
       if (f.dirty) continue; // never overwrite what the user is typing
-      const value = locked ?? (point ? fieldValue(f.key, point, this.request.base) : undefined);
+      const value = locked ?? (point ? this.liveValue(f.key, point) : undefined);
       if (value === undefined) continue;
       const text = formatNumber(value, this.host.precision());
       if (f.input.value === text) continue;
@@ -147,6 +164,11 @@ export class InputBoxes {
     return this.request?.canFinish ? 'finish' : 'none';
   }
 
+  private liveValue(key: BoxKey, p: Vec2): number | undefined {
+    if (key !== 'value') return fieldValue(key, p, this.request?.base);
+    return this.request?.kind === 'value' ? this.request.fromCursor?.(p) : undefined;
+  }
+
   private effectiveMode(): EntryMode {
     return this.request?.base ? this.mode : 'absolute';
   }
@@ -158,8 +180,8 @@ export class InputBoxes {
     this.host.changed();
   }
 
-  private provisionalLocks(): Locks {
-    const locks: Locks = { ...this.locks };
+  private provisionalLocks(): Locks & { value?: number } {
+    const locks: Locks & { value?: number } = { ...this.locks };
     for (const f of this.fields) {
       if (!f.dirty) continue;
       const r = this.parse(f);
@@ -169,7 +191,8 @@ export class InputBoxes {
   }
 
   private parse(f: Field): ParseResult {
-    return f.key === 'angle' ? parseAngle(f.input.value) : parseLength(f.input.value, this.host.units());
+    const angle = f.key === 'angle' || (f.key === 'value' && this.request?.kind === 'value' && this.request.quantity === 'angle');
+    return angle ? parseAngle(f.input.value) : parseLength(f.input.value, this.host.units());
   }
 
   /** Locks a typed value, or unlocks the field when it was emptied. False if the text is invalid. */
@@ -205,11 +228,14 @@ export class InputBoxes {
       this.root.hidden = true;
       return;
     }
-    for (const key of fieldsFor(this.request.base, this.effectiveMode())) {
+    const keys: readonly BoxKey[] =
+      this.request.kind === 'point' ? fieldsFor(this.request.base, this.effectiveMode()) : this.request.kind === 'value' ? ['value'] : [];
+    const req = this.request;
+    for (const key of keys) {
       const label = document.createElement('label');
       label.className = 'input-field';
       const name = document.createElement('span');
-      name.textContent = LABELS[key];
+      name.textContent = key === 'value' ? (req.kind === 'value' ? req.label : '') : LABELS[key];
       const input = document.createElement('input');
       input.autocomplete = 'off';
       input.spellcheck = false;
@@ -226,7 +252,7 @@ export class InputBoxes {
       this.root.append(label);
       this.fields.push(field);
     }
-    if (this.request.base) {
+    if (this.request.kind === 'point' && this.request.base) {
       this.modeButton.textContent = MODE_LABELS[this.mode];
       this.root.append(this.modeButton);
     }

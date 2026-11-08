@@ -4,6 +4,9 @@ const svg = (body: string): string =>
 
 export const ICONS = {
   line: svg('<path d="M3 16 L17 4"/><circle cx="3" cy="16" r="1.4" fill="currentColor"/><circle cx="17" cy="4" r="1.4" fill="currentColor"/>'),
+  circle: svg('<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/>'),
+  arc: svg('<path d="M3 15 A8 8 0 0 1 17 9"/><circle cx="3" cy="15" r="1.4" fill="currentColor"/><circle cx="17" cy="9" r="1.4" fill="currentColor"/>'),
+  xline: svg('<path d="M1 16 L19 4"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/>'),
   point: svg('<path d="M10 5 V15 M5 10 H15"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/>'),
   undo: svg('<path d="M7 5 L3 9 L7 13"/><path d="M3 9 H12 a4 4 0 0 1 0 8 H9"/>'),
   redo: svg('<path d="M13 5 L17 9 L13 13"/><path d="M17 9 H8 a4 4 0 0 0 0 8 H11"/>'),

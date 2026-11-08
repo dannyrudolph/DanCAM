@@ -1,10 +1,13 @@
+import { createArcTool } from '../commands/arcTool';
+import { createCircleTool } from '../commands/circleTool';
 import { lineTool } from '../commands/lineTool';
 import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
+import { createXlineTool } from '../commands/xlineTool';
 import type { Vec2 } from '../geometry/vec';
 import { DEFAULT_LAYER, type Drawing, drawingBBox } from '../model/drawing';
-import type { EntityId, EntityProps } from '../model/entity';
+import type { Entity, EntityId, EntityProps } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
 import { UndoStack } from '../model/undo';
@@ -22,7 +25,7 @@ const PICK_RADIUS_PX = 6;
 /** Initial view: about 4 drawing units across a 1000px canvas. */
 const INITIAL_SCALE = 250;
 
-export const TOOLS: readonly ToolDef[] = [lineTool, pointTool];
+export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), pointTool];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -107,6 +110,7 @@ export class App {
       undo: this.undo,
       newProps: () => this.newProps(),
       message: (m) => this.status.showMessage(m),
+      continuation: undefined,
     };
     this.runner = new ToolRunner(ctx);
 
@@ -159,9 +163,31 @@ export class App {
   }
 
   private enter(action: EnterAction): void {
-    if (action === 'place') this.send({ kind: 'point', at: this.nextPoint() });
+    if (action === 'place') this.place();
     else if (action === 'finish') this.send({ kind: 'finish' });
     else this.requestRedraw();
+  }
+
+  /** A click, or Enter with values locked: answers the waiting step from the cursor and the boxes. */
+  private place(): void {
+    const req = this.runner.request;
+    if (!req) return;
+    const cursor = this.cursorWorld();
+    if (req.kind === 'point') {
+      this.send({ kind: 'point', at: this.nextPoint() });
+    } else if (req.kind === 'value') {
+      const value = this.boxes.resolveValue(cursor);
+      if (value === undefined) this.status.showMessage(`Type a value for ${req.label}, then press Enter.`);
+      else this.send({ kind: 'value', value, at: cursor });
+    } else {
+      const id = this.pickAt(cursor, req.accepts);
+      if (id) this.send({ kind: 'entity', id, at: cursor });
+      else this.status.showMessage('Nothing there that this step can use.');
+    }
+  }
+
+  private pickAt(world: Vec2, accepts?: (e: Entity) => boolean): EntityId | undefined {
+    return pickEntity(this.drawing, world, PICK_RADIUS_PX / this.view.scale, accepts);
   }
 
   private doUndo(): void {
@@ -246,7 +272,7 @@ export class App {
     for (const o of req?.options ?? []) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'option-button';
+      b.className = o.active ? 'option-button active' : 'option-button';
       b.textContent = o.label;
       b.disabled = !o.enabled;
       b.tabIndex = -1;
@@ -268,17 +294,26 @@ export class App {
 
   private draw(): void {
     const req = this.runner.request;
-    const next = req && this.cursorScreen ? this.nextPoint() : undefined;
-    render(
-      this.g,
-      this.view,
-      this.drawing,
-      { preview: next && req?.preview ? req.preview(next) : [], selected: this.selected, nextPoint: next },
-      window.devicePixelRatio || 1,
-    );
-    const shown = next ?? (this.cursorScreen ? this.cursorWorld() : undefined);
-    this.status.setCursor(shown, req?.base);
-    this.boxes.update(this.cursorScreen, next);
+    const cursor = this.cursorScreen ? this.cursorWorld() : undefined;
+    let next: Vec2 | undefined;
+    let preview: readonly Entity[] = [];
+    if (req && cursor) {
+      if (req.kind === 'point') {
+        next = this.nextPoint();
+        preview = req.preview?.(next) ?? [];
+      } else if (req.kind === 'value') {
+        const value = this.boxes.resolveValue(cursor);
+        if (value !== undefined) preview = req.preview?.(value, cursor) ?? [];
+      } else {
+        // Highlight what a click would pick.
+        const hit = this.pickAt(cursor, req.accepts);
+        const e = hit && this.drawing.entities.get(hit);
+        if (e) preview = [e];
+      }
+    }
+    render(this.g, this.view, this.drawing, { preview, selected: this.selected, nextPoint: next }, window.devicePixelRatio || 1);
+    this.status.setCursor(next ?? cursor, req?.base);
+    this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : cursor);
   }
 
   private fitCanvas(): void {
@@ -371,9 +406,9 @@ export class App {
       click: (screen) => {
         this.cursorScreen = screen;
         if (this.runner.request) {
-          this.send({ kind: 'point', at: this.nextPoint() });
+          this.place();
         } else {
-          this.selected = pickEntity(this.drawing, this.cursorWorld(), PICK_RADIUS_PX / this.view.scale);
+          this.selected = this.pickAt(this.cursorWorld());
           this.refresh();
         }
       },

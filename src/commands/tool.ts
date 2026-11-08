@@ -1,15 +1,17 @@
 import type { Vec2 } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
-import type { Entity, EntityProps } from '../model/entity';
+import type { Entity, EntityId, EntityProps } from '../model/entity';
 import type { UndoStack } from '../model/undo';
 
-/** A button in the options bar while a step is waiting. */
-export type ToolOption = { readonly key: string; readonly label: string; readonly enabled: boolean };
+/** A button in the options bar while a step is waiting. `active` marks the chosen method. */
+export type ToolOption = {
+  readonly key: string;
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly active?: boolean;
+};
 
-/**
- * What a tool step asks for. Phase 1b adds `{ kind: 'entity' }` for picking
- * objects (tangent circles, offset).
- */
+/** A step that asks for a point: clicked, or typed into the input boxes. */
 export type PointRequest = {
   readonly kind: 'point';
   /** Instruction for the status line, e.g. "Pick the first point". */
@@ -23,12 +25,57 @@ export type PointRequest = {
   readonly canFinish?: boolean;
 };
 
-export type Request = PointRequest;
+/**
+ * A step that asks for one number (a radius, diameter, angle or distance). One
+ * input box follows the cursor; clicking takes the value the cursor gives, and
+ * a typed value is locked like a point's.
+ */
+export type ValueRequest = {
+  readonly kind: 'value';
+  readonly prompt: string;
+  /** Label on the input box, e.g. "R", "Ø", "∠". */
+  readonly label: string;
+  /** How typed text is read: lengths take unit suffixes, angles are degrees. */
+  readonly quantity: 'length' | 'angle';
+  /** The value the cursor gives. Absent when the value can only be typed. */
+  readonly fromCursor?: (cursor: Vec2) => number | undefined;
+  /** Point the value is measured from, for the status line. */
+  readonly base?: Vec2;
+  /** Preview for a candidate value; `cursor` is where the mouse is (e.g. to choose a side). */
+  readonly preview?: (value: number, cursor: Vec2) => readonly Entity[];
+  readonly options?: readonly ToolOption[];
+  readonly canFinish?: boolean;
+};
+
+/** A step that asks the user to click an existing entity. */
+export type EntityRequest = {
+  readonly kind: 'entity';
+  readonly prompt: string;
+  /** Which entities can be picked; others are passed over. */
+  readonly accepts: (e: Entity) => boolean;
+  /** No base point; declared so `request.base` reads on any request. */
+  readonly base?: never;
+  readonly options?: readonly ToolOption[];
+  readonly canFinish?: boolean;
+};
+
+export type Request = PointRequest | ValueRequest | EntityRequest;
 
 export type ToolInput =
   | { readonly kind: 'point'; readonly at: Vec2 }
+  /** `at` is the cursor when the value was given. */
+  | { readonly kind: 'value'; readonly value: number; readonly at: Vec2 }
+  /** `at` is where the entity was clicked. */
+  | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2 }
   | { readonly kind: 'option'; readonly key: string }
   | { readonly kind: 'finish' };
+
+/**
+ * Where the last line or arc drawn ends, and the direction it was travelling
+ * there. Arc "Continue" starts from it. Stale once `id` is no longer in the
+ * drawing (undone).
+ */
+export type Continuation = { readonly id: EntityId; readonly end: Vec2; readonly dir: Vec2 };
 
 /** A tool is a generator: each `yield` is one step waiting for one input. */
 export type ToolGen = Generator<Request, void, ToolInput>;
@@ -40,6 +87,8 @@ export interface ToolContext {
   newProps(): EntityProps;
   /** Shows a short message to the user (status line). */
   message(text: string): void;
+  /** Set by the Line and Arc tools each time they add an entity. */
+  continuation: Continuation | undefined;
 }
 
 export type ToolDef = {
