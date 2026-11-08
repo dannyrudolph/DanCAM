@@ -1,5 +1,6 @@
 import { type BBox, EMPTY_BBOX, union } from '../geometry/bbox';
 import { type Entity, type EntityId, entityBBox } from './entity';
+import { LINE_STYLES, type LineStyle, type LineStyleName } from './lineStyle';
 
 export type Units = 'in' | 'mm';
 
@@ -7,6 +8,8 @@ export type Layer = {
   readonly name: string;
   readonly color: string;
   readonly visible: boolean;
+  /** Style used by entities on this layer that don't set their own. */
+  readonly style: LineStyleName;
 };
 
 /**
@@ -28,7 +31,7 @@ export function createDrawing(units: Units): Drawing {
   return {
     schemaVersion: 1,
     units,
-    layers: new Map([[DEFAULT_LAYER, { name: DEFAULT_LAYER, color: '#e6e6e6', visible: true }]]),
+    layers: new Map([[DEFAULT_LAYER, { name: DEFAULT_LAYER, color: '#e6e6e6', visible: true, style: 'visible' }]]),
     entities: new Map(),
     nextId: 1,
   };
@@ -38,6 +41,12 @@ export function newEntityId(d: Drawing): EntityId {
   const id = `e${d.nextId}`;
   d.nextId += 1;
   return id;
+}
+
+/** The style an entity draws with: its own, else its layer's, else Visible. */
+export function effectiveStyle(d: Drawing, e: Entity): LineStyle {
+  const name = e.style ?? d.layers.get(e.layer)?.style ?? 'visible';
+  return LINE_STYLES[name];
 }
 
 export function drawingBBox(d: Drawing): BBox {

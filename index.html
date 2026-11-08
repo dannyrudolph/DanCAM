@@ -7,9 +7,14 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="canvas"></canvas>
-      <div id="cmdline"></div>
-      <div id="status"></div>
+      <div id="topbar" class="bar"></div>
+      <div id="options" class="bar"></div>
+      <div id="main">
+        <div id="toolbar"></div>
+        <div id="canvas-wrap"><canvas id="canvas"></canvas></div>
+        <aside id="properties"></aside>
+      </div>
+      <div id="status" class="bar"></div>
     </div>
     <script type="module" src="/src/ui/main.ts"></script>
   </body>

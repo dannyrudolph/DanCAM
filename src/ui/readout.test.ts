@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { wheelZoomFactor } from './input';
-import { formatNumber, formatReadout } from './statusBar';
+import { formatFromBase, formatNumber, formatReadout } from './statusBar';
 
 describe('coordinate readout', () => {
   it('shows 4 decimals by default', () => {
@@ -33,5 +33,11 @@ describe('wheelZoomFactor', () => {
 
   it('many small steps zoom exactly as much as one large step', () => {
     expect(wheelZoomFactor(-10, 0) ** 10).toBeCloseTo(wheelZoomFactor(-100, 0), 12);
+  });
+});
+
+describe('formatFromBase', () => {
+  it('shows length and angle from the base point', () => {
+    expect(formatFromBase({ x: 1, y: 2 }, { x: 4, y: 6 }, 3)).toBe('L 5.000  ∠ 53.130°');
   });
 });

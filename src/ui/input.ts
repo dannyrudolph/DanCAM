@@ -23,12 +23,37 @@ export type CanvasHandlers = {
   pan(dxPx: number, dyPx: number): void;
   zoomExtents(): void;
   cursor(screen: Vec2 | undefined): void;
+  /** Left click (press and release without dragging). */
+  click(screen: Vec2): void;
+  /** Right click, in page coordinates for placing a menu. */
+  contextMenu(pageX: number, pageY: number): void;
 };
 
-/** Wheel zoom at the cursor, middle-drag pan, double-middle-click Zoom Extents. */
+/** A left press that moves less than this many pixels counts as a click. */
+const CLICK_SLOP_PX = 4;
+
+/**
+ * Wheel zoom at the cursor, middle-drag pan, double-middle-click Zoom Extents,
+ * left click and right-click menu.
+ */
 export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): void {
   let panning: Vec2 | undefined;
   let lastMiddleDown = 0;
+  let leftDown: Vec2 | undefined;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button === 0) leftDown = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (e.button !== 0 || !leftDown) return;
+    const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
+    leftDown = undefined;
+    if (moved <= CLICK_SLOP_PX) h.click(local(e));
+  });
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    h.contextMenu(e.pageX, e.pageY);
+  });
 
   const local = (e: MouseEvent): Vec2 => {
     const r = canvas.getBoundingClientRect();

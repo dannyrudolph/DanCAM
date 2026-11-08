@@ -1,8 +1,10 @@
 import type { BBox } from '../geometry/bbox';
 import { clipSegment } from '../geometry/clip';
+import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
-import type { Drawing } from '../model/drawing';
-import type { Entity } from '../model/entity';
+import { type Drawing, effectiveStyle } from '../model/drawing';
+import type { Entity, EntityId } from '../model/entity';
+import { type LineStyle, dashOffset } from '../model/lineStyle';
 import { gridLines, gridSpacing } from './grid';
 import { type Viewport, visibleBBox, worldToScreen } from './viewport';
 
@@ -12,23 +14,46 @@ const COLORS = {
   gridMajor: '#323943',
   axisX: '#7a3b3b',
   axisY: '#3b6a45',
+  selected: '#6cb6ff',
+  preview: '#f0c674',
+  cursor: '#f0c674',
 } as const;
 
-/** Entity line width in CSS pixels; constant on screen at every zoom. */
-const ENTITY_LINE_PX = 1.5;
 /** Half-size of the point marker in CSS pixels. */
 const POINT_MARK_PX = 3;
+/** Extra width added to a selected entity, CSS pixels. */
+const SELECTED_EXTRA_PX = 1;
+/** Half-size of the marker where the next point will land. */
+const CURSOR_MARK_PX = 4;
+
+/** Things drawn over the drawing: tool preview, selection and the next-point marker. */
+export type Overlay = {
+  readonly preview: readonly Entity[];
+  readonly selected: EntityId | undefined;
+  /** Where a click or Enter would place the point now (after locks and tracking). */
+  readonly nextPoint: Vec2 | undefined;
+};
 
 /**
  * Redraws the whole canvas. `dpr` is the device pixel ratio; the canvas backing
  * store is expected to be widthPx*dpr by heightPx*dpr.
  */
-export function render(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, dpr: number): void {
+export function render(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  drawing: Drawing,
+  overlay: Overlay,
+  dpr: number,
+): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, v.widthPx, v.heightPx);
   drawGrid(ctx, v, dpr);
-  drawEntities(ctx, v, drawing);
+  drawEntities(ctx, v, drawing, overlay.selected);
+  for (const e of overlay.preview) {
+    drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
+  }
+  if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
 }
 
 /** Rounds a CSS-pixel coordinate to the center of a device pixel, so 1-device-pixel lines stay sharp. */
@@ -80,33 +105,54 @@ function drawGrid(ctx: CanvasRenderingContext2D, v: Viewport, dpr: number): void
   }
 }
 
-function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing): void {
-  ctx.lineWidth = ENTITY_LINE_PX;
-  ctx.lineCap = 'round';
+function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: EntityId | undefined): void {
   for (const e of drawing.entities.values()) {
     const layer = drawing.layers.get(e.layer);
     if (layer && !layer.visible) continue;
-    ctx.strokeStyle = layer?.color ?? '#ffffff';
-    drawEntity(ctx, v, e);
+    const isSelected = e.id === selected;
+    const color = isSelected ? COLORS.selected : (layer?.color ?? '#ffffff');
+    drawEntity(ctx, v, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
 }
 
-function drawEntity(ctx: CanvasRenderingContext2D, v: Viewport, e: Entity): void {
+function drawEntity(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  e: Entity,
+  style: LineStyle,
+  color: string,
+  extraWidth: number,
+): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = style.weight + extraWidth;
+  ctx.lineCap = style.dash.length === 0 ? 'round' : 'butt';
   switch (e.kind) {
     case 'line': {
       // Clip in float64 screen space so the canvas never sees huge coordinates at deep zoom.
-      const seg = clipSegment(worldToScreen(v, e.start), worldToScreen(v, e.end), screenClipBox(v));
+      const a = worldToScreen(v, e.start);
+      const seg = clipSegment(a, worldToScreen(v, e.end), screenClipBox(v));
       if (!seg) return;
+      ctx.setLineDash(style.dash);
+      ctx.lineDashOffset = dashOffset(style.dash, distance(a, seg[0]));
       ctx.beginPath();
       ctx.moveTo(seg[0].x, seg[0].y);
       ctx.lineTo(seg[1].x, seg[1].y);
       ctx.stroke();
+      ctx.setLineDash([]);
       return;
     }
     case 'point':
+      ctx.lineWidth = 1 + extraWidth;
       drawPointMark(ctx, worldToScreen(v, e.at));
       return;
   }
+}
+
+function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
+  ctx.strokeStyle = COLORS.cursor;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(s.x - CURSOR_MARK_PX, s.y - CURSOR_MARK_PX, CURSOR_MARK_PX * 2, CURSOR_MARK_PX * 2);
 }
 
 /** The canvas rectangle plus a margin wider than any line cap, in CSS pixels. */

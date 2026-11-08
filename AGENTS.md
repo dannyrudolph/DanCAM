@@ -47,6 +47,7 @@ keep them current when they change.
 | Task | Command |
 |---|---|
 | Test | `npm test` (Vitest + fast-check) |
+| Browser tests | `npm run test:e2e` (Playwright, Chromium; starts its own Vite on port 5174) |
 | Type check | `npm run typecheck` (`tsc --noEmit`) |
 | Lint | none |
 | Build | `npm run build` (type check + `vite build` → `dist/`) |

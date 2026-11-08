@@ -1,0 +1,31 @@
+import { distanceToSegment } from '../geometry/distance';
+import type { Vec2 } from '../geometry/vec';
+import type { Drawing } from './drawing';
+import type { Entity, EntityId } from './entity';
+
+export function distanceToEntity(p: Vec2, e: Entity): number {
+  switch (e.kind) {
+    case 'point':
+      return Math.hypot(p.x - e.at.x, p.y - e.at.y);
+    case 'line':
+      return distanceToSegment(p, e.start, e.end);
+  }
+}
+
+/**
+ * The visible entity nearest to `p` within `radius` drawing units, or
+ * undefined. Ties go to the entity drawn last, which is the one on top.
+ */
+export function pickEntity(d: Drawing, p: Vec2, radius: number): EntityId | undefined {
+  let best: EntityId | undefined;
+  let bestDist = radius;
+  for (const e of d.entities.values()) {
+    if (d.layers.get(e.layer)?.visible === false) continue;
+    const dist = distanceToEntity(p, e);
+    if (dist <= bestDist) {
+      best = e.id;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
