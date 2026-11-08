@@ -136,6 +136,7 @@ export class App {
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
+  private selectButton: HTMLButtonElement | undefined;
   private readonly unitsButton = document.createElement('button');
   private readonly sidePanelButton = document.createElement('button');
   private readonly settings: StatusSettings = {
@@ -405,7 +406,16 @@ export class App {
   private setPanMode(on: boolean): void {
     this.panMode = on;
     this.panButton?.classList.toggle('active', on);
+    this.selectButton?.classList.toggle('active', !on && !this.runner.tool);
     this.updateCanvasCursor(false);
+  }
+
+  /** The Select button: leaves the active tool and Pan, keeping the selection. */
+  private selectMode(): void {
+    this.menu.close();
+    this.runner.stop();
+    this.setPanMode(false);
+    this.refresh();
   }
 
   private updateCanvasCursor(dragging: boolean): void {
@@ -512,6 +522,9 @@ export class App {
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
+    const selecting = !this.runner.tool;
+    this.selectButton?.classList.toggle('active', selecting && !this.panMode);
+    this.canvas.classList.toggle('selecting', selecting);
     this.renderOptions();
     // Undo may have removed a selected entity, or its layer may now be hidden.
     const picked: Entity[] = [];
@@ -599,6 +612,8 @@ export class App {
   /** Drawing tools in a row under the top bar, ending with the drawing's units. */
   private buildToolbar(): void {
     const bar = el('toolbar');
+    this.selectButton = button(ICONS.select, 'Select (Esc): pick objects, or drag a window', () => this.selectMode(), 'tool-select');
+    bar.append(this.selectButton);
     for (const def of TOOLS) {
       const icon = ICONS[def.id as keyof typeof ICONS];
       const b = button(icon, `${def.label} (${shortcutLabel(def.shortcut)})`, () => this.startTool(def), `tool-${def.id}`);

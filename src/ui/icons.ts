@@ -3,6 +3,7 @@ const svg = (body: string): string =>
   `<svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
 export const ICONS = {
+  select: svg('<path d="M5 2 V16 L8.5 12.5 L11 18 L13 17 L10.5 11.5 H15 Z"/>'),
   line: svg('<path d="M3 16 L17 4"/><circle cx="3" cy="16" r="1.4" fill="currentColor"/><circle cx="17" cy="4" r="1.4" fill="currentColor"/>'),
   circle: svg('<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/>'),
   arc: svg('<path d="M3 15 A8 8 0 0 1 17 9"/><circle cx="3" cy="15" r="1.4" fill="currentColor"/><circle cx="17" cy="9" r="1.4" fill="currentColor"/>'),

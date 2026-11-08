@@ -165,6 +165,11 @@ input {
   touch-action: none;
 }
 
+/* No tool: picking and selection boxes, so an arrow rather than crosshairs. */
+#canvas.selecting {
+  cursor: default;
+}
+
 #canvas.pan-ready {
   cursor: grab;
 }

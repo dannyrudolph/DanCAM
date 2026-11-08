@@ -727,3 +727,20 @@ test.describe('selection', () => {
     await expect(prop(page, 'entity-count')).toHaveText('3');
   });
 });
+
+test('the Select arrow is on with no tool, and clicking it leaves a tool', async ({ page }) => {
+  const select = page.getByTestId('tool-select');
+  await expect(select).toHaveClass(/active/);
+  await expect(page.locator('#canvas')).toHaveClass(/selecting/);
+  await page.keyboard.press('l');
+  await expect(select).not.toHaveClass(/active/);
+  await expect(page.locator('#canvas')).not.toHaveClass(/selecting/); // crosshairs while drawing
+  await select.click();
+  await expect(select).toHaveClass(/active/);
+  await expect(page.getByTestId('tool-line')).not.toHaveClass(/active/);
+  await expect(page.locator('.options-tool')).toHaveText('Select');
+  await page.getByTestId('pan').click();
+  await expect(select).not.toHaveClass(/active/);
+  await select.click();
+  await expect(page.getByTestId('pan')).not.toHaveClass(/active/);
+});
