@@ -110,8 +110,25 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 Also in Phase 2, at the user's request: Rotate's Reference option (two
 points along an edge, then its new angle).
 
-**Next:** Phase 3, after the user's go-ahead (CAD-7). Re-read the spec's
-Phase 3 section and propose a plan first.
+## Phase 3 (plan approved 2026-11-08): in progress
+
+1. **Trim/extend kernel (done).** `geometry/trim.trimCurve` (removed piece +
+   kept pieces; new ends are the cut points; cuts within TOL of an end or of
+   each other dropped; circle needs two cuts → arc; xline → ray(s), ray →
+   line) and `geometry/extend.extendCurve` (segment end nearer the pick, ray
+   base, arc end along its circle; an end already on a boundary goes on to
+   the next). Unit and property tests.
+2. Trim (T) and Extend (Shift+T) tools: edges or Enter = all, repeated
+   picks, Shift-pick swaps mode, preview; `shift` flag on entity input.
+3. Fillet (F) and Chamfer (Shift+F).
+4. Offset (O), Break (B), Join (J), Lengthen (Shift+L).
+5. Array (Shift+A) and Stretch (Shift+S).
+6. Done-when e2e: turned profile from xlines by trimming, R.020 fillet,
+   .010 x 45° chamfer, checked with ID/List to 1e-12.
+
+Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
+or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
+become rays or lines); shortcuts as listed above.
 
 Decisions (user, 2026-11-08): shortcuts as above plus F3 for snaps (Stretch
 needs a key other than S); arc grips as in step 4; sidebar results panel;
