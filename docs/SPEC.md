@@ -9,7 +9,7 @@ This spec lives at `docs/SPEC.md`; its project rules are in `AGENTS.md` ("Projec
 ```text
 Read docs/SPEC.md in full. We are building a browser-based 2D drafting
 application in the style of AutoCAD LT (late 1990s): explicit geometry,
-command line plus toolbar, object snaps, trim/extend/fillet, and
+a mouse-driven toolbar (no command line), object snaps, trim/extend/fillet, and
 print-quality dimensioning. It is for sketching CNC turning and live-tool
 milling geometry for small medical device parts.
 
@@ -35,7 +35,7 @@ For each later phase, a short prompt is enough: "Implement Phase 2 from docs/SPE
 The goal is a self-owned 2D drafting tool that replaces Solid Edge 2D Drafting for turning profiles and live-tool features. It runs in the browser from local files, works offline, and has no accounts or licenses.
 
 - **Drafting, not modeling.** Like AutoCAD LT: you place lines, arcs and circles at exact values, then trim, fillet and dimension them. Changing a dimension's value never moves geometry.
-- **Keyboard first.** A command line takes typed commands and aliases (`L`, `C`, `A`, `TR`, `EX`, `F`, `O`, `DIM`). It also takes coordinates and values at any prompt, with toolbar buttons as a second path.
+- **Mouse first, no command line.** Tools are picked from a toolbar and points are placed by clicking, with snaps. Exact values are typed only into input boxes that appear at the cursor while a tool is active, and into the properties panel. A tool's options (such as circle method or fillet radius) are buttons and fields in an options bar for the active tool. There is no typed-command entry. A status line shows the active tool's instruction ("Pick the first point").
 - **Exactness.** Coordinates are stored as 64-bit floats in drawing units. Display rounding never changes stored values. Geometric comparisons use one shared tolerance (default 1e-9 drawing units).
 - **Lathe-aware.** An optional lathe mode labels axes Z (horizontal) and X (vertical). It treats the X axis as a centerline and allows diameter entry for X values. Milling sketches use a normal X/Y view.
 - **Micro-part friendly.** Smooth zoom from a 0.0005" feature to a 2" overall part. Prints at enlarged scales such as 5:1, 10:1 and 20:1, with dimension text sized for the sheet, not the part.
@@ -49,7 +49,7 @@ TypeScript, built with Vite, drawn on an HTML Canvas 2D context. The result is a
 | --- | --- | --- |
 | Language / build | TypeScript (strict), Vite | Static output; optional PWA manifest for offline install |
 | Rendering | Canvas 2D, redrawn on change | Screen-space line widths; world-to-screen transform for pan/zoom |
-| UI | Plain TypeScript + DOM, or a light framework | Toolbar, command line, properties panel, status bar |
+| UI | Plain TypeScript + DOM, or a light framework | Toolbar, tool options bar, input boxes at the cursor, properties panel, status bar |
 | Tests | Vitest; Playwright later | Unit tests for geometry; screenshots for dimension rendering |
 | DXF | Hand-written R12 writer; evaluate an npm DXF parser for import | Writing DXF is simple; reading it is where a library helps |
 | PDF | jsPDF or browser print of an SVG render | Must keep true scale on paper |
@@ -59,9 +59,9 @@ Modules, with dependencies pointing downward only:
 1. `geometry/`: pure math. Vectors, lines, arcs, circles, intersections, tangents, offsets, fillets, projections. No DOM.
 2. `model/`: the drawing document. Entities with stable ids, layers, dimension styles, units, and an undo/redo stack built on reversible change records.
 3. `snap/`: finds snap candidates near the cursor and ranks them.
-4. `commands/`: each command is a small state machine that asks for points, values, selections and options, like AutoCAD prompts.
+4. `commands/`: each tool is a small state machine that asks for points, values, selections and options one step at a time, fed by mouse clicks and the input boxes at the cursor.
 5. `render/`: draws entities, dimensions, snap markers, grips and rubber-band previews.
-6. `ui/`: input handling, command line, panels, and file dialogs.
+6. `ui/`: input handling, toolbar, tool options bar, input boxes at the cursor, panels, and file dialogs.
 7. `io/`: native JSON, DXF, SVG and PDF.
 
 ## Units, precision and dimension resolution
@@ -92,16 +92,15 @@ The entity set stays small: point, line, construction line (xline), ray, circle,
 | Arc | 3-point, Start-Center-End, Start-End-Radius, Start-Center-Angle, Continue tangent from last |
 | Construction line | Horizontal, Vertical, Angle, Through two points, Offset from a line |
 
-**Point entry at any prompt**
+**Point entry: click, or lock exact values in the input boxes at the cursor**
 
-- Absolute `x,y` (lathe mode `z,x`, with X typed as diameter when diameter mode is on).
-- Relative `@dx,dy` and polar `@length<angle`, with angles counter-clockwise from +X.
-- Direct distance: aim with the cursor, type a length, press Enter.
-- Angle lock: type `<30` to lock the next segment's angle, then click or type a length.
-- Ortho (F8) and polar tracking (F10) at a set increment, 15° by default.
+- Click to place a point, with snaps guiding the cursor.
+- While a tool is placing something, small input boxes follow the cursor, showing the values for that step: X and Y for a first point (lathe mode Z and X, with X shown as a diameter when diameter mode is on); length and angle for the next segment; radius or diameter for a circle. Typing a value and pressing Tab locks it, so the cursor is constrained to it. Enter places the point. Angles are counter-clockwise from +X.
+- A toggle on the boxes switches between absolute coordinates and values relative to the last point.
+- Ortho and polar tracking at a set increment (15° by default), toggled by buttons in the status bar.
 - The status bar shows live cursor coordinates, plus length and angle from the last point.
 
-**Object snaps** (running snaps toggled with F3; a single snap can be typed at a prompt, such as `END` or `TAN`)
+**Object snaps** (running snaps toggled from the status bar; a one-time snap can be picked from the right-click menu while placing a point)
 
 - Endpoint, Midpoint, Center, Quadrant, Intersection, Perpendicular, Tangent, Nearest, Node
 - Extension and object snap tracking, which line up with a point's X or Y, added in a later phase
@@ -118,7 +117,7 @@ The entity set stays small: point, line, construction line (xline), ray, circle,
 
 Trim, extend and fillet are the core of the tool and get the most tests. Every command below is undoable, and each works on lines, arcs and circles unless noted.
 
-| Command | Alias | Behavior |
+| Command | Short name (toolbar tooltip) | Behavior |
 | --- | --- | --- |
 | Trim | TR | Select cutting edges (Enter = all), then pick the pieces to remove. Shift-pick extends instead. Trimming a circle turns it into an arc. |
 | Extend | EX | Select boundaries (Enter = all), then pick near the end to extend. Arcs extend along their circle. Shift-pick trims instead. |
@@ -195,11 +194,11 @@ The native format is a versioned JSON file that you own and that stays readable 
 Each phase ends with something you can use and check by hand. Phases 1–3 already give a working sketcher; Phases 4–5 make it a drafting tool.
 
 1. **Phase 0: Canvas and shell**
-   - Vite + TypeScript project, test runner, canvas with grid, wheel zoom at the cursor, middle-drag pan, Zoom Extents, live coordinate readout, command line, empty undo stack.
+   - Vite + TypeScript project, test runner, canvas with grid, wheel zoom at the cursor, middle-drag pan, Zoom Extents, live coordinate readout, empty undo stack. (Built with a temporary command line, replaced by the toolbar at the start of Phase 1.)
    - Done when: zooming from 2" to 0.001" across the screen stays smooth and lines stay crisp.
-2. **Phase 1: Drawing and typed input**
-   - Line, circle, arc, xline and point with all creation methods; absolute, relative, polar and direct-distance entry; ortho and polar tracking; inch/mm; layers; JSON save and load.
-   - Done when: a turned profile typed from a print matches its coordinates exactly in the properties panel.
+2. **Phase 1: Toolbar, drawing and exact input**
+   - Toolbar, tool options bar and status line replacing the Phase 0 command line; line, circle, arc, xline and point with all creation methods; input boxes at the cursor for absolute and relative values, length and angle; ortho and polar tracking; inch/mm; layers; JSON save and load.
+   - Done when: a turned profile entered from a print with the mouse and the input boxes matches its coordinates exactly in the properties panel.
 3. **Phase 2: Snaps, selection, grips, basic edits**
    - All object snaps with markers; window and crossing selection; grips; properties panel editing; erase, move, copy, rotate, mirror, scale; DIST, ID, LIST.
    - Done when: tangent and intersection snaps land exactly, checked with ID, on line-arc and arc-arc cases.

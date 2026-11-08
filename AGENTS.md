@@ -33,6 +33,11 @@ Spec: `docs/SPEC.md`. Re-read the relevant section before each phase.
   approval. Never start the next phase without the user's go-ahead.
 - **CAD-8** — Keep dependencies minimal; ask before adding any npm package.
   Commit in small steps with clear messages.
+- **CAD-9** — Mouse first, with no command line or typed-command entry, even
+  though the drafting model is AutoCAD LT's. Tools come from a toolbar.
+  Exact values go only into the input boxes at the cursor and the properties
+  panel. A tool's options are buttons in its options bar (spec, "Overview
+  and principles").
 
 ## Commands
 
