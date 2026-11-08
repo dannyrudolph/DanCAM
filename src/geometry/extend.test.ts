@@ -64,7 +64,7 @@ describe('extendCurve properties', () => {
         const r = extendCurve(s, [vline(wx)], s.b) as Extract<Curve, { kind: 'segment' }> | undefined;
         if (!r) return;
         expect(r.a).toEqual(s.a);
-        expect(r.b.x).toBe(wx);
+        expect(r.b.x === wx).toBe(true); // exactly the boundary (=== so -0 equals 0)
         expect(Math.abs(cross(sub(r.b, s.a), sub(s.b, s.a))) / distance(s.a, s.b)).toBeLessThan(1e-9 * Math.max(1, distance(r.a, r.b)));
         expect(distance(r.a, r.b)).toBeGreaterThan(distance(s.a, s.b));
       }),

@@ -14,6 +14,14 @@ describe('lineLine', () => {
     expect(lineLine({ x: -3, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 5 }, { x: 0, y: -2 })).toEqual({ x: 0, y: 0 });
   });
 
+  it('takes the exact coordinate from a vertical or horizontal line', () => {
+    // From (-2.859..., 0) along an unnormalized direction, p + d·t alone lands a few ULPs off x = 0.00018068991310799426.
+    const wall = 0.00018068991310799426;
+    expect(lineLine({ x: 0, y: 0 }, { x: 2.8593211940897474, y: 0 }, { x: wall, y: 0 }, { x: 0, y: 1 })).toEqual({ x: wall, y: 0 });
+    const p = lineLine({ x: 0.1, y: 0.3 }, { x: 0.7, y: 0.2 }, { x: 0, y: 0.7 }, { x: 1, y: 0 });
+    expect(p?.y).toBe(0.7);
+  });
+
   it('returns undefined for parallel lines', () => {
     expect(lineLine({ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }, { x: 2, y: 2 })).toBeUndefined();
   });

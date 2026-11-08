@@ -14,7 +14,13 @@ export function lineLine(p1: Vec2, d1: Vec2, p2: Vec2, d2: Vec2): Vec2 | undefin
   // Parallel when the unit directions' cross product is below TOL per unit length.
   if (l1 === 0 || l2 === 0 || Math.abs(den) <= TOL * l1 * l2) return undefined;
   const t = cross(sub(p2, p1), d2) / den;
-  return { x: p1.x + d1.x * t, y: p1.y + d1.y * t };
+  const p = { x: p1.x + d1.x * t, y: p1.y + d1.y * t };
+  // A vertical or horizontal line fixes one coordinate exactly; take it from
+  // there rather than from p1 + d1·t, which can be a few ULPs off. Ends trimmed
+  // to construction lines then sit exactly on them.
+  const x = d1.x === 0 ? p1.x : d2.x === 0 ? p2.x : p.x;
+  const y = d1.y === 0 ? p1.y : d2.y === 0 ? p2.y : p.y;
+  return { x, y };
 }
 
 export function lineCircle(p: Vec2, d: Vec2, center: Vec2, r: number): Vec2[] {
