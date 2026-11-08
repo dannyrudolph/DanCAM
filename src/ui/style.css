@@ -84,7 +84,7 @@ input {
 
 #main {
   display: grid;
-  grid-template-columns: auto 1fr 220px;
+  grid-template-columns: auto 1fr 300px;
   min-height: 0;
 }
 
@@ -150,11 +150,129 @@ input {
   cursor: grabbing;
 }
 
-#properties {
+#side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--panel);
   border-left: 1px solid var(--border);
-  padding: 8px 10px;
   overflow-y: auto;
+}
+
+#properties {
+  padding: 8px 10px;
+}
+
+#layers {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.layers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.layers-header h2 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layer-row {
+  display: grid;
+  grid-template-columns: auto auto auto 1fr auto auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px;
+  border-radius: 4px;
+}
+
+.layer-row.current {
+  background: var(--panel-2);
+}
+
+.layer-row.hidden-layer .layer-name {
+  color: var(--muted);
+}
+
+.layer-row input[type='radio'] {
+  margin: 0;
+}
+
+.layer-row input[type='color'] {
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+}
+
+.layer-name,
+.layer-name-input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-name {
+  cursor: default;
+}
+
+.layer-name-input {
+  width: 100%;
+  padding: 0 2px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.layer-row select {
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.layer-count {
+  min-width: 2ch;
+  text-align: right;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.layer-icon-button {
+  display: inline-flex;
+  padding: 1px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.layer-icon-button:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.layer-icon-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 #properties h2 {

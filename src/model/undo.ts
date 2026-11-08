@@ -1,4 +1,4 @@
-import type { Drawing, Units } from './drawing';
+import type { Drawing, Layer, Units } from './drawing';
 import type { Entity } from './entity';
 
 /** One reversible change to the drawing. */
@@ -7,7 +7,9 @@ export type Change =
   | { readonly op: 'remove'; readonly entity: Entity }
   | { readonly op: 'modify'; readonly before: Entity; readonly after: Entity }
   /** The drawing's unit label (converting also scales every entity, in the same transaction). */
-  | { readonly op: 'units'; readonly before: Units; readonly after: Units };
+  | { readonly op: 'units'; readonly before: Units; readonly after: Units }
+  /** Adds (no `before`), removes (no `after`) or edits one layer, matched by name. */
+  | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -25,6 +27,8 @@ function invert(c: Change): Change {
       return { op: 'modify', before: c.after, after: c.before };
     case 'units':
       return { op: 'units', before: c.after, after: c.before };
+    case 'layer':
+      return { op: 'layer', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
   }
 }
 
@@ -48,7 +52,27 @@ function apply(d: Drawing, c: Change): void {
       if (d.units !== c.before) throw new Error(`units: drawing is ${d.units}, expected ${c.before}`);
       d.units = c.after;
       return;
+    case 'layer':
+      applyLayer(d, c.before, c.after);
+      return;
   }
+}
+
+function applyLayer(d: Drawing, before: Layer | undefined, after: Layer | undefined): void {
+  if (before && after && before.name !== after.name) throw new Error('layer: a change keeps the name; rename is remove + add');
+  const name = (before ?? after)?.name;
+  if (name === undefined) throw new Error('layer: change has neither before nor after');
+  if (before ? !d.layers.has(name) : d.layers.has(name)) {
+    throw new Error(before ? `layer: ${name} not found` : `layer: ${name} already exists`);
+  }
+  if (after) {
+    d.layers.set(name, after);
+    return;
+  }
+  for (const e of d.entities.values()) {
+    if (e.layer === name) throw new Error(`layer: ${name} still has entities`);
+  }
+  d.layers.delete(name);
 }
 
 /**

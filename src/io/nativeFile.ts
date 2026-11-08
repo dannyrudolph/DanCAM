@@ -2,6 +2,7 @@ import { nearlyEqual } from '../geometry/tolerance';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
 import type { Entity } from '../model/entity';
+import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 
 /**
@@ -18,6 +19,8 @@ type FileV1 = {
   schemaVersion: 1;
   units: Units;
   nextId: number;
+  /** Optional: files from before layers had a current layer open on "0". */
+  currentLayer?: string;
   layers: Layer[];
   entities: Entity[];
 };
@@ -28,6 +31,7 @@ export function serializeDrawing(d: Drawing): string {
     schemaVersion: SCHEMA_VERSION,
     units: d.units,
     nextId: d.nextId,
+    currentLayer: d.currentLayer,
     layers: [...d.layers.values()],
     entities: [...d.entities.values()],
   };
@@ -102,6 +106,14 @@ function readV1(file: Record<string, unknown>): Drawing {
     const n = /^e(\d+)$/.exec(e.id);
     if (n) maxId = Math.max(maxId, Number(n[1]));
   });
+
+  if (file.currentLayer === undefined) {
+    ensureCurrentLayer(d);
+  } else {
+    const current = str(file.currentLayer, 'currentLayer');
+    if (!d.layers.has(current)) throw new FileError(`currentLayer: layer "${current}" is not defined.`);
+    d.currentLayer = current;
+  }
 
   // Never hand out an id that is already in use, even if nextId was edited by hand.
   const nextId = file.nextId === undefined ? 1 : num(file.nextId, 'nextId');

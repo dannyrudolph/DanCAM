@@ -7,11 +7,12 @@ import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../c
 import { createXlineTool } from '../commands/xlineTool';
 import type { Vec2 } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
-import { DEFAULT_LAYER, type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
+import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
 import { type Transaction, UndoStack } from '../model/undo';
+import { ensureCurrentLayer } from '../model/layers';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { render } from '../render/renderer';
 import * as vp from '../render/viewport';
@@ -20,6 +21,7 @@ import { DrawingFile } from './fileAccess';
 import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
+import { LayersPanel } from './layersPanel';
 import { PropertiesPanel } from './propertiesPanel';
 import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
 
@@ -94,6 +96,15 @@ export class App {
   private readonly boxes: InputBoxes;
   private readonly status: StatusBar;
   private readonly properties = new PropertiesPanel(el('properties'));
+  private readonly layers = new LayersPanel(el('layers'), {
+    commit: (tx, renamed) => this.commitLayerEdit(tx, renamed),
+    setCurrent: (name) => {
+      this.drawing.currentLayer = name;
+      this.status.showMessage(`Current layer: ${name}`);
+      this.refresh();
+    },
+    message: (m) => this.status.showMessage(m),
+  });
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
@@ -240,6 +251,15 @@ export class App {
     ]);
   }
 
+  private commitLayerEdit(tx: Transaction, renamed?: { from: string; to: string }): void {
+    // A tool mid-step (a line chain's "Undo last segment") must not undo a layer edit.
+    this.runner.stop();
+    this.undo.commit(tx);
+    if (renamed) ensureCurrentLayer(this.drawing, renamed.from, renamed.to);
+    this.status.showMessage(tx.label);
+    this.refresh();
+  }
+
   private changeUnits(tx: Transaction | undefined): void {
     if (!tx) return;
     this.runner.stop();
@@ -339,7 +359,8 @@ export class App {
   }
 
   private newProps(): EntityProps {
-    return this.currentStyle ? { layer: DEFAULT_LAYER, style: this.currentStyle } : { layer: DEFAULT_LAYER };
+    const layer = this.drawing.currentLayer;
+    return this.currentStyle ? { layer, style: this.currentStyle } : { layer };
   }
 
   // ---- point resolution ------------------------------------------------------
@@ -368,6 +389,8 @@ export class App {
       this.zoomExtents();
     }
     document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
+    ensureCurrentLayer(this.drawing); // an undo may have removed it
+    this.layers.show(this.drawing);
     const req = this.runner.request;
     this.boxes.setRequest(req);
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');

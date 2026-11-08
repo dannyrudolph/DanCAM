@@ -63,6 +63,15 @@ describe('native file', () => {
     expect(text.startsWith(`{\n  "format": "DanCAM drawing",\n  "schemaVersion": ${SCHEMA_VERSION},`)).toBe(true);
   });
 
+  it('saves the current layer, and opens a file without one on layer 0', () => {
+    const d = createDrawing('in');
+    d.layers.set('CL', { name: 'CL', color: '#000000', visible: true, style: 'center' });
+    d.currentLayer = 'CL';
+    expect(reopen(serializeDrawing(d)).currentLayer).toBe('CL');
+    expect(reopen(v1()).currentLayer).toBe('0');
+    expect(errorOf(v1({ currentLayer: 'Nope' }))).toBe('currentLayer: layer "Nope" is not defined.');
+  });
+
   it('keeps the next id ahead of every id in the file, even if it was edited down', () => {
     const d = reopen(v1({ nextId: 1 }));
     expect(d.nextId).toBe(2);

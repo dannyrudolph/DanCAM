@@ -22,6 +22,11 @@ export type Drawing = {
   units: Units;
   readonly layers: Map<string, Layer>;
   readonly entities: Map<EntityId, Entity>;
+  /**
+   * Layer new entities go on. Saved in the file but not undoable (a setting,
+   * like the active tool); see `ensureCurrentLayer` for when its layer goes away.
+   */
+  currentLayer: string;
   /** Next id counter. Ids are never reused, even after undo. */
   nextId: number;
 };
@@ -34,6 +39,7 @@ export function createDrawing(units: Units): Drawing {
     units,
     layers: new Map([[DEFAULT_LAYER, { name: DEFAULT_LAYER, color: '#000000', visible: true, style: 'visible' }]]),
     entities: new Map(),
+    currentLayer: DEFAULT_LAYER,
     nextId: 1,
   };
 }

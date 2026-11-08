@@ -141,3 +141,13 @@ describe('UndoStack saved state', () => {
     );
   });
 });
+
+describe('UndoStack layer changes', () => {
+  it('refuses to remove a layer that still has entities, or add one that exists', () => {
+    const { drawing, undo } = setup();
+    undo.commit({ label: 'LINE', changes: [{ op: 'add', entity: line('e1') }] });
+    const layer0 = drawing.layers.get('0')!;
+    expect(() => undo.commit({ label: 'DEL', changes: [{ op: 'layer', before: layer0 }] })).toThrow('layer: 0 still has entities');
+    expect(() => undo.commit({ label: 'ADD', changes: [{ op: 'layer', after: layer0 }] })).toThrow('layer: 0 already exists');
+  });
+});

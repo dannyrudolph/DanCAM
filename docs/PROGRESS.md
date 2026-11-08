@@ -19,46 +19,33 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
   Panning: middle-drag, Space + left-drag, or the Pan button (H).
   Playwright browser tests, also run in CI.
 
-## In flight: Phase 1b (plan approved 2026-11-08)
+## Phase 1b (plan approved 2026-11-08): all five steps done; awaiting the user's review
 
-Five steps, one commit each:
+1. **Geometry kernel.** `geometry/`: `angle`, `circle` (2P, 3P), `arc` (3P,
+   S-C-E, S-E-R, S-C-Angle, tangent-from-direction), `xline`, `intersect`,
+   `tangentCircles` (TTR, TTT, nearest-to-picks), `arcPolyline`
+   (screen-space, clipped), `clip.clipLine`.
+2. **Model and rendering.** Circle/Arc/Xline entities (arc angles in degrees,
+   CCW); xlines excluded from extents; pick distance; arcs flattened in screen
+   space with anchored dashes and tangent end gaps; properties rows.
+3. **Tools.** `value` and `entity` requests; `MethodChoice` keeps a tool's
+   method in the options bar. Circle (C): C-R, C-D, 2P, 3P, TTR, TTT. Arc (A):
+   3P, S-C-E, S-E-R, S-C-A, Continue (from `ToolContext.continuation`). Xline
+   (X): H, V, Angle, 2P, Offset.
+4. **Layers** (done after step 5, at the user's request). `layer` change
+   record; `model/layers` (add LayerN, edit, rename moving its objects,
+   delete only when empty and not 0 or current); Layers panel above the
+   properties (current, show/hide, color, style, name by double-click, count,
+   delete). `Drawing.currentLayer` is saved (optional `currentLayer` in the
+   file) but not undoable; it follows a rename and falls back to 0 when undo
+   removes its layer.
+5. **Units and files.** New (inch/mm), Open, Save, Save As; `io/nativeFile`
+   (`.cad2d.json`, schemaVersion 1, migrations table, strict reader); File
+   System Access API with fallbacks; convert/relabel from the status bar
+   units (undoable `units` record); unsaved-changes marker and prompts.
 
-1. **Geometry kernel — done.** `geometry/`: `angle` (moved `cosSinDeg`/`angleDeg`
-   here from `commands/pointInput`), `circle` (2P, 3P), `arc` (3P, S-C-E, S-E-R
-   minor arc toward a side point, S-C-Angle, tangent-from-direction), `xline`
-   (H, V, angle, 2P, offset), `intersect` (line/circle), `tangentCircles` (TTR,
-   TTT, contact points, nearest-to-picks), `arcPolyline` (screen-space,
-   clipped, chord error bound), `clip.clipLine`. TTT walks the bisectors of
-   two lines (well conditioned for nearly parallel lines) and refines the
-   all-circle/one-line cases with damped least squares; fast-check
-   counterexamples are pinned as regression tests.
-2. **Model and rendering — done.** Circle/Arc/Xline entities (arc angles in
-   degrees, CCW), bbox (xlines excluded from extents; `arcBBox` uses ends plus
-   crossed quadrants), pick distance (arc: radial within its range, else
-   nearer end), render via `arcScreenPieces` (0.25px chord error) with dash
-   offsets and tangent end gaps (`insetArc`), xline dashes anchored at the base
-   point, properties rows. The `?demo` drawing has an end view with all three.
-3. **Tools — done.** `value` requests (one box at the cursor: R, Ø, ∠, Dist;
-   click takes the cursor's value, typing locks one) and `entity` requests
-   (click an object; candidates highlight on hover). `MethodChoice` puts a
-   tool's methods in the options bar and keeps the choice between runs.
-   Circle (C): Center-Radius/Diameter, 2P, 3P, TTR, TTT. Arc (A): 3P, S-C-E,
-   S-E-R (bulges toward the cursor), S-C-Angle (negative = clockwise),
-   Continue (from `ToolContext.continuation`, set by Line and Arc; falls back
-   to 3P when the last one was undone). Xline (X): H, V, Angle (point then
-   angle), 2P, Offset (pick a line or xline; distance and side from the cursor).
-4. **Next (deferred by the user, 2026-11-08; done after step 5): layers** —
-   undoable layer records, layers panel, current layer. Also add the current
-   layer to the file as an optional field (default "0"), so version 1 files
-   still open.
-5. **Units and files — done.** New (inch or mm), Open, Save, Save As in the
-   top bar; Ctrl+O, Ctrl+S, Ctrl+Shift+S. `io/nativeFile`: indented
-   `.cad2d.json`, schemaVersion 1, a migrations table, and a strict reader
-   that says what is wrong. File System Access API with input/download
-   fallbacks; a file that fails to open never becomes the Save target.
-   Clicking the units in the status bar converts (×/÷ 25.4, undoable, a
-   `units` change record) or relabels. The title shows • when unsaved; New,
-   Open and closing the tab ask first.
+Next: Phase 2 (snaps, selection, grips, editing). Don't start it until the
+user says so (CAD-7).
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current

@@ -487,3 +487,60 @@ test.describe('files and units', () => {
     await expect(prop(page, 'entity-count')).toHaveText('1');
   });
 });
+
+test.describe('layers panel', () => {
+  const row = (page: Page, name: string) => page.locator(`.layer-row[data-layer="${name}"]`);
+
+  test('a new layer is named, made current, and takes new lines; hiding it hides them from picks', async ({ page }) => {
+    await page.getByTestId('new-layer').click();
+    const nameBox = page.locator('[data-role="name-input"]');
+    await expect(nameBox).toBeFocused();
+    await nameBox.fill('Profile');
+    await nameBox.press('Enter');
+    await expect(row(page, 'Profile')).toBeVisible();
+
+    await row(page, 'Profile').locator('[data-role="current"]').check();
+    await expect(row(page, 'Profile')).toHaveClass(/current/);
+
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(row(page, 'Profile').locator('.layer-count')).toHaveText('1');
+
+    await page.getByTestId('zoom-extents').click();
+    const c = await canvasCenter(page);
+    await page.mouse.click(c.x, c.y);
+    await expect(prop(page, 'Layer')).toHaveText('Profile');
+
+    await page.keyboard.press('Escape'); // clear the selection
+    await row(page, 'Profile').locator('[data-role="visible"]').click();
+    await expect(row(page, 'Profile')).toHaveClass(/hidden-layer/);
+    await page.mouse.click(c.x, c.y);
+    await expect(page.locator('#properties h2')).toHaveText('Drawing'); // nothing picked
+  });
+
+  test('deleting a layer with objects is refused; undo takes back a new layer', async ({ page }) => {
+    await page.goto('/?demo');
+    await row(page, 'CENTER').locator('[data-role="delete"]').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('CENTER still has 3 objects on it.');
+    await expect(row(page, 'CENTER')).toBeVisible();
+
+    await page.getByTestId('new-layer').click();
+    await page.locator('[data-role="name-input"]').press('Enter'); // keep the name Layer1
+    await expect(row(page, 'Layer1')).toBeVisible();
+    await page.keyboard.press('Control+z');
+    await expect(row(page, 'Layer1')).toHaveCount(0);
+  });
+
+  test('renaming a layer moves its objects with it', async ({ page }) => {
+    await page.goto('/?demo');
+    await row(page, 'CENTER').locator('[data-role="name"]').dblclick();
+    const nameBox = page.locator('[data-role="name-input"]');
+    await nameBox.fill('CL');
+    await nameBox.press('Enter');
+    await expect(row(page, 'CL').locator('.layer-count')).toHaveText('3');
+    await expect(row(page, 'CENTER')).toHaveCount(0);
+  });
+});
