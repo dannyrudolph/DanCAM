@@ -9,3 +9,12 @@ export function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
+
+/** Distance from p to the infinite line through a and b (to a when they coincide). */
+export function distanceToLine(p: Vec2, a: Vec2, b: Vec2): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  return Math.abs(dx * (p.y - a.y) - dy * (p.x - a.x)) / len;
+}

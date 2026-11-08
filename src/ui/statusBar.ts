@@ -1,4 +1,4 @@
-import { angleDeg } from '../commands/pointInput';
+import { angleDeg } from '../geometry/angle';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
 import type { ScrollMode } from './input';

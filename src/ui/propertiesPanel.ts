@@ -1,4 +1,4 @@
-import { angleDeg } from '../commands/pointInput';
+import { angleDeg } from '../geometry/angle';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity } from '../model/entity';
 import { formatNumber } from './statusBar';

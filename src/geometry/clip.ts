@@ -35,3 +35,32 @@ export function clipSegment(a: Vec2, b: Vec2, box: BBox): [Vec2, Vec2] | undefin
   const end = t1 === 1 ? b : { x: a.x + t1 * dx, y: a.y + t1 * dy };
   return [start, end];
 }
+
+/**
+ * Clips the infinite line through `p` with direction `d` to `box`. Returns the
+ * visible segment, or undefined if the line misses the box or `d` is zero.
+ */
+export function clipLine(p: Vec2, d: Vec2, box: BBox): [Vec2, Vec2] | undefined {
+  let t0 = -Infinity;
+  let t1 = Infinity;
+  const edges: [number, number][] = [
+    [-d.x, p.x - box.minX],
+    [d.x, box.maxX - p.x],
+    [-d.y, p.y - box.minY],
+    [d.y, box.maxY - p.y],
+  ];
+  for (const [a, q] of edges) {
+    if (a === 0) {
+      if (q < 0) return undefined;
+      continue;
+    }
+    const t = q / a;
+    if (a < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+  }
+  if (!(t0 <= t1) || !Number.isFinite(t0) || !Number.isFinite(t1)) return undefined;
+  return [
+    { x: p.x + t0 * d.x, y: p.y + t0 * d.y },
+    { x: p.x + t1 * d.x, y: p.y + t1 * d.y },
+  ];
+}

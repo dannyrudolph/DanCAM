@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { clipSegment } from './clip';
+import { clipLine, clipSegment } from './clip';
 import { TOL } from './tolerance';
 
 const box = { minX: 0, minY: 0, maxX: 100, maxY: 50 };
@@ -67,5 +67,25 @@ describe('clipSegment', () => {
         }
       }),
     );
+  });
+});
+
+describe('clipLine', () => {
+  it('cuts an infinite horizontal line at the box edges, whatever its base point', () => {
+    expect(clipLine({ x: 1e12, y: 25 }, { x: 1, y: 0 }, box)).toEqual([
+      { x: 0, y: 25 },
+      { x: 100, y: 25 },
+    ]);
+  });
+
+  it('runs a diagonal corner to corner', () => {
+    const r = clipLine({ x: 50, y: 50 }, { x: -1, y: -1 }, { minX: 0, minY: 0, maxX: 100, maxY: 100 })!;
+    const xs = [r[0].x, r[1].x].sort((a, b) => a - b);
+    expect(xs).toEqual([0, 100]);
+  });
+
+  it('misses a line outside the box and rejects a zero direction', () => {
+    expect(clipLine({ x: 0, y: 60 }, { x: 1, y: 0 }, box)).toBeUndefined();
+    expect(clipLine({ x: 10, y: 10 }, { x: 0, y: 0 }, box)).toBeUndefined();
   });
 });

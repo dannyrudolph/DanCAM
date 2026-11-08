@@ -1,7 +1,8 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { TOL } from '../geometry/tolerance';
-import { angleDeg, cosSinDeg, fieldValue, fieldsFor, resolvePoint, track } from './pointInput';
+import { angleDeg } from '../geometry/angle';
+import { fieldValue, fieldsFor, resolvePoint, track } from './pointInput';
 
 const free = { ortho: false, polar: false, polarIncrementDeg: 15 };
 const polar15 = { ortho: false, polar: true, polarIncrementDeg: 15 };
@@ -17,33 +18,6 @@ describe('fieldsFor', () => {
     expect(fieldsFor(base, 'polar')).toEqual(['length', 'angle']);
     expect(fieldsFor(base, 'delta')).toEqual(['dx', 'dy']);
     expect(fieldsFor(base, 'absolute')).toEqual(['x', 'y']);
-  });
-});
-
-describe('cosSinDeg', () => {
-  it('is exact at multiples of 90°, including negative and over 360', () => {
-    expect(cosSinDeg(0)).toEqual([1, 0]);
-    expect(cosSinDeg(90)).toEqual([0, 1]);
-    expect(cosSinDeg(180)).toEqual([-1, 0]);
-    expect(cosSinDeg(270)).toEqual([0, -1]);
-    expect(cosSinDeg(-90)).toEqual([0, -1]);
-    expect(cosSinDeg(450)).toEqual([0, 1]);
-  });
-
-  it('matches Math.cos/sin elsewhere', () => {
-    const [c, s] = cosSinDeg(30);
-    expect(c).toBe(Math.cos(Math.PI / 6));
-    expect(s).toBe(Math.sin(Math.PI / 6));
-  });
-});
-
-describe('angleDeg', () => {
-  it('is counter-clockwise from +X in [0, 360)', () => {
-    expect(angleDeg({ x: 1, y: 0 })).toBe(0);
-    expect(angleDeg({ x: 0, y: 1 })).toBe(90);
-    expect(angleDeg({ x: -1, y: 0 })).toBe(180);
-    expect(angleDeg({ x: 0, y: -1 })).toBe(270);
-    expect(angleDeg({ x: 1, y: -1 })).toBe(315);
   });
 });
 

@@ -17,18 +17,30 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
   Panning: middle-drag, Space + left-drag, or the Pan button (H).
   Playwright browser tests, also run in CI.
 
-## In flight
+## In flight: Phase 1b (plan approved 2026-11-08)
 
-- 1a reviewed and approved by the user. Starting 1b.
+Five steps, one commit each:
 
-## Next: Phase 1b
+1. **Geometry kernel — done.** `geometry/`: `angle` (moved `cosSinDeg`/`angleDeg`
+   here from `commands/pointInput`), `circle` (2P, 3P), `arc` (3P, S-C-E, S-E-R
+   minor arc toward a side point, S-C-Angle, tangent-from-direction), `xline`
+   (H, V, angle, 2P, offset), `intersect` (line/circle), `tangentCircles` (TTR,
+   TTT, contact points, nearest-to-picks), `arcPolyline` (screen-space,
+   clipped, chord error bound), `clip.clipLine`. TTT walks the bisectors of
+   two lines (well conditioned for nearly parallel lines) and refines the
+   all-circle/one-line cases with damped least squares; fast-check
+   counterexamples are pinned as regression tests.
+2. **Next: model and rendering** — Circle/Arc/Xline entities (arc angles in
+   degrees, CCW), bbox (xlines excluded from extents), pick distance, render
+   via `arcScreenPieces` with dash offset and tangent end gaps, properties rows.
+3. Tools — `entity` and `value` requests; Circle (C), Arc (A), Xline (X).
+4. Layers — undoable layer records, layers panel, current layer.
+5. Units and files — new drawing, convert/relabel, `.cad2d.json` save/load.
 
-Circle (center+radius/diameter, 2-pt, 3-pt, TTR, TTT), Arc (3-pt, S-C-E,
-S-E-R, S-C-Angle, continue tangent), Construction line (H, V, angle, 2-pt,
-offset), entity picking inside tools, layers panel (including each layer's
-line style), units (new drawing, convert vs relabel), `.cad2d.json` save and
-load. Arcs must be drawn as clipped, adaptively split polylines in screen
-space for deep zoom.
+Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
+circles for TTR/TTT; Continue starts from the last line/arc drawn; current
+layer is saved in the file but not undoable; ray and IndexedDB autosave are
+deferred (ray to Phase 2, autosave to Phase 6).
 
 ## Open questions
 
