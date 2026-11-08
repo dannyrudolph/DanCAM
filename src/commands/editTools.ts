@@ -25,7 +25,7 @@ export function* objects(ctx: ToolContext, verb: string): Step<Entity[]> {
   }
 }
 
-function* point(req: Omit<PointRequest, 'kind'>): Step<Vec2> {
+export function* point(req: Omit<PointRequest, 'kind'>): Step<Vec2> {
   for (;;) {
     const input = yield { ...req, kind: 'point' };
     if (input.kind === 'finish') return undefined;
@@ -33,7 +33,7 @@ function* point(req: Omit<PointRequest, 'kind'>): Step<Vec2> {
   }
 }
 
-function* value(req: Omit<ValueRequest, 'kind'>): Step<number> {
+export function* value(req: Omit<ValueRequest, 'kind'>): Step<number> {
   for (;;) {
     const input = yield { ...req, kind: 'value' };
     if (input.kind === 'finish') return undefined;

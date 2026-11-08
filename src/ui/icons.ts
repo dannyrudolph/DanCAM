@@ -24,6 +24,8 @@ export const ICONS = {
   break: svg('<path d="M2 10 H8 M12 10 H18"/><path d="M8 6 V14 M12 6 V14"/>'),
   join: svg('<path d="M2 10 H18"/><path d="M8 7 L10 10 L12 7"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/>'),
   lengthen: svg('<path d="M2 12 H12"/><path d="M12 12 H18" stroke-dasharray="1.5 2"/><path d="M15 8 L18 12 L15 16"/><path d="M2 8 V16"/>'),
+  array: svg('<rect x="2" y="2" width="5" height="5"/><rect x="13" y="2" width="5" height="5"/><rect x="2" y="13" width="5" height="5"/><rect x="13" y="13" width="5" height="5"/>'),
+  stretch: svg('<path d="M2 15 H9 L13 5 H18" /><rect x="11" y="2" width="8" height="8" stroke-dasharray="1.5 1.5"/><path d="M5 9 L8 6 M8 6 H5.5 M8 6 V8.5"/>'),
   dist: svg('<path d="M3 10 H17 M3 6 V14 M17 6 V14 M6 8 L3 10 L6 12 M14 8 L17 10 L14 12"/>'),
   id: svg('<path d="M10 2 V7 M10 13 V18 M2 10 H7 M13 10 H18"/><circle cx="10" cy="10" r="3"/>'),
   list: svg('<path d="M7 5 H17 M7 10 H17 M7 15 H17"/><circle cx="3.5" cy="5" r="1" fill="currentColor"/><circle cx="3.5" cy="10" r="1" fill="currentColor"/><circle cx="3.5" cy="15" r="1" fill="currentColor"/>'),

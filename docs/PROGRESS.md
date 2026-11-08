@@ -154,7 +154,20 @@ points along an edge, then its new angle).
    remembered, picks until Enter). `editTools.objects` is now exported.
    Also: `intersect.lineLine` takes x from a vertical line and y from a
    horizontal one exactly (separate commit).
-5. Array (Shift+A) and Stretch (Shift+S).
+5. **Array (Shift+A) and Stretch (Shift+S) (done).** `geometry/array`
+   (`rectangularArray`, `polarArray`: full 360° spaces evenly, a partial
+   fill ends on the last item, negative is clockwise, unrotated copies
+   keep the objects' bbox center on the circle) and `geometry/stretch`
+   (line ends, ray/xline base, circle center, points inside move; an arc
+   with both ends inside moves, with one end keeps its sagitta).
+   `commands/arrayTool`: selection first; Rectangular (rows, columns,
+   ΔY, ΔX; spacing skipped for a single row/column) or Polar (center,
+   count, fill angle with Rotate items / Don't rotate); typed values, the
+   last previews; one step. `commands/stretchTool`: the crossing window is
+   two picked corners (previewed as a dashed box; snaps work), then base
+   and second point; visible objects only; one step. No selection-first
+   for Stretch (it needs the window itself). `editTools.point` / `value`
+   exported and reused. `ui/shortcuts.test` guards unique tool keys.
 6. Done-when e2e: turned profile from xlines by trimming, R.020 fillet,
    .010 x 45° chamfer, checked with ID/List to 1e-12.
 

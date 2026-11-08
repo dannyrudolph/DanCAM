@@ -4,7 +4,8 @@ import type { Vec2 } from '../geometry/vec';
 import { newEntityId } from '../model/drawing';
 import { type Entity, type EntityId, type EntityProps, entityCurve, entityFromCurve } from '../model/entity';
 import type { Change } from '../model/undo';
-import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption, ValueRequest } from './tool';
+import { value } from './editTools';
+import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption } from './tool';
 import { PREVIEW_ID } from './toolSteps';
 
 /**
@@ -34,15 +35,6 @@ function previewOf(changes: readonly Change[]): Entity[] {
 }
 
 const num = (n: number): string => String(n);
-
-/** Asks for one typed value; undefined if the user finishes instead. */
-function* typed(req: Omit<ValueRequest, 'kind'>): Generator<Request, number | undefined, ToolInput> {
-  for (;;) {
-    const input = yield { ...req, kind: 'value' };
-    if (input.kind === 'finish') return undefined;
-    if (input.kind === 'value') return input.value;
-  }
-}
 
 type CornerTool = {
   readonly id: string;
@@ -143,7 +135,7 @@ export function createFilletTool(): ToolDef {
     options: () => [{ key: 'radius', label: `Radius ${num(radius)}…`, enabled: true }],
     *option(key) {
       if (key !== 'radius') return;
-      const r = yield* typed({ prompt: 'Fillet: type the radius', label: 'R', quantity: 'length' });
+      const r = yield* value({ prompt: 'Fillet: type the radius', label: 'R', quantity: 'length' });
       if (r !== undefined && r >= 0) radius = r;
     },
     make: (c1, p1, c2, p2) => filletCurves(c1, p1, c2, p2, radius),
@@ -175,15 +167,15 @@ export function createChamferTool(): ToolDef {
         return;
       }
       if (key !== 'sizes') return;
-      const a = yield* typed({ prompt: 'Chamfer: type the distance on the first line', label: 'D1', quantity: 'length' });
+      const a = yield* value({ prompt: 'Chamfer: type the distance on the first line', label: 'D1', quantity: 'length' });
       if (a === undefined || a < 0) return;
       if (mode === 'distances') {
-        const b = yield* typed({ prompt: 'Chamfer: type the distance on the second line', label: 'D2', quantity: 'length' });
+        const b = yield* value({ prompt: 'Chamfer: type the distance on the second line', label: 'D2', quantity: 'length' });
         if (b === undefined || b < 0) return;
         d1 = a;
         d2 = b;
       } else {
-        const g = yield* typed({ prompt: 'Chamfer: type the angle from the first line', label: '∠', quantity: 'angle' });
+        const g = yield* value({ prompt: 'Chamfer: type the angle from the first line', label: '∠', quantity: 'angle' });
         if (g === undefined || g <= 0 || g >= 180) return;
         d1 = a;
         deg = g;
