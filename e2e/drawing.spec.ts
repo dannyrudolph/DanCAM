@@ -544,3 +544,18 @@ test.describe('layers panel', () => {
     await expect(row(page, 'CENTER')).toHaveCount(0);
   });
 });
+
+test('the sidebar hides and shows, and stays hidden after a reload', async ({ page }) => {
+  const side = page.locator('#side');
+  await expect(side).toBeVisible();
+  const before = (await page.locator('#canvas').boundingBox())!.width;
+
+  await page.getByTestId('side-panel').click();
+  await expect(side).toBeHidden();
+  await expect.poll(async () => (await page.locator('#canvas').boundingBox())!.width).toBeGreaterThan(before);
+
+  await page.reload();
+  await expect(side).toBeHidden();
+  await page.getByTestId('side-panel').click();
+  await expect(side).toBeVisible();
+});

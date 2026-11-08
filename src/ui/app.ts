@@ -47,6 +47,7 @@ export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createAr
 const VALUE_START = /^[0-9.+\-(]$/;
 
 const SCROLL_MODE_KEY = 'dancam.scrollMode';
+const SIDE_PANEL_KEY = 'dancam.sidePanel';
 
 /** The viewer's scroll preference; a convenience, so storage failures just fall back to Pan. */
 function loadScrollMode(): ScrollMode {
@@ -62,6 +63,23 @@ function saveScrollMode(mode: ScrollMode): void {
     localStorage.setItem(SCROLL_MODE_KEY, mode);
   } catch {
     // Private mode or blocked storage: the setting just won't persist.
+  }
+}
+
+/** Whether the layers/properties sidebar is shown; remembered per browser, shown by default. */
+function loadSidePanel(): boolean {
+  try {
+    return localStorage.getItem(SIDE_PANEL_KEY) !== 'hidden';
+  } catch {
+    return true;
+  }
+}
+
+function saveSidePanel(shown: boolean): void {
+  try {
+    localStorage.setItem(SIDE_PANEL_KEY, shown ? 'shown' : 'hidden');
+  } catch {
+    // Not persisted; fine.
   }
 }
 
@@ -108,6 +126,8 @@ export class App {
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
+  private readonly unitsButton = document.createElement('button');
+  private readonly sidePanelButton = document.createElement('button');
   private readonly settings: StatusSettings = {
     scrollMode: loadScrollMode(),
     ortho: false,
@@ -138,16 +158,10 @@ export class App {
     this.view = initialView(drawing.units, 1, 1);
     this.shownUnits = drawing.units;
 
-    this.status = new StatusBar(
-      el('status'),
-      this.settings,
-      () => {
-        saveScrollMode(this.settings.scrollMode);
-        this.refresh();
-      },
-      (anchor) => this.openUnitsMenu(anchor),
-    );
-    this.status.setUnits(drawing.units);
+    this.status = new StatusBar(el('status'), this.settings, () => {
+      saveScrollMode(this.settings.scrollMode);
+      this.refresh();
+    });
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
       precision: () => this.settings.precision,
@@ -187,7 +201,6 @@ export class App {
     this.runner = this.makeRunner();
     this.selected = undefined;
     this.shownUnits = d.units;
-    this.status.setUnits(d.units);
     this.view = initialView(d.units, this.view.widthPx, this.view.heightPx);
     if (d.entities.size > 0) this.zoomExtents();
     this.refresh();
@@ -237,7 +250,7 @@ export class App {
   private openUnitsMenu(anchor: DOMRect): void {
     const other: Units = this.drawing.units === 'in' ? 'mm' : 'in';
     const op = other === 'mm' ? '×' : '÷';
-    this.menu.open(anchor.left, anchor.top, [
+    this.menu.open(anchor.left, anchor.bottom, [
       {
         label: `Convert to ${UNIT_LABEL[other]} (same size, numbers ${op} 25.4)`,
         enabled: true,
@@ -385,9 +398,9 @@ export class App {
   private refresh(): void {
     if (this.drawing.units !== this.shownUnits) {
       this.shownUnits = this.drawing.units;
-      this.status.setUnits(this.drawing.units);
       this.zoomExtents();
     }
+    this.unitsButton.textContent = this.drawing.units;
     document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     this.layers.show(this.drawing);
@@ -468,6 +481,7 @@ export class App {
 
   // ---- building the chrome ---------------------------------------------------
 
+  /** Drawing tools in a row under the top bar, ending with the drawing's units. */
   private buildToolbar(): void {
     const bar = el('toolbar');
     for (const def of TOOLS) {
@@ -476,6 +490,23 @@ export class App {
       this.toolButtons.set(def.id, b);
       bar.append(b);
     }
+    const u = this.unitsButton;
+    u.type = 'button';
+    u.className = 'units-button';
+    u.title = 'Drawing units: convert or relabel';
+    u.tabIndex = -1;
+    u.dataset.testid = 'units';
+    u.textContent = this.drawing.units;
+    u.addEventListener('click', () => this.openUnitsMenu(u.getBoundingClientRect()));
+    bar.append(u);
+  }
+
+  private setSidePanel(shown: boolean): void {
+    el('main').classList.toggle('side-hidden', !shown);
+    this.sidePanelButton.classList.toggle('active', shown);
+    this.sidePanelButton.setAttribute('aria-pressed', String(shown));
+    this.sidePanelButton.title = shown ? 'Hide the layers and properties panel' : 'Show the layers and properties panel';
+    saveSidePanel(shown);
   }
 
   private buildTopBar(): void {
@@ -527,6 +558,16 @@ export class App {
       button(ICONS.extents, 'Zoom Extents (double-click middle button)', () => this.zoomExtents(), 'zoom-extents'),
       style,
     );
+
+    const side = this.sidePanelButton;
+    side.type = 'button';
+    side.className = 'tool-button side-panel-toggle';
+    side.innerHTML = ICONS.sidebar;
+    side.tabIndex = -1;
+    side.dataset.testid = 'side-panel';
+    side.addEventListener('click', () => this.setSidePanel(el('main').classList.contains('side-hidden')));
+    bar.append(side);
+    this.setSidePanel(loadSidePanel());
   }
 
   private contextItems(): MenuItem[] {

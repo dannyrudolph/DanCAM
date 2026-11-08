@@ -35,12 +35,11 @@ export type StatusSettings = {
   precision: number;
 };
 
-/** Bottom bar: tool instruction or message, cursor readout, Ortho/Polar toggles, precision, units. */
+/** Bottom bar: tool instruction or message, cursor readout, Ortho/Polar toggles, precision. */
 export class StatusBar {
   private readonly prompt: HTMLElement;
   private readonly coords: HTMLElement;
   private readonly fromBase: HTMLElement;
-  private readonly units: HTMLButtonElement;
   private readonly ortho: HTMLButtonElement;
   private readonly polar: HTMLButtonElement;
   private readonly increment: HTMLSelectElement;
@@ -51,8 +50,6 @@ export class StatusBar {
     root: HTMLElement,
     private readonly settings: StatusSettings,
     private readonly onSettingsChanged: () => void,
-    /** The units label was clicked; `anchor` is its position for a menu. */
-    onUnitsClick: (anchor: DOMRect) => void,
   ) {
     const span = (cls: string): HTMLElement => {
       const s = document.createElement('span');
@@ -62,13 +59,6 @@ export class StatusBar {
     this.prompt = span('status-prompt');
     this.coords = span('status-coords');
     this.fromBase = span('status-from-base');
-    this.units = document.createElement('button');
-    this.units.type = 'button';
-    this.units.className = 'status-units';
-    this.units.title = 'Drawing units: convert or relabel';
-    this.units.tabIndex = -1;
-    this.units.dataset.testid = 'units';
-    this.units.addEventListener('click', () => onUnitsClick(this.units.getBoundingClientRect()));
 
     this.ortho = this.toggle('Ortho', 'Ortho (F8): horizontal and vertical only', () => {
       settings.ortho = !settings.ortho;
@@ -101,7 +91,7 @@ export class StatusBar {
     scroll.dataset.testid = 'scroll-mode';
 
     const right = span('status-right');
-    right.append(scroll, this.ortho, this.polar, this.increment, this.precision, this.units);
+    right.append(scroll, this.ortho, this.polar, this.increment, this.precision);
     root.append(this.prompt, this.coords, this.fromBase, right);
     this.refreshToggles();
   }
@@ -122,10 +112,6 @@ export class StatusBar {
     const dp = this.settings.precision;
     this.coords.textContent = p ? formatReadout(p, dp) : '';
     this.fromBase.textContent = p && base ? formatFromBase(base, p, dp) : '';
-  }
-
-  setUnits(units: Units): void {
-    this.units.textContent = units;
   }
 
   /** Call after settings change from elsewhere (F8, F10). */

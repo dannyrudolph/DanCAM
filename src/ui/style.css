@@ -40,7 +40,7 @@ input {
 
 #app {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto 1fr auto;
   height: 100%;
 }
 
@@ -84,17 +84,40 @@ input {
 
 #main {
   display: grid;
-  grid-template-columns: auto 1fr 300px;
+  grid-template-columns: 1fr 300px;
   min-height: 0;
 }
 
+#main.side-hidden {
+  grid-template-columns: 1fr;
+}
+
+#main.side-hidden #side {
+  display: none;
+}
+
+/* Drawing tools: their own row under the file and view buttons. */
 #toolbar {
-  display: flex;
-  flex-direction: column;
   gap: 4px;
-  padding: 6px 4px;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
+}
+
+.units-button {
+  height: 32px;
+  min-width: 36px;
+  margin-left: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.units-button:hover {
+  border-color: var(--accent);
+}
+
+.side-panel-toggle {
+  margin-left: auto;
 }
 
 .tool-button {
@@ -355,20 +378,6 @@ input {
   padding: 1px 4px;
 }
 
-.status-units {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.status-units:hover {
-  border-color: var(--border);
-  color: var(--text);
-}
 
 .input-boxes {
   position: absolute;

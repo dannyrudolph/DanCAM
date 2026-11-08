@@ -12,6 +12,7 @@ export const ICONS = {
   open: svg('<path d="M2 5 H8 L10 7 H17 V16 H2 Z"/>'),
   save: svg('<path d="M3 3 H14 L17 6 V17 H3 Z"/><path d="M6 3 V8 H13 V3 M6 17 V12 H14 V17"/>'),
   saveAs: svg('<path d="M3 3 H14 L17 6 V10 M10 17 H3 V3"/><path d="M6 3 V8 H13 V3"/><path d="M12 17 L18 11 L16 9 L10 15 Z"/>'),
+  sidebar: svg('<rect x="2" y="3" width="16" height="14" rx="1.5"/><path d="M12 3 V17"/>'),
   plus: svg('<path d="M10 4 V16 M4 10 H16"/>'),
   eye: svg('<path d="M2 10 C5 5 15 5 18 10 C15 15 5 15 2 10 Z"/><circle cx="10" cy="10" r="2.5"/>'),
   eyeOff: svg('<path d="M2 10 C5 5 15 5 18 10 C15 15 5 15 2 10 Z" opacity="0.4"/><path d="M4 16 L16 4"/>'),
