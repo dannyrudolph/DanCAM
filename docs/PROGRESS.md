@@ -77,10 +77,20 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    solid blue; right-to-left crossing, dashed green; Shift-drag removes).
    Hidden or deleted objects drop out. Panel shows "N objects" with counts by
    kind for more than one. Not undoable.
-4. **Grips and properties editing.** Arc end grips slide along the circle
-   (center and radius fixed); arc mid grip changes radius keeping both ends.
-   Each drag is one `modify`. Panel fields editable with the value parser;
-   multi-select edits layer and style only.
+4. **Grips and properties editing (done).** `model/grips` (gripsFor,
+   applyGrip): line ends stretch, line mid / centers / point / xline-ray base
+   move, circle quadrants set radius, arc ends slide along the circle, arc
+   mid makes the arc through the dropped point keeping both ends.
+   `commands/gripTool` is a one-shot tool (`ToolDef.repeat: false`), so grip
+   drags get snaps, Ortho/polar and input boxes from the grip; one `modify`;
+   no-change and degenerate drops commit nothing. Press on a grip and drag,
+   or press-release to make it hot and click to drop; Shift-press never
+   grabs. Grips show on every selected object with no tool active.
+   `model/propertyEdit.propertySetter`: click a value in the panel to type
+   (Enter/blur applies, Esc cancels, unchanged text stores nothing); Length
+   keeps start+angle, Angle keeps start+length, arc Included angle / Arc
+   length keep the start. Layer and Style dropdowns, also for multi-select
+   ("(varies)"). Also added: Select arrow button (no tool), arrow cursor.
 5. **Edit tools.** Erase (E, Del), Move (M), Copy (Shift+C, repeats),
    Rotate (R), Mirror (I, keep/erase), Scale (S); selection first or a new
    `selection` request.

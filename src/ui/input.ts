@@ -51,6 +51,13 @@ export type CanvasHandlers = {
   cursor(screen: Vec2 | undefined): void;
   /** Left click (press and release without dragging). */
   click(screen: Vec2, shift: boolean): void;
+  /**
+   * A left press, before anything else: true when it grabbed something (a
+   * grip) that the drag now moves. Releasing after a drag calls `dragEnd`;
+   * releasing in place calls nothing, leaving the grabbed thing for a click.
+   */
+  pressStartsDrag(screen: Vec2, shift: boolean): boolean;
+  dragEnd(screen: Vec2): void;
   /** True when a left drag should draw a selection box (no tool waiting for input). */
   leftDragSelects(): boolean;
   /** A selection box being dragged from `from` to `to`; `done` on release. */
@@ -79,6 +86,8 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
   let leftDown: Vec2 | undefined;
   /** Where a selection-box drag started, canvas-local, once it has moved past the click slop. */
   let boxFrom: Vec2 | undefined;
+  /** A press that grabbed a grip: where it started, in client pixels. */
+  let grabbed: Vec2 | undefined;
 
   const local = (e: MouseEvent): Vec2 => {
     const r = canvas.getBoundingClientRect();
@@ -115,8 +124,13 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
         startPan(e);
         return;
       }
-      leftDown = { x: e.clientX, y: e.clientY };
       boxFrom = undefined;
+      if (h.pressStartsDrag(local(e), e.shiftKey)) {
+        grabbed = { x: e.clientX, y: e.clientY };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      leftDown = { x: e.clientX, y: e.clientY };
       return;
     }
     if (e.button !== 1) return;
@@ -150,6 +164,13 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
   canvas.addEventListener('pointerup', (e) => {
     if (pan) {
       endPan(e);
+      return;
+    }
+    if (grabbed && e.button === 0) {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      const moved = Math.hypot(e.clientX - grabbed.x, e.clientY - grabbed.y);
+      grabbed = undefined;
+      if (moved > CLICK_SLOP_PX) h.dragEnd(local(e));
       return;
     }
     if (e.button !== 0 || !leftDown) return;

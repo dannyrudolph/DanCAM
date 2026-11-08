@@ -1,5 +1,6 @@
 import { createArcTool } from '../commands/arcTool';
 import { createCircleTool } from '../commands/circleTool';
+import { gripTool } from '../commands/gripTool';
 import { lineTool } from '../commands/lineTool';
 import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
@@ -10,13 +11,14 @@ import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
 import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
+import { type Grip, gripsFor } from '../model/grips';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
 import { type BoxMode, boxModeFor, selectInBox } from '../model/selection';
 import { type Transaction, UndoStack } from '../model/undo';
 import { ensureCurrentLayer } from '../model/layers';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
-import { render } from '../render/renderer';
+import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
 import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
@@ -123,7 +125,11 @@ export class App {
   private readonly g: CanvasRenderingContext2D;
   private readonly boxes: InputBoxes;
   private readonly status: StatusBar;
-  private readonly properties = new PropertiesPanel(el('properties'));
+  private readonly properties = new PropertiesPanel(el('properties'), {
+    units: () => this.drawing.units,
+    commit: (tx) => this.commitLayerEdit(tx),
+    message: (m) => this.status.showMessage(m),
+  });
   private readonly layers = new LayersPanel(el('layers'), {
     commit: (tx, renamed) => this.commitLayerEdit(tx, renamed),
     setCurrent: (name) => {
@@ -156,6 +162,8 @@ export class App {
   private lastCursorWorld: Vec2 = { x: 0, y: 0 };
   /** Selected entities, in the order they were picked. Not undoable. */
   private readonly selected = new Set<EntityId>();
+  /** The grip being dragged (the grip tool is running). */
+  private hotGrip: { id: EntityId; grip: Grip } | undefined;
   /** A selection box being dragged, screen pixels. */
   private selectBox: { from: Vec2; to: Vec2; mode: BoxMode } | undefined;
   private currentStyle: LineStyleName | undefined;
@@ -287,8 +295,9 @@ export class App {
     ]);
   }
 
+  /** Commits an edit from a panel (layers, properties) as one undo step. */
   private commitLayerEdit(tx: Transaction, renamed?: { from: string; to: string }): void {
-    // A tool mid-step (a line chain's "Undo last segment") must not undo a layer edit.
+    // A tool mid-step (a line chain's "Undo last segment") must not undo a panel edit.
     this.runner.stop();
     this.undo.commit(tx);
     if (renamed) ensureCurrentLayer(this.drawing, renamed.from, renamed.to);
@@ -371,6 +380,27 @@ export class App {
 
   private pickAt(world: Vec2, accepts?: (e: Entity) => boolean): EntityId | undefined {
     return pickEntity(this.drawing, world, PICK_RADIUS_PX / this.view.scale, accepts);
+  }
+
+  /** Grips of the selected objects, shown with no tool active or while one is dragged. */
+  private shownGrips(): { id: EntityId; grip: Grip }[] {
+    if (this.runner.tool && this.runner.tool.id !== 'grip') return [];
+    const out: { id: EntityId; grip: Grip }[] = [];
+    for (const id of this.selected) {
+      const e = this.drawing.entities.get(id);
+      if (e) for (const grip of gripsFor(e)) out.push({ id, grip });
+    }
+    return out;
+  }
+
+  /** The grip under the screen point, if any (the last drawn wins, as it's on top). */
+  private gripAt(screen: Vec2): { id: EntityId; grip: Grip } | undefined {
+    let found: { id: EntityId; grip: Grip } | undefined;
+    for (const g of this.shownGrips()) {
+      const s = vp.worldToScreen(this.view, g.grip.at);
+      if (Math.abs(s.x - screen.x) <= GRIP_PX + 1 && Math.abs(s.y - screen.y) <= GRIP_PX + 1) found = g;
+    }
+    return found;
   }
 
   /**
@@ -522,6 +552,7 @@ export class App {
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
+    if (this.runner.tool?.id !== 'grip') this.hotGrip = undefined;
     const selecting = !this.runner.tool;
     this.selectButton?.classList.toggle('active', selecting && !this.panMode);
     this.canvas.classList.toggle('selecting', selecting);
@@ -592,7 +623,17 @@ export class App {
         if (e) preview = [e];
       }
     }
-    render(this.g, this.view, this.drawing, { preview, selected: this.selected, selectBox: this.selectBox, nextPoint: next, snap }, window.devicePixelRatio || 1);
+    render(this.g, this.view, this.drawing, {
+        preview,
+        selected: this.selected,
+        grips: this.shownGrips()
+          .filter((g) => g.grip !== this.hotGrip?.grip)
+          .map((g) => g.grip.at),
+        hotGrip: this.hotGrip?.grip.at,
+        selectBox: this.selectBox,
+        nextPoint: next,
+        snap,
+      }, window.devicePixelRatio || 1);
     this.canvas.dataset.snap = snap?.kind ?? '';
     this.status.setCursor(next ?? snap?.at ?? cursor, req?.base);
     this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : (snap?.at ?? cursor));
@@ -739,6 +780,21 @@ export class App {
         } else {
           this.clickSelect(this.pickAt(this.cursorWorld()), shift);
         }
+      },
+      pressStartsDrag: (screen, shift) => {
+        // Shift-click removes from the selection, even on a grip.
+        if (shift || this.runner.request || this.panMode || this.spaceHeld) return false;
+        const hit = this.gripAt(screen);
+        if (!hit) return false;
+        this.cursorScreen = screen;
+        this.startTool(gripTool(hit.id, hit.grip));
+        this.hotGrip = hit;
+        this.requestRedraw();
+        return true;
+      },
+      dragEnd: (screen) => {
+        this.cursorScreen = screen;
+        if (this.runner.tool?.id === 'grip') this.place();
       },
       leftDragSelects: () => !this.runner.request,
       box: (from, to, done, shift) => {

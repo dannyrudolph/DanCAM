@@ -104,12 +104,15 @@ export type ToolDef = {
   readonly label: string;
   /** Single-key shortcut, lowercase, optionally with a `shift+` prefix ("x", "shift+x"). */
   readonly shortcut: string;
+  /** False for a one-shot tool (a grip drag) that ends instead of starting again. */
+  readonly repeat?: false;
   run(ctx: ToolContext): ToolGen;
 };
 
 /**
  * Drives the active tool's generator. Tools are sticky: when one completes it
- * starts again, so you can keep drawing until Esc or another tool.
+ * starts again, so you can keep drawing until Esc or another tool (unless
+ * the tool says `repeat: false`).
  */
 export class ToolRunner {
   private active: { def: ToolDef; gen: ToolGen; request: Request } | undefined;
@@ -162,6 +165,6 @@ export class ToolRunner {
     }
     this.active = undefined;
     // A tool that ends before asking for anything would restart forever; don't.
-    if (restartWhenDone) this.launch(def);
+    if (restartWhenDone && def.repeat !== false) this.launch(def);
   }
 }

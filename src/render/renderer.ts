@@ -22,6 +22,9 @@ const COLORS = {
   cursor: '#d4760a',
   snap: '#1a7f37',
   tooltipText: '#ffffff',
+  grip: '#0969da',
+  hotGrip: '#d1242f',
+  gripEdge: '#ffffff',
   windowEdge: '#0969da',
   windowFill: 'rgba(9, 105, 218, 0.08)',
   crossingEdge: '#1a7f37',
@@ -36,6 +39,8 @@ const SELECTED_EXTRA_PX = 1;
 const ARC_ERROR_PX = 0.25;
 /** Half-size of the marker where the next point will land. */
 const CURSOR_MARK_PX = 4;
+/** Half-size of a grip square, CSS pixels. */
+export const GRIP_PX = 4;
 /** Half-size of an object snap marker, CSS pixels. */
 const SNAP_MARK_PX = 6;
 
@@ -43,6 +48,10 @@ const SNAP_MARK_PX = 6;
 export type Overlay = {
   readonly preview: readonly Entity[];
   readonly selected: ReadonlySet<EntityId>;
+  /** Grips of the selected entities, world coordinates. */
+  readonly grips: readonly Vec2[];
+  /** The grip being dragged, drawn hot. */
+  readonly hotGrip: Vec2 | undefined;
   /** A selection box being dragged, in screen pixels. */
   readonly selectBox: { readonly from: Vec2; readonly to: Vec2; readonly mode: BoxMode } | undefined;
   /** Where a click or Enter would place the point now (after locks and tracking). */
@@ -69,6 +78,8 @@ export function render(
   for (const e of overlay.preview) {
     drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
+  for (const g of overlay.grips) drawGrip(ctx, worldToScreen(v, g), COLORS.grip);
+  if (overlay.hotGrip) drawGrip(ctx, worldToScreen(v, overlay.hotGrip), COLORS.hotGrip);
   if (overlay.selectBox) drawSelectBox(ctx, overlay.selectBox);
   if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind, overlay.snap.deferred !== undefined);
   else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
@@ -164,6 +175,17 @@ function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.strokeRect(s.x - CURSOR_MARK_PX, s.y - CURSOR_MARK_PX, CURSOR_MARK_PX * 2, CURSOR_MARK_PX * 2);
+}
+
+function drawGrip(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  const x = Math.round(s.x) - GRIP_PX;
+  const y = Math.round(s.y) - GRIP_PX;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, GRIP_PX * 2, GRIP_PX * 2);
+  ctx.strokeStyle = COLORS.gripEdge;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(x - 0.5, y - 0.5, GRIP_PX * 2 + 1, GRIP_PX * 2 + 1);
 }
 
 /** Window: solid blue edge. Crossing: dashed green edge. Both lightly filled. */

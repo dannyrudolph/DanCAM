@@ -126,7 +126,7 @@ test('new lines take the chosen style', async ({ page }) => {
   await page.getByTestId('zoom-extents').click();
   const c = await canvasCenter(page);
   await page.mouse.click(c.x, c.y);
-  await expect(prop(page, 'Style')).toHaveText('Hidden');
+  await expect(prop(page, 'Style').locator('select')).toHaveValue('hidden');
 });
 
 test('the Point tool places a point at typed coordinates', async ({ page }) => {
@@ -514,7 +514,7 @@ test.describe('layers panel', () => {
     await page.getByTestId('zoom-extents').click();
     const c = await canvasCenter(page);
     await page.mouse.click(c.x, c.y);
-    await expect(prop(page, 'Layer')).toHaveText('Profile');
+    await expect(prop(page, 'Layer').locator('select')).toHaveValue('Profile');
 
     await page.keyboard.press('Escape'); // clear the selection
     await row(page, 'Profile').locator('[data-role="visible"]').click();
@@ -743,4 +743,102 @@ test('the Select arrow is on with no tool, and clicking it leaves a tool', async
   await expect(select).not.toHaveClass(/active/);
   await select.click();
   await expect(page.getByTestId('pan')).not.toHaveClass(/active/);
+});
+
+test.describe('editing', () => {
+  /** A line typed in, Zoom Extents, and selected by clicking its middle. */
+  async function selectedLine(page: Page, x1: string, y1: string, length: string, angle: string) {
+    await page.keyboard.press('l');
+    await typeValues(page, x1, y1);
+    await typeValues(page, length, angle);
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const c = await canvasCenter(page);
+    await page.mouse.click(c.x, c.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+  }
+
+  test('a value typed into the properties panel changes the line exactly, as one undo step', async ({ page }) => {
+    await selectedLine(page, '0', '0', '1', '0');
+    await prop(page, 'Length').click();
+    await page.keyboard.type('3/8');
+    await page.keyboard.press('Enter');
+    await page.getByTestId('precision').selectOption('8');
+    await expect(prop(page, 'Length')).toHaveText('0.37500000');
+    await expect(prop(page, 'End X')).toHaveAttribute('title', '0.375');
+
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'Length')).toHaveText('1.00000000');
+  });
+
+  test('Esc or bad text leaves the value alone; tabbing through without typing never rounds it', async ({ page }) => {
+    await selectedLine(page, '0', '0', '1', '30'); // End X = cos 30°, not exact at 4 places
+    await prop(page, 'End X').click();
+    await page.keyboard.type('9');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'End X')).toHaveText('0.8660');
+
+    await prop(page, 'End X').click();
+    await page.keyboard.type('1+');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'End X')).toHaveText('0.8660');
+
+    await prop(page, 'End X').click();
+    await page.keyboard.press('Enter'); // unchanged text: nothing stored
+    await expect(prop(page, 'End X')).toHaveAttribute('title', String(Math.cos(Math.PI / 6)));
+  });
+
+  test('the Style dropdown restyles every selected object at once', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await typeValues(page, '1', '90');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.move(box.x + 5, box.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + box.width - 5, box.y + box.height - 5);
+    await page.mouse.up();
+    await expect(prop(page, 'selection-count')).toHaveText('2');
+    await prop(page, 'Style').locator('select').selectOption('center');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('center');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('');
+  });
+
+  test('dragging a line end grip onto another line endpoint snaps it there exactly', async ({ page }) => {
+    // A (0,0)-(1,0) and B (0,1)-(1,1); select A and drag its right end up to B's right end
+    for (const y of ['0', '1']) {
+      await page.keyboard.press('l');
+      await typeValues(page, '0', y);
+      await typeValues(page, '1', '0');
+      await page.keyboard.press('Escape');
+    }
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const scale = Math.min(box.width * 0.9, box.height * 0.9);
+    const c = await canvasCenter(page);
+    const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - (y - 0.5) * scale });
+
+    const a = at(0.5, 0);
+    await page.mouse.click(a.x, a.y);
+    const grip = at(1, 0);
+    const target = at(1, 1);
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + 3, (grip.y + target.y) / 2);
+    await page.mouse.move(target.x + 4, target.y + 3);
+    await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+    await page.mouse.up();
+
+    await page.getByTestId('precision').selectOption('8');
+    await expect(prop(page, 'Start X')).toHaveText('0.00000000');
+    await expect(prop(page, 'Start Y')).toHaveText('0.00000000');
+    await expect(prop(page, 'End X')).toHaveText('1.00000000');
+    await expect(prop(page, 'End Y')).toHaveText('1.00000000');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'End Y')).toHaveText('0.00000000');
+  });
 });

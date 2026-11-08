@@ -326,6 +326,37 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
+#properties dd.editable {
+  cursor: text;
+  border-radius: 3px;
+}
+
+#properties dd.editable:hover {
+  background: #1d3a57;
+}
+
+#properties dd input {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  background: #0d1117;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+#properties dd select {
+  max-width: 100%;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
 #status {
   border-top: 1px solid var(--border);
   border-bottom: none;
