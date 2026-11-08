@@ -1,6 +1,7 @@
 import { type Arc, arcContainsDeg, arcEnd, arcStart } from './arc';
 import { angleFrom, nearestOnCircle } from './circle';
 import { circleCircle, lineCircle, lineLine } from './intersect';
+import type { BBox } from './bbox';
 import { TOL } from './tolerance';
 import { type Vec2, distance, dot, sub } from './vec';
 
@@ -219,4 +220,25 @@ export function resolveDeferredPair(a: Deferred, b: Deferred): [Vec2, Vec2] | un
     }
   }
   return best;
+}
+
+function insideBox(p: Vec2, box: BBox): boolean {
+  return p.x >= box.minX && p.x <= box.maxX && p.y >= box.minY && p.y <= box.maxY;
+}
+
+/**
+ * True when any part of the curve lies inside or on the box (a crossing
+ * selection): a point of it is inside, or it meets an edge.
+ */
+export function curveTouchesBox(c: Curve, box: BBox): boolean {
+  const some =
+    c.kind === 'segment' ? c.a : c.kind === 'ray' ? c.base : c.kind === 'arc' ? arcStart(c) : c.kind === 'circle' ? { x: c.center.x + c.radius, y: c.center.y } : undefined;
+  if (some && insideBox(some, box)) return true;
+  const corners = [
+    { x: box.minX, y: box.minY },
+    { x: box.maxX, y: box.minY },
+    { x: box.maxX, y: box.maxY },
+    { x: box.minX, y: box.maxY },
+  ];
+  return corners.some((a, i) => intersectCurves(c, { kind: 'segment', a, b: corners[(i + 1) % 4]! }).length > 0);
 }

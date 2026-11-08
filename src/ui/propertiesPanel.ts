@@ -78,16 +78,35 @@ const KIND_LABEL: Record<Entity['kind'], string> = {
   ray: 'Ray',
 };
 
+/** "Line ×2", "Circle ×1": counts by kind for a multiple selection, in KIND_LABEL order. */
+export function selectionSummary(entities: readonly Entity[]): Row[] {
+  const rows: Row[] = [];
+  for (const kind of Object.keys(KIND_LABEL) as Entity['kind'][]) {
+    const n = entities.filter((e) => e.kind === kind).length;
+    if (n > 0) rows.push({ label: KIND_LABEL[kind], value: String(n) });
+  }
+  return rows;
+}
+
 /**
- * Read-only exact values of the selected entity (editing arrives in Phase 2).
- * Hovering a value shows it at full stored precision.
+ * Read-only exact values of the selected entity (editing arrives in Phase 2
+ * step 4). With several selected, a count by kind. Hovering a value shows it
+ * at full stored precision.
  */
 export class PropertiesPanel {
   constructor(private readonly root: HTMLElement) {}
 
-  show(d: Drawing, e: Entity | undefined, precision: number): void {
+  show(d: Drawing, selected: readonly Entity[], precision: number): void {
     const title = document.createElement('h2');
     const table = document.createElement('dl');
+    if (selected.length > 1) {
+      title.textContent = `${selected.length} objects`;
+      this.addRow(table, 'Selected', String(selected.length), 'selection-count');
+      for (const r of selectionSummary(selected)) this.addRow(table, r.label, String(r.value));
+      this.root.replaceChildren(title, table);
+      return;
+    }
+    const e = selected[0];
     if (!e) {
       title.textContent = 'Drawing';
       this.addRow(table, 'Units', d.units === 'in' ? 'inch' : 'mm');

@@ -1,6 +1,7 @@
 import { arcBBox } from '../geometry/arc';
 import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
 import { circleBBox } from '../geometry/circle';
+import type { Curve } from '../geometry/curve';
 import type { Vec2 } from '../geometry/vec';
 import type { LineStyleName } from './lineStyle';
 
@@ -104,3 +105,22 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
       return { ...e, base: p(e.base) };
   }
 }
+
+/** The entity as a curve with its real extent, or undefined for a point. */
+export function entityCurve(e: Entity): Curve | undefined {
+  switch (e.kind) {
+    case 'point':
+      return undefined;
+    case 'line':
+      return { kind: 'segment', a: e.start, b: e.end };
+    case 'ray':
+    case 'xline':
+      return { kind: e.kind, base: e.base, dir: e.dir };
+    case 'circle':
+      return { kind: 'circle', center: e.center, radius: e.radius };
+    case 'arc':
+      return { kind: 'arc', center: e.center, radius: e.radius, startDeg: e.startDeg, endDeg: e.endDeg };
+  }
+}
+
+/** `score` ranks it; `dist` (true distance to the cursor) breaks ties. */

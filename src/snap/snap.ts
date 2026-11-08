@@ -4,7 +4,7 @@ import { type Curve, type Deferred, intersectCurves, nearestOnCurve, perpendicul
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
-import type { Entity } from '../model/entity';
+import { entityCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
 
 export type SnapKind = 'end' | 'mid' | 'cen' | 'quad' | 'int' | 'perp' | 'tan' | 'nea' | 'node';
@@ -33,24 +33,6 @@ export const NEEDS_BASE: ReadonlySet<SnapKind> = new Set<SnapKind>(['perp', 'tan
 /** `deferred`: a Tangent or Perpendicular picked with no base point yet; `at` is the point on the curve under the cursor. */
 export type Snap = { readonly kind: SnapKind; readonly at: Vec2; readonly deferred?: Deferred };
 
-/** The entity as a curve with its real extent, or undefined for a point. */
-export function entityCurve(e: Entity): Curve | undefined {
-  switch (e.kind) {
-    case 'point':
-      return undefined;
-    case 'line':
-      return { kind: 'segment', a: e.start, b: e.end };
-    case 'ray':
-    case 'xline':
-      return { kind: e.kind, base: e.base, dir: e.dir };
-    case 'circle':
-      return { kind: 'circle', center: e.center, radius: e.radius };
-    case 'arc':
-      return { kind: 'arc', center: e.center, radius: e.radius, startDeg: e.startDeg, endDeg: e.endDeg };
-  }
-}
-
-/** `score` ranks it; `dist` (true distance to the cursor) breaks ties. */
 type Candidate = Snap & { readonly score: number; readonly dist: number };
 
 /**

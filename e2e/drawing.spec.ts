@@ -170,10 +170,12 @@ test('circles, arcs and xlines in the demo end view can be picked and show their
   await expect(prop(page, 'Diameter')).toHaveText('0.5010');
 
   p = at(60, 0.15); // bolt-circle arc, 30° to 150°
+  await page.keyboard.press('Escape'); // clicks add to the selection; start afresh
   await page.mouse.click(p.x, p.y);
   await expect(prop(page, 'Included angle')).toHaveText('120.0000°');
 
   p = toScreen(-0.6, 0);
+  await page.keyboard.press('Escape');
   await page.mouse.click(p.x, box.y + 5); // the vertical xline, well beyond the drawing's extents
   await expect(page.locator('#properties h2')).toHaveText(/^Xline /);
   await expect(prop(page, 'Angle')).toHaveText('90.0000°');
@@ -652,4 +654,76 @@ test('a line started with a one-time Tangent on a circle ends up tangent to it',
   await expect(prop(page, 'Length')).toHaveText(Math.sqrt(d * d - 1).toFixed(8)); // tangent length √(d² − r²)
   await expect(prop(page, 'Start X')).toHaveText(s.x.toFixed(8));
   await expect(prop(page, 'Start Y')).toHaveText(s.y.toFixed(8));
+});
+
+test.describe('selection', () => {
+  /** Lines A (0,0)-(1,0), B (0,1)-(1,1), C (2,0)-(2,1), fitted to the view; returns world → page coordinates. */
+  async function draw(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
+    for (const pts of [
+      ['0', '0', '1', '0'],
+      ['0', '1', '1', '1'],
+      ['2', '0', '2', '1'],
+    ]) {
+      await page.keyboard.press('l');
+      await typeValues(page, pts[0]!, pts[1]!);
+      // the second point in polar entry: length and angle from the first
+      const [dx, dy] = [Number(pts[2]) - Number(pts[0]), Number(pts[3]) - Number(pts[1])];
+      await typeValues(page, String(Math.hypot(dx, dy)), String((Math.atan2(dy, dx) * 180) / Math.PI));
+      await page.keyboard.press('Escape');
+    }
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const scale = Math.min((box.width * 0.9) / 2, box.height * 0.9);
+    const c = await canvasCenter(page);
+    return (x, y) => ({ x: c.x + (x - 1) * scale, y: c.y - (y - 0.5) * scale });
+  }
+
+  async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, shift = false) {
+    if (shift) await page.keyboard.down('Shift');
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
+    await page.mouse.move(to.x, to.y);
+    await page.mouse.up();
+    if (shift) await page.keyboard.up('Shift');
+  }
+
+  test('a window takes what is fully inside; the same box dragged right to left also takes what it touches', async ({ page }) => {
+    const at = await draw(page);
+    // x 0.5..1.2, y 0.5..1.2: B pokes in, A and C don't, nothing is fully inside
+    await drag(page, at(0.5, 1.2), at(1.2, 0.5));
+    await expect(prop(page, 'entity-count')).toHaveText('3'); // still the drawing summary: nothing selected
+    await drag(page, at(1.2, 0.5), at(0.5, 1.2));
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'Start Y')).toHaveText('1.0000');
+
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await drag(page, at(-0.1, 1.1), at(1.1, -0.1)); // window around A and B
+    await expect(prop(page, 'selection-count')).toHaveText('2');
+  });
+
+  test('clicks add to the selection, Shift-click and Shift-window remove, Esc clears', async ({ page }) => {
+    const at = await draw(page);
+    const a = at(0.5, 0);
+    const b = at(0.5, 1);
+    const c = at(2, 0.5);
+    await page.mouse.click(a.x, a.y);
+    await page.mouse.click(b.x, b.y);
+    await page.mouse.click(c.x, c.y);
+    await expect(prop(page, 'selection-count')).toHaveText('3');
+
+    await page.keyboard.down('Shift');
+    await page.mouse.click(c.x, c.y);
+    await page.keyboard.up('Shift');
+    await expect(prop(page, 'selection-count')).toHaveText('2');
+
+    await drag(page, at(-0.1, 1.1), at(1.1, 0.5), true); // Shift-window around B only
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'Start Y')).toHaveText('0.0000');
+
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+  });
 });

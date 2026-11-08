@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDrawing } from '../model/drawing';
 import type { Entity } from '../model/entity';
-import { rowsFor } from './propertiesPanel';
+import { rowsFor, selectionSummary } from './propertiesPanel';
 
 /** Rows as label → value, skipping Layer and Style. */
 function values(e: Entity): Record<string, number | string> {
@@ -32,5 +32,16 @@ describe('properties rows', () => {
   it('lists an xline by base point and direction angle', () => {
     const v = values({ kind: 'xline', id: 'e1', layer: '0', base: { x: 1, y: 2 }, dir: { x: 0, y: -1 } });
     expect(v).toMatchObject({ 'Base X': 1, 'Base Y': 2, Angle: 270 });
+  });
+});
+
+describe('selectionSummary', () => {
+  it('counts a multiple selection by kind', () => {
+    const l = (id: string): Entity => ({ kind: 'line', id, layer: '0', start: { x: 0, y: 0 }, end: { x: 1, y: 0 } });
+    const c: Entity = { kind: 'circle', id: 'c', layer: '0', center: { x: 0, y: 0 }, radius: 1 };
+    expect(selectionSummary([l('a'), c, l('b')])).toEqual([
+      { label: 'Line', value: '2' },
+      { label: 'Circle', value: '1' },
+    ]);
   });
 });

@@ -12,6 +12,7 @@ import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/d
 import type { Entity, EntityId, EntityProps } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
+import { type BoxMode, boxModeFor, selectInBox } from '../model/selection';
 import { type Transaction, UndoStack } from '../model/undo';
 import { ensureCurrentLayer } from '../model/layers';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
@@ -152,7 +153,10 @@ export class App {
   private view: vp.Viewport;
   private cursorScreen: Vec2 | undefined;
   private lastCursorWorld: Vec2 = { x: 0, y: 0 };
-  private selected: EntityId | undefined;
+  /** Selected entities, in the order they were picked. Not undoable. */
+  private readonly selected = new Set<EntityId>();
+  /** A selection box being dragged, screen pixels. */
+  private selectBox: { from: Vec2; to: Vec2; mode: BoxMode } | undefined;
   private currentStyle: LineStyleName | undefined;
   private frameRequested = false;
   /** Space held: left-drag pans. */
@@ -217,7 +221,7 @@ export class App {
     this.drawing = d;
     this.undo = new UndoStack(d);
     this.runner = this.makeRunner();
-    this.selected = undefined;
+    this.selected.clear();
     this.shownUnits = d.units;
     this.view = initialView(d.units, this.view.widthPx, this.view.heightPx);
     if (d.entities.size > 0) this.zoomExtents();
@@ -322,7 +326,7 @@ export class App {
     else if (this.onceSnap) this.onceSnap = undefined;
     else if (this.boxes.hasLocks || this.boxes.focused) this.boxes.clearLocks();
     else if (this.runner.tool) this.runner.stop();
-    else this.selected = undefined;
+    else this.selected.clear();
     this.refresh();
   }
 
@@ -366,6 +370,17 @@ export class App {
 
   private pickAt(world: Vec2, accepts?: (e: Entity) => boolean): EntityId | undefined {
     return pickEntity(this.drawing, world, PICK_RADIUS_PX / this.view.scale, accepts);
+  }
+
+  /**
+   * A click with no tool: adds the object to the selection, or with Shift
+   * removes it. A plain click on empty space clears the selection.
+   */
+  private clickSelect(id: EntityId | undefined, shift: boolean): void {
+    if (id && shift) this.selected.delete(id);
+    else if (id) this.selected.add(id);
+    else if (!shift) this.selected.clear();
+    this.refresh();
   }
 
   private doUndo(): void {
@@ -498,8 +513,14 @@ export class App {
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
     this.renderOptions();
-    if (this.selected && !this.drawing.entities.has(this.selected)) this.selected = undefined;
-    this.properties.show(this.drawing, this.selected ? this.drawing.entities.get(this.selected) : undefined, this.settings.precision);
+    // Undo may have removed a selected entity, or its layer may now be hidden.
+    const picked: Entity[] = [];
+    for (const id of this.selected) {
+      const e = this.drawing.entities.get(id);
+      if (e && this.drawing.layers.get(e.layer)?.visible !== false) picked.push(e);
+      else this.selected.delete(id);
+    }
+    this.properties.show(this.drawing, picked, this.settings.precision);
     this.requestRedraw();
   }
 
@@ -558,7 +579,7 @@ export class App {
         if (e) preview = [e];
       }
     }
-    render(this.g, this.view, this.drawing, { preview, selected: this.selected, nextPoint: next, snap }, window.devicePixelRatio || 1);
+    render(this.g, this.view, this.drawing, { preview, selected: this.selected, selectBox: this.selectBox, nextPoint: next, snap }, window.devicePixelRatio || 1);
     this.canvas.dataset.snap = snap?.kind ?? '';
     this.status.setCursor(next ?? snap?.at ?? cursor, req?.base);
     this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : (snap?.at ?? cursor));
@@ -696,14 +717,31 @@ export class App {
         this.cursorScreen = screen;
         this.requestRedraw();
       },
-      click: (screen) => {
+      click: (screen, shift) => {
         this.cursorScreen = screen;
         if (this.runner.request) {
           this.place();
         } else {
-          this.selected = this.pickAt(this.cursorWorld());
-          this.refresh();
+          this.clickSelect(this.pickAt(this.cursorWorld()), shift);
         }
+      },
+      leftDragSelects: () => !this.runner.request,
+      box: (from, to, done, shift) => {
+        const mode = boxModeFor(from.x, to.x);
+        if (!done) {
+          this.selectBox = { from, to, mode };
+          this.requestRedraw();
+          return;
+        }
+        this.selectBox = undefined;
+        const a = vp.screenToWorld(this.view, from);
+        const b = vp.screenToWorld(this.view, to);
+        const box = { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
+        for (const id of selectInBox(this.drawing, box, mode)) {
+          if (shift) this.selected.delete(id);
+          else this.selected.add(id);
+        }
+        this.refresh();
       },
       contextMenu: (x, y) => this.menu.open(x, y, this.contextItems(x, y)),
       leftDragPans: () => this.panMode || this.spaceHeld,

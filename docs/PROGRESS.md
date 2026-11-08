@@ -69,8 +69,14 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    on placement. Tangent to tangent uses `geometry/curve.commonTangents`;
    other pairings ask for a point. Deferred snaps rank like Center. Line tool
    only; Circle/Arc/Xline/Ray don't take deferred picks.
-3. **Selection.** Multi-select; Shift-click removes; left-to-right window
-   (inside), right-to-left crossing (touching); Esc clears; not undoable.
+3. **Selection (done).** `model/selection.selectInBox` (window: entity bbox
+   inside, never xlines/rays; crossing: `geometry/curve.curveTouchesBox`);
+   `entityCurve` now lives in `model/entity`. App keeps a `Set` of ids: a
+   click adds, Shift-click removes, a plain click on empty space clears, Esc
+   clears; drags with no tool waiting draw the box (left-to-right window,
+   solid blue; right-to-left crossing, dashed green; Shift-drag removes).
+   Hidden or deleted objects drop out. Panel shows "N objects" with counts by
+   kind for more than one. Not undoable.
 4. **Grips and properties editing.** Arc end grips slide along the circle
    (center and radius fixed); arc mid grip changes radius keeping both ends.
    Each drag is one `modify`. Panel fields editable with the value parser;

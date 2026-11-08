@@ -7,6 +7,7 @@ import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
+import type { BoxMode } from '../model/selection';
 import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
 import { SNAP_LABEL, type Snap, type SnapKind } from '../snap/snap';
 import { type Viewport, worldToScreen } from './viewport';
@@ -21,6 +22,10 @@ const COLORS = {
   cursor: '#d4760a',
   snap: '#1a7f37',
   tooltipText: '#ffffff',
+  windowEdge: '#0969da',
+  windowFill: 'rgba(9, 105, 218, 0.08)',
+  crossingEdge: '#1a7f37',
+  crossingFill: 'rgba(26, 127, 55, 0.08)',
 } as const;
 
 /** Half-size of the point marker in CSS pixels. */
@@ -37,7 +42,9 @@ const SNAP_MARK_PX = 6;
 /** Things drawn over the drawing: tool preview, selection and the next-point marker. */
 export type Overlay = {
   readonly preview: readonly Entity[];
-  readonly selected: EntityId | undefined;
+  readonly selected: ReadonlySet<EntityId>;
+  /** A selection box being dragged, in screen pixels. */
+  readonly selectBox: { readonly from: Vec2; readonly to: Vec2; readonly mode: BoxMode } | undefined;
   /** Where a click or Enter would place the point now (after locks and tracking). */
   readonly nextPoint: Vec2 | undefined;
   /** The object snap the cursor is on; drawn instead of the next-point marker. */
@@ -62,15 +69,16 @@ export function render(
   for (const e of overlay.preview) {
     drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
+  if (overlay.selectBox) drawSelectBox(ctx, overlay.selectBox);
   if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind, overlay.snap.deferred !== undefined);
   else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
 }
 
-function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: EntityId | undefined): void {
+function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: ReadonlySet<EntityId>): void {
   for (const e of drawing.entities.values()) {
     const layer = drawing.layers.get(e.layer);
     if (layer && !layer.visible) continue;
-    const isSelected = e.id === selected;
+    const isSelected = selected.has(e.id);
     const color = isSelected ? COLORS.selected : (layer?.color ?? COLORS.fallbackLine);
     drawEntity(ctx, v, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
@@ -156,6 +164,22 @@ function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.strokeRect(s.x - CURSOR_MARK_PX, s.y - CURSOR_MARK_PX, CURSOR_MARK_PX * 2, CURSOR_MARK_PX * 2);
+}
+
+/** Window: solid blue edge. Crossing: dashed green edge. Both lightly filled. */
+function drawSelectBox(ctx: CanvasRenderingContext2D, b: NonNullable<Overlay['selectBox']>): void {
+  const x = Math.min(b.from.x, b.to.x);
+  const y = Math.min(b.from.y, b.to.y);
+  const w = Math.abs(b.to.x - b.from.x);
+  const h = Math.abs(b.to.y - b.from.y);
+  const crossing = b.mode === 'crossing';
+  ctx.fillStyle = crossing ? COLORS.crossingFill : COLORS.windowFill;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = crossing ? COLORS.crossingEdge : COLORS.windowEdge;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(crossing ? [6, 4] : []);
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.setLineDash([]);
 }
 
 /** The snap's glyph (AutoCAD's shapes) at `s`, with its name in a tooltip above right, clear of the input boxes. */

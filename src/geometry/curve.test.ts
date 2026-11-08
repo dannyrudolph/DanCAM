@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { type Curve, commonTangents, intersectCurves, nearestOnCurve, perpendicularFeet, resolveDeferred, resolveDeferredPair, tangentPointsFrom } from './curve';
+import { type Curve, commonTangents, curveTouchesBox, intersectCurves, nearestOnCurve, perpendicularFeet, resolveDeferred, resolveDeferredPair, tangentPointsFrom } from './curve';
 import { TOL } from './tolerance';
 import { type Vec2, distance, dot, sub } from './vec';
 
@@ -243,5 +243,35 @@ describe('resolveDeferredPair', () => {
   it('only solves tangent to tangent', () => {
     const seg = { kind: 'segment' as const, a: { x: 0, y: -3 }, b: { x: 4, y: -3 } };
     expect(resolveDeferredPair({ kind: 'tan', curve: c1, pick: { x: 0, y: -1 } }, { kind: 'perp', curve: seg, pick: { x: 0, y: -3 } })).toBeUndefined();
+  });
+});
+
+describe('curveTouchesBox', () => {
+  const box = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+  it('a segment touches when an end is inside or it crosses an edge, not when it passes by', () => {
+    expect(curveTouchesBox(seg(0.5, 0.5, 3, 3), box)).toBe(true);
+    expect(curveTouchesBox(seg(-1, 0.5, 2, 0.5), box)).toBe(true); // through, both ends outside
+    expect(curveTouchesBox(seg(-1, 1.5, 2, 1.5), box)).toBe(false);
+    expect(curveTouchesBox(seg(1, -1, 1, 2), box)).toBe(true); // along an edge
+  });
+
+  it('a circle touches when it crosses the box or lies inside it, not when it encloses it', () => {
+    expect(curveTouchesBox(circle(0.5, 0.5, 0.2), box)).toBe(true);
+    expect(curveTouchesBox(circle(1.5, 0.5, 0.6), box)).toBe(true);
+    expect(curveTouchesBox(circle(0.5, 0.5, 5), box)).toBe(false);
+    expect(curveTouchesBox(circle(3, 3, 0.5), box)).toBe(false);
+  });
+
+  it('an arc touches only where it runs: the missing half of its circle does not count', () => {
+    // centered right of the box; only its left half (90°→270°) would reach in
+    expect(curveTouchesBox(arc(1.5, 0.5, 0.75, 90, 270), box)).toBe(true);
+    expect(curveTouchesBox(arc(1.5, 0.5, 0.75, 270, 90), box)).toBe(false);
+  });
+
+  it('xlines and rays touch where they cross; a ray pointing away does not', () => {
+    expect(curveTouchesBox({ kind: 'xline', base: { x: 5, y: 0.5 }, dir: { x: 1, y: 0 } }, box)).toBe(true);
+    expect(curveTouchesBox({ kind: 'ray', base: { x: 5, y: 0.5 }, dir: { x: -1, y: 0 } }, box)).toBe(true);
+    expect(curveTouchesBox({ kind: 'ray', base: { x: 5, y: 0.5 }, dir: { x: 1, y: 0 } }, box)).toBe(false);
   });
 });
