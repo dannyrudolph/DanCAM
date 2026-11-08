@@ -176,3 +176,48 @@ describe('construction lines', () => {
     expect(get(t, 'X')).toEqual({ ...xl, base: { x: 0, y: 3 }, dir: { x: 0, y: 1 } });
   });
 });
+
+describe('Rotate with Reference', () => {
+  it('turns an edge from its measured angle to the typed one: a 30° line set to 90° lands exactly vertical', () => {
+    const slanted: LineEntity = { kind: 'line', id: 'S', layer: '0', start: { x: 0, y: 0 }, end: { x: Math.sqrt(3), y: 1 } };
+    const t = withShapes(slanted);
+    t.select('S');
+    t.runner.start(rotateTool);
+    t.click(0, 0);
+    t.option('reference');
+    expect(t.runner.request?.prompt).toBe('Rotate: pick the first point of the reference edge');
+    t.click(0, 0);
+    t.click(Math.sqrt(3), 1); // 30°
+    expect(t.runner.request?.prompt).toBe('Rotate: pick or type the new angle (reference 30°)');
+    t.value(90);
+    const s = get<LineEntity>(t, 'S');
+    expect(s.start).toEqual({ x: 0, y: 0 });
+    expect(s.end.x).toBeCloseTo(0, 15);
+    expect(s.end.y).toBeCloseTo(2, 15);
+    expect(t.undo.undoLabel).toBe('Rotate');
+  });
+
+  it('the preview turns by new − reference', () => {
+    const t = withShapes(line);
+    t.select('L');
+    t.runner.start(rotateTool);
+    t.click(0, 0);
+    t.option('reference');
+    t.click(0, 0);
+    t.click(0, 1); // 90°
+    const [shown] = t.preview({ x: 0, y: 0 }, 180) as LineEntity[]; // 180 − 90 = +90
+    expect(shown).toEqual({ ...line, start: { x: 0, y: 1 }, end: { x: 0, y: 2 } });
+  });
+
+  it('refuses a reference edge with no length and keeps waiting for its second point', () => {
+    const t = withShapes(line);
+    t.select('L');
+    t.runner.start(rotateTool);
+    t.click(0, 0);
+    t.option('reference');
+    t.click(1, 1);
+    t.click(1, 1);
+    expect(t.messages.at(-1)).toBe('The reference edge needs two different points; pick another.');
+    expect(t.runner.request?.prompt).toBe('Rotate: pick the second point of the reference edge');
+  });
+});

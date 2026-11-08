@@ -113,6 +113,12 @@ export const copyTool: ToolDef = {
   },
 };
 
+/**
+ * Rotate: about a center by an angle, typed or from the cursor. The
+ * Reference option measures an existing edge first (two points, or a typed
+ * angle at the second point) and then asks for the angle it should have:
+ * the rotation is new − reference.
+ */
 export const rotateTool: ToolDef = {
   id: 'rotate',
   label: 'Rotate',
@@ -123,16 +129,48 @@ export const rotateTool: ToolDef = {
     if (!es) return;
     const base = yield* point({ prompt: 'Rotate: pick the center of rotation' });
     if (!base) return;
-    const deg = yield* value({
-      prompt: 'Rotate: pick or type the angle (counter-clockwise)',
+    const fromCursor = (c: Vec2): number | undefined => (distance(c, base) > 0 ? angleDeg(sub(c, base)) : undefined);
+    let reference = 0;
+    for (;;) {
+      const input = yield {
+        kind: 'value',
+        prompt: 'Rotate: pick or type the angle (counter-clockwise), or use Reference',
+        label: '∠',
+        quantity: 'angle',
+        base,
+        fromCursor,
+        preview: (v) => moved(es, rotation(base, v)),
+        options: [{ key: 'reference', label: 'Reference', enabled: true }],
+      };
+      if (input.kind === 'finish') return;
+      if (input.kind === 'value') {
+        commitTransform(ctx, 'Rotate', es, rotation(base, input.value));
+        return;
+      }
+      if (input.kind === 'option' && input.key === 'reference') break;
+    }
+    const r1 = yield* point({ prompt: 'Rotate: pick the first point of the reference edge' });
+    if (!r1) return;
+    for (;;) {
+      const r2 = yield* point({ prompt: 'Rotate: pick the second point of the reference edge', base: r1 });
+      if (!r2) return;
+      if (distance(r1, r2) > 0) {
+        reference = angleDeg(sub(r2, r1));
+        break;
+      }
+      ctx.message('The reference edge needs two different points; pick another.');
+    }
+    const ref = reference;
+    const target = yield* value({
+      prompt: `Rotate: pick or type the new angle (reference ${Number(ref.toFixed(4))}°)`,
       label: '∠',
       quantity: 'angle',
       base,
-      fromCursor: (c) => (distance(c, base) > 0 ? angleDeg(sub(c, base)) : undefined),
-      preview: (v) => moved(es, rotation(base, v)),
+      fromCursor,
+      preview: (v) => moved(es, rotation(base, v - ref)),
     });
-    if (deg === undefined) return;
-    commitTransform(ctx, 'Rotate', es, rotation(base, deg));
+    if (target === undefined) return;
+    commitTransform(ctx, 'Rotate', es, rotation(base, target - ref));
   },
 };
 
