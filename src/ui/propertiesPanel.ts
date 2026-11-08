@@ -1,11 +1,13 @@
 import { angleDeg } from '../geometry/angle';
+import { arcEnd, arcLength, arcSweepDeg, arcStart } from '../geometry/arc';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity } from '../model/entity';
 import { formatNumber } from './statusBar';
 
-type Row = { label: string; value: number | string; unit?: string };
+export type Row = { label: string; value: number | string; unit?: string };
 
-function rowsFor(d: Drawing, e: Entity): Row[] {
+/** The rows the properties panel shows for `e`, with values unrounded. */
+export function rowsFor(d: Drawing, e: Entity): Row[] {
   const style = effectiveStyle(d, e);
   const common: Row[] = [
     { label: 'Layer', value: e.layer },
@@ -29,10 +31,50 @@ function rowsFor(d: Drawing, e: Entity): Row[] {
         { label: 'Angle', value: angleDeg({ x: dx, y: dy }), unit: '°' },
       ];
     }
+    case 'circle':
+      return [
+        ...common,
+        { label: 'Center X', value: e.center.x },
+        { label: 'Center Y', value: e.center.y },
+        { label: 'Radius', value: e.radius },
+        { label: 'Diameter', value: 2 * e.radius },
+        { label: 'Circumference', value: 2 * Math.PI * e.radius },
+      ];
+    case 'arc': {
+      const s = arcStart(e);
+      const t = arcEnd(e);
+      return [
+        ...common,
+        { label: 'Center X', value: e.center.x },
+        { label: 'Center Y', value: e.center.y },
+        { label: 'Radius', value: e.radius },
+        { label: 'Start angle', value: e.startDeg, unit: '°' },
+        { label: 'End angle', value: e.endDeg, unit: '°' },
+        { label: 'Included angle', value: arcSweepDeg(e), unit: '°' },
+        { label: 'Arc length', value: arcLength(e) },
+        { label: 'Start X', value: s.x },
+        { label: 'Start Y', value: s.y },
+        { label: 'End X', value: t.x },
+        { label: 'End Y', value: t.y },
+      ];
+    }
+    case 'xline':
+      return [
+        ...common,
+        { label: 'Base X', value: e.base.x },
+        { label: 'Base Y', value: e.base.y },
+        { label: 'Angle', value: angleDeg(e.dir), unit: '°' },
+      ];
   }
 }
 
-const KIND_LABEL: Record<Entity['kind'], string> = { point: 'Point', line: 'Line' };
+const KIND_LABEL: Record<Entity['kind'], string> = {
+  point: 'Point',
+  line: 'Line',
+  circle: 'Circle',
+  arc: 'Arc',
+  xline: 'Xline',
+};
 
 /**
  * Read-only exact values of the selected entity (editing arrives in Phase 2).

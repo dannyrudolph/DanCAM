@@ -30,10 +30,13 @@ Five steps, one commit each:
    two lines (well conditioned for nearly parallel lines) and refines the
    all-circle/one-line cases with damped least squares; fast-check
    counterexamples are pinned as regression tests.
-2. **Next: model and rendering** — Circle/Arc/Xline entities (arc angles in
-   degrees, CCW), bbox (xlines excluded from extents), pick distance, render
-   via `arcScreenPieces` with dash offset and tangent end gaps, properties rows.
-3. Tools — `entity` and `value` requests; Circle (C), Arc (A), Xline (X).
+2. **Model and rendering — done.** Circle/Arc/Xline entities (arc angles in
+   degrees, CCW), bbox (xlines excluded from extents; `arcBBox` uses ends plus
+   crossed quadrants), pick distance (arc: radial within its range, else
+   nearer end), render via `arcScreenPieces` (0.25px chord error) with dash
+   offsets and tangent end gaps (`insetArc`), xline dashes anchored at the base
+   point, properties rows. The `?demo` drawing has an end view with all three.
+3. **Next: tools** — — `entity` and `value` requests; Circle (C), Arc (A), Xline (X).
 4. Layers — undoable layer records, layers panel, current layer.
 5. Units and files — new drawing, convert/relabel, `.cad2d.json` save/load.
 

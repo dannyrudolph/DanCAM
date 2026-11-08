@@ -1,4 +1,7 @@
+import { distanceToArc } from '../geometry/arc';
+import { distanceToCircle } from '../geometry/circle';
 import { distanceToSegment } from '../geometry/distance';
+import { distanceToXline } from '../geometry/xline';
 import type { Vec2 } from '../geometry/vec';
 import type { Drawing } from './drawing';
 import type { Entity, EntityId } from './entity';
@@ -9,6 +12,12 @@ export function distanceToEntity(p: Vec2, e: Entity): number {
       return Math.hypot(p.x - e.at.x, p.y - e.at.y);
     case 'line':
       return distanceToSegment(p, e.start, e.end);
+    case 'circle':
+      return distanceToCircle(p, e);
+    case 'arc':
+      return distanceToArc(p, e);
+    case 'xline':
+      return distanceToXline(p, e);
   }
 }
 

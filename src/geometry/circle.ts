@@ -1,4 +1,5 @@
 import { angleDeg, cosSinDeg } from './angle';
+import type { BBox } from './bbox';
 import { distanceToLine } from './distance';
 import { TOL } from './tolerance';
 import { type Vec2, distance, vecNearlyEqual } from './vec';
@@ -43,4 +44,18 @@ export function nearestOnCircle(center: Vec2, radius: number, p: Vec2): Vec2 {
   const d = distance(center, p);
   if (d === 0) return { x: center.x + radius, y: center.y };
   return { x: center.x + ((p.x - center.x) / d) * radius, y: center.y + ((p.y - center.y) / d) * radius };
+}
+
+export function circleBBox(c: Circle): BBox {
+  return {
+    minX: c.center.x - c.radius,
+    minY: c.center.y - c.radius,
+    maxX: c.center.x + c.radius,
+    maxY: c.center.y + c.radius,
+  };
+}
+
+/** Distance from `p` to the circle's curve (not its disc). */
+export function distanceToCircle(p: Vec2, c: Circle): number {
+  return Math.abs(distance(p, c.center) - c.radius);
 }

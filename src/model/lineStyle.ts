@@ -45,11 +45,13 @@ export function patternLength(dash: readonly number[]): number {
 /**
  * Canvas lineDashOffset that keeps a pattern anchored to the entity's real start
  * point when the drawn segment was clipped to start `clippedAway` pixels later.
+ * Negative distances (an xline drawn from before its base point) wrap into
+ * [0, pattern length).
  * Without it, dashes would slide along the line as you pan.
  */
 export function dashOffset(dash: readonly number[], clippedAway: number): number {
   const len = patternLength(dash);
-  return len === 0 ? 0 : clippedAway % len;
+  return len === 0 ? 0 : ((clippedAway % len) + len) % len;
 }
 
 /**
@@ -66,4 +68,16 @@ export function insetSegment(a: Vec2, b: Vec2, gap: number): [Vec2, Vec2] {
     { x: a.x + ux * g, y: a.y + uy * g },
     { x: b.x - ux * g, y: b.y - uy * g },
   ];
+}
+
+/**
+ * The arc version of insetSegment: pulls both ends of an arc in by `gap`
+ * pixels of arc length, keeping the middle half of an arc too short for full
+ * gaps. Angles in radians; returns [startRad, sweepRad].
+ */
+export function insetArc(startRad: number, sweepRad: number, radiusPx: number, gap: number): [number, number] {
+  const len = radiusPx * sweepRad;
+  if (gap <= 0 || !(len > 0)) return [startRad, sweepRad];
+  const g = Math.min(gap, len / 4) / radiusPx;
+  return [startRad + g, sweepRad - 2 * g];
 }

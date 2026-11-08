@@ -1,4 +1,5 @@
 import { ccwDeg, cosSinDeg, degToRad, normDeg } from './angle';
+import { type BBox, fromPoints } from './bbox';
 import { type Circle, angleFrom, circle3P, pointAtDeg } from './circle';
 import { TOL } from './tolerance';
 import { type Vec2, distance, vecNearlyEqual } from './vec';
@@ -33,6 +34,24 @@ export function arcLength(a: Arc): number {
 /** True when the direction `deg` from the center falls on the arc (ends included). */
 export function arcContainsDeg(a: Arc, deg: number): boolean {
   return ccwDeg(a.startDeg, deg) <= arcSweepDeg(a);
+}
+
+/** Tight bounding box: the two ends plus every quadrant point the arc passes. */
+export function arcBBox(a: Arc): BBox {
+  const pts = [arcStart(a), arcEnd(a)];
+  for (const q of [0, 90, 180, 270]) if (arcContainsDeg(a, q)) pts.push(pointAtDeg(a.center, a.radius, q));
+  return fromPoints(pts);
+}
+
+/**
+ * Distance from `p` to the arc: radial when `p` is inside the arc's angular
+ * range, otherwise to the nearer end.
+ */
+export function distanceToArc(p: Vec2, a: Arc): number {
+  const d = distance(p, a.center);
+  if (d > 0 && arcContainsDeg(a, angleFrom(a.center, p))) return Math.abs(d - a.radius);
+  if (d === 0) return a.radius;
+  return Math.min(distance(p, arcStart(a)), distance(p, arcEnd(a)));
 }
 
 /** Unit tangent at `deg`, pointing counter-clockwise (the arc's own direction). */

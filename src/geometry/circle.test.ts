@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { angleFrom, circle2P, circle3P, nearestOnCircle, pointAtDeg } from './circle';
+import { angleFrom, circle2P, circle3P, circleBBox, distanceToCircle, nearestOnCircle, pointAtDeg } from './circle';
 import { distanceToLine } from './distance';
 import { TOL } from './tolerance';
 import { distance } from './vec';
@@ -60,5 +60,19 @@ describe('nearestOnCircle and angleFrom', () => {
   it('projects radially onto the circle', () => {
     expect(nearestOnCircle({ x: 1, y: 1 }, 2, { x: 1, y: 5 })).toEqual({ x: 1, y: 3 });
     expect(angleFrom({ x: 1, y: 1 }, { x: 1, y: 5 })).toBe(90);
+  });
+});
+
+describe('circleBBox and distanceToCircle', () => {
+  const c = { center: { x: 1, y: -2 }, radius: 0.5 };
+
+  it('boxes the circle at center ± radius', () => {
+    expect(circleBBox(c)).toEqual({ minX: 0.5, minY: -2.5, maxX: 1.5, maxY: -1.5 });
+  });
+
+  it('measures to the curve from outside and inside, not to the disc', () => {
+    expect(distanceToCircle({ x: 1, y: 1 }, c)).toBe(2.5);
+    expect(distanceToCircle({ x: 1, y: -2 }, c)).toBe(0.5);
+    expect(distanceToCircle({ x: 1.5, y: -2 }, c)).toBe(0);
   });
 });

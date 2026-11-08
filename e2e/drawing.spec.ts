@@ -142,11 +142,38 @@ test('the demo drawing loads and renders without errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?demo');
-  await expect(prop(page, 'entity-count')).toHaveText('14');
+  await expect(prop(page, 'entity-count')).toHaveText('18');
   await page.mouse.move(400, 300);
   await page.mouse.wheel(0, -2000); // deep zoom
   await page.waitForTimeout(100);
   expect(errors).toEqual([]);
+});
+
+test('circles, arcs and xlines in the demo end view can be picked and show their values', async ({ page }) => {
+  await page.goto('/?demo');
+  await page.getByTestId('zoom-extents').click();
+  const box = await page.locator('#canvas').boundingBox();
+  if (!box) throw new Error('canvas has no box');
+  // Demo extents (xlines excluded): X -0.1 … 2.8505, Y ±0.2505, with a 5% margin each side.
+  const extents = { minX: -0.1, maxX: 2.8505, minY: -0.2505, maxY: 0.2505 };
+  const scale = Math.min((box.width * 0.9) / (extents.maxX - extents.minX), (box.height * 0.9) / (extents.maxY - extents.minY));
+  const cx = (extents.minX + extents.maxX) / 2;
+  const toScreen = (x: number, y: number) => ({ x: box.x + box.width / 2 + (x - cx) * scale, y: box.y + box.height / 2 - y * scale });
+  const at = (deg: number, r: number) => toScreen(2.6 + r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180));
+
+  let p = at(45, 0.2505); // outside-diameter circle
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Circle /);
+  await expect(prop(page, 'Diameter')).toHaveText('0.5010');
+
+  p = at(60, 0.15); // bolt-circle arc, 30° to 150°
+  await page.mouse.click(p.x, p.y);
+  await expect(prop(page, 'Included angle')).toHaveText('120.0000°');
+
+  p = toScreen(2.6, 0);
+  await page.mouse.click(p.x, box.y + 5); // the vertical xline, well beyond the drawing's extents
+  await expect(page.locator('#properties h2')).toHaveText(/^Xline /);
+  await expect(prop(page, 'Angle')).toHaveText('90.0000°');
 });
 
 test('a focused box that has not been typed in keeps following the cursor', async ({ page }) => {

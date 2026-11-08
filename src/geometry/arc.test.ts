@@ -2,6 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   arc3P,
+  arcBBox,
   arcContainsDeg,
   arcEnd,
   arcLength,
@@ -13,6 +14,7 @@ import {
   arcSweepDeg,
   arcTangentFrom,
   ccwTangentAt,
+  distanceToArc,
 } from './arc';
 import { angleFrom } from './circle';
 import { distanceToLine } from './distance';
@@ -181,5 +183,47 @@ describe('arcTangentFrom', () => {
         expect(cross(d, { x: e.x - s.x, y: e.y - s.y }) > 0).toBe(!reversed);
       }),
     );
+  });
+});
+
+describe('arcBBox', () => {
+  it('reaches the top quadrant of an arc across 90°, but not the sides', () => {
+    const b = arcBBox({ center: { x: 1, y: 1 }, radius: 2, startDeg: 30, endDeg: 150 });
+    expect(b.minX).toBeCloseTo(1 - Math.sqrt(3), 12);
+    expect(b.maxX).toBeCloseTo(1 + Math.sqrt(3), 12);
+    expect(b.minY).toBeCloseTo(2, 12); // the ends, at 1 + 2·sin 30°
+    expect(b.maxY).toBe(3); // the 90° quadrant, exact
+  });
+
+  it('reaches +X for an arc that crosses 0°', () => {
+    const b = arcBBox({ center: O, radius: 1, startDeg: 300, endDeg: 60 });
+    expect(b.maxX).toBe(1);
+    expect(b.minX).toBeCloseTo(0.5, 12);
+    expect(b.minY).toBeCloseTo(-Math.sqrt(3) / 2, 12);
+    expect(b.maxY).toBeCloseTo(Math.sqrt(3) / 2, 12);
+  });
+
+  it('stops short of +X for an arc of almost a full turn that skips 0°', () => {
+    const b = arcBBox({ center: O, radius: 1, startDeg: 1, endDeg: 359 });
+    expect(b).toEqual({ minX: -1, minY: -1, maxX: expect.closeTo(Math.cos(Math.PI / 180), 12), maxY: 1 });
+  });
+});
+
+describe('distanceToArc', () => {
+  const upper = { center: O, radius: 1, startDeg: 0, endDeg: 180 };
+
+  it('is radial inside the angular range', () => {
+    expect(distanceToArc({ x: 0, y: 3 }, upper)).toBe(2);
+    expect(distanceToArc({ x: 0, y: 0.25 }, upper)).toBe(0.75);
+  });
+
+  it('is the distance to the nearer end outside the range', () => {
+    // Below the missing half: radially it would be 2, but the arc's nearest point is its end.
+    expect(distanceToArc({ x: 0, y: -3 }, upper)).toBeCloseTo(Math.hypot(1, 3), 12);
+    expect(distanceToArc({ x: 1.5, y: -0.5 }, upper)).toBeCloseTo(Math.hypot(0.5, 0.5), 12);
+  });
+
+  it('is the radius at the center', () => {
+    expect(distanceToArc(O, upper)).toBe(1);
   });
 });

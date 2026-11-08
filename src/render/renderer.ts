@@ -1,10 +1,13 @@
+import { degToRad } from '../geometry/angle';
+import { arcSweepDeg } from '../geometry/arc';
+import { arcScreenPieces } from '../geometry/arcPolyline';
 import type { BBox } from '../geometry/bbox';
-import { clipSegment } from '../geometry/clip';
+import { clipLine, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
-import { type LineStyle, dashOffset, insetSegment } from '../model/lineStyle';
+import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
 import { gridLines, gridSpacing } from './grid';
 import { type Viewport, visibleBBox, worldToScreen } from './viewport';
 
@@ -23,6 +26,8 @@ const COLORS = {
 const POINT_MARK_PX = 3;
 /** Extra width added to a selected entity, CSS pixels. */
 const SELECTED_EXTRA_PX = 1;
+/** Largest gap between a drawn arc chord and the true curve, CSS pixels. */
+const ARC_ERROR_PX = 0.25;
 /** Half-size of the marker where the next point will land. */
 const CURSOR_MARK_PX = 4;
 
@@ -135,6 +140,46 @@ function drawEntity(
       if (!seg) return;
       ctx.setLineDash(style.dash);
       ctx.lineDashOffset = dashOffset(style.dash, distance(a, seg[0]));
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      ctx.lineTo(seg[1].x, seg[1].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      return;
+    }
+    case 'circle':
+    case 'arc': {
+      // Flattened in screen space and clipped to the view, so the segment count
+      // follows what is visible rather than the zoom.
+      const center = worldToScreen(v, e.center);
+      const radiusPx = e.radius * v.scale;
+      let start = 0;
+      let sweep = 2 * Math.PI;
+      if (e.kind === 'arc') {
+        [start, sweep] = insetArc(degToRad(e.startDeg), degToRad(arcSweepDeg(e)), radiusPx, style.endGap);
+      }
+      const pieces = arcScreenPieces(center, radiusPx, start, sweep, screenClipBox(v), ARC_ERROR_PX);
+      ctx.setLineDash(style.dash);
+      for (const piece of pieces) {
+        ctx.lineDashOffset = dashOffset(style.dash, piece.startOffsetPx);
+        ctx.beginPath();
+        const [first, ...rest] = piece.points;
+        ctx.moveTo(first!.x, first!.y);
+        for (const p of rest) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      return;
+    }
+    case 'xline': {
+      const base = worldToScreen(v, e.base);
+      const dir = { x: e.dir.x, y: -e.dir.y }; // screen Y points down
+      const seg = clipLine(base, dir, screenClipBox(v));
+      if (!seg) return;
+      // Dashes are anchored at the base point, so they stay put while panning.
+      const fromBase = (seg[0].x - base.x) * dir.x + (seg[0].y - base.y) * dir.y;
+      ctx.setLineDash(style.dash);
+      ctx.lineDashOffset = dashOffset(style.dash, fromBase);
       ctx.beginPath();
       ctx.moveTo(seg[0].x, seg[0].y);
       ctx.lineTo(seg[1].x, seg[1].y);

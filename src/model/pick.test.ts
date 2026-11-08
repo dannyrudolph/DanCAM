@@ -53,3 +53,27 @@ describe('pickEntity', () => {
     expect(pickEntity(d, { x: 0.5, y: 0 }, 0.05)).toBe('b');
   });
 });
+
+describe('pickEntity on curves and xlines', () => {
+  function drawing() {
+    const d = createDrawing('in');
+    d.entities.set('c', { kind: 'circle', id: 'c', layer: '0', center: { x: 0, y: 0 }, radius: 1 });
+    d.entities.set('a', { kind: 'arc', id: 'a', layer: '0', center: { x: 5, y: 0 }, radius: 1, startDeg: 0, endDeg: 180 });
+    d.entities.set('x', { kind: 'xline', id: 'x', layer: '0', base: { x: 0, y: 10 }, dir: { x: 1, y: 0 } });
+    return d;
+  }
+
+  it('picks a circle on its curve, not inside its disc', () => {
+    expect(pickEntity(drawing(), { x: 0, y: 1.02 }, 0.05)).toBe('c');
+    expect(pickEntity(drawing(), { x: 0, y: 0 }, 0.05)).toBeUndefined();
+  });
+
+  it('picks an arc on its curve but not on the missing part of its circle', () => {
+    expect(pickEntity(drawing(), { x: 5, y: 0.98 }, 0.05)).toBe('a');
+    expect(pickEntity(drawing(), { x: 5, y: -1 }, 0.05)).toBeUndefined();
+  });
+
+  it('picks an xline far from its base point', () => {
+    expect(pickEntity(drawing(), { x: -1000, y: 10.01 }, 0.05)).toBe('x');
+  });
+});

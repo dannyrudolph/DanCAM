@@ -1,4 +1,6 @@
-import { type BBox, fromPoints } from '../geometry/bbox';
+import { arcBBox } from '../geometry/arc';
+import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
+import { circleBBox } from '../geometry/circle';
 import type { Vec2 } from '../geometry/vec';
 import type { LineStyleName } from './lineStyle';
 
@@ -23,17 +25,51 @@ export type LineEntity = EntityBase & {
   readonly end: Vec2;
 };
 
-/** Phase 1b adds circle, arc and xline. */
-export type Entity = PointEntity | LineEntity;
+export type CircleEntity = EntityBase & {
+  readonly kind: 'circle';
+  readonly center: Vec2;
+  readonly radius: number;
+};
+
+/**
+ * Runs counter-clockwise from `startDeg` to `endDeg`, degrees in [0, 360)
+ * from +X (the geometry `Arc`).
+ */
+export type ArcEntity = EntityBase & {
+  readonly kind: 'arc';
+  readonly center: Vec2;
+  readonly radius: number;
+  readonly startDeg: number;
+  readonly endDeg: number;
+};
+
+/** Construction line, infinite both ways. `dir` is a unit vector (the geometry `Xline`). */
+export type XlineEntity = EntityBase & {
+  readonly kind: 'xline';
+  readonly base: Vec2;
+  readonly dir: Vec2;
+};
+
+export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity;
 
 /** The layer and style a tool gives each new entity. */
 export type EntityProps = { readonly layer: string; readonly style?: LineStyleName };
 
+/**
+ * Bounds used by Zoom Extents. Xlines are infinite, so they contribute
+ * nothing, as in AutoCAD.
+ */
 export function entityBBox(e: Entity): BBox {
   switch (e.kind) {
     case 'point':
       return fromPoints([e.at]);
     case 'line':
       return fromPoints([e.start, e.end]);
+    case 'circle':
+      return circleBBox(e);
+    case 'arc':
+      return arcBBox(e);
+    case 'xline':
+      return EMPTY_BBOX;
   }
 }

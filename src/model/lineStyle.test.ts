@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDrawing, effectiveStyle } from './drawing';
 import type { LineEntity } from './entity';
-import { LINE_STYLES, dashOffset, insetSegment, patternLength } from './lineStyle';
+import { LINE_STYLES, dashOffset, insetArc, insetSegment, patternLength } from './lineStyle';
 
 describe('line styles', () => {
   it('Visible is continuous and the heaviest; Hidden and Center are dashed', () => {
@@ -26,6 +26,12 @@ describe('line styles', () => {
     expect(dashOffset([8, 4], 30)).toBe(6);
     expect(dashOffset([8, 4], 1e9)).toBe(1e9 % 12);
     expect(dashOffset([], 30)).toBe(0);
+  });
+
+  it('dashOffset wraps a negative distance into one pattern length', () => {
+    // An xline drawn from 30px before its base: phase -30 ≡ 6 in a 12px pattern.
+    expect(dashOffset([8, 4], -30)).toBe(6);
+    expect(dashOffset([8, 4], -12)).toBe(0);
   });
 });
 
@@ -75,5 +81,26 @@ describe('insetSegment', () => {
     const b = { x: 5, y: 1 };
     expect(insetSegment(a, b, 0)).toEqual([a, b]);
     expect(insetSegment(a, a, 4)).toEqual([a, a]);
+  });
+});
+
+describe('insetArc', () => {
+  it('pulls both ends in by the gap measured along the arc', () => {
+    // 100px radius quarter arc: a 4px gap is 0.04 rad at each end.
+    const [start, sweep] = insetArc(0, Math.PI / 2, 100, 4);
+    expect(start).toBeCloseTo(0.04, 12);
+    expect(sweep).toBeCloseTo(Math.PI / 2 - 0.08, 12);
+  });
+
+  it('keeps the middle half of an arc too short for full gaps', () => {
+    // 10px radius, 0.8 rad: 8px long, so 2px comes off each end.
+    const [start, sweep] = insetArc(1, 0.8, 10, 4);
+    expect(start).toBeCloseTo(1.2, 12);
+    expect(sweep).toBeCloseTo(0.4, 12);
+  });
+
+  it('leaves the arc alone with no gap or no size', () => {
+    expect(insetArc(1, 2, 50, 0)).toEqual([1, 2]);
+    expect(insetArc(1, 2, 0, 4)).toEqual([1, 2]);
   });
 });
