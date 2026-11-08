@@ -198,6 +198,32 @@ input {
   padding: 8px 10px;
 }
 
+#inquiry {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.inquiry-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.inquiry-clear {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inquiry-result h3 {
+  font-size: 12px;
+  margin: 8px 0 4px;
+  color: var(--muted);
+}
+
 #layers {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
@@ -310,23 +336,27 @@ input {
   height: 16px;
 }
 
-#properties h2 {
+#properties h2,
+#inquiry h2 {
   font-size: 13px;
   margin: 0 0 8px;
 }
 
-#properties dl {
+#properties dl,
+#inquiry dl {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 3px 10px;
   margin: 0;
 }
 
-#properties dt {
+#properties dt,
+#inquiry dt {
   color: var(--muted);
 }
 
-#properties dd {
+#properties dd,
+#inquiry dd {
   margin: 0;
   text-align: right;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

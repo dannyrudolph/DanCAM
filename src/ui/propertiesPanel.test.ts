@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDrawing } from '../model/drawing';
 import type { Entity } from '../model/entity';
-import { rowsFor, selectionSummary } from './propertiesPanel';
+import { rowsFor } from '../model/properties';
+import { selectionSummary } from './propertiesPanel';
 
 /** Rows as label → value, skipping Layer and Style. */
 function values(e: Entity): Record<string, number | string> {

@@ -44,7 +44,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    System Access API with fallbacks; convert/relabel from the status bar
    units (undoable `units` record); unsaved-changes marker and prompts.
 
-## Phase 2 (plan approved 2026-11-08): in progress
+## Phase 2 (plan approved 2026-11-08): done 2026-11-08, awaiting the user's review
 
 1. **Geometry and rays (done).** Bounded curves (segment, ray, xline, circle, arc):
    intersections that respect ends, nearest, perpendicular feet, tangent
@@ -99,8 +99,19 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    `selection` request (clicks and boxes as usual, Enter hands it over).
    Edit tools are one-shot (`repeat: false`) and the selection is kept after.
    `model/entity.transformEntity`. Toolbar: separator, then edit tools.
-6. **Inquiry.** Dist (D), ID, List, Angle; results in a sidebar panel; e2e
-   for the phase's done-when (line-arc and arc-arc Tan/Int checked with ID).
+6. **Inquiry (done).** `commands/inquiryTools`: Dist (D), ID, List (pick
+   one object; same rows as the panel, now in `model/properties`), Angle
+   (vertex + two arms: included and CCW). Sticky. `ToolContext.report` →
+   `ui/inquiryPanel` (Results, newest first, 10 kept, Clear; hover for full
+   precision). Toolbar: third group. Done-when e2e: line–arc and arc–arc
+   Int, point-to-arc Tan and arc-to-arc tangent line, each checked with ID
+   to 1e-12.
+
+Also in Phase 2, at the user's request: Rotate's Reference option (two
+points along an edge, then its new angle).
+
+**Next:** Phase 3, after the user's go-ahead (CAD-7). Re-read the spec's
+Phase 3 section and propose a plan first.
 
 Decisions (user, 2026-11-08): shortcuts as above plus F3 for snaps (Stretch
 needs a key other than S); arc grips as in step 4; sidebar results panel;

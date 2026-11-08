@@ -905,3 +905,93 @@ test.describe('edit tools', () => {
     await expect(prop(page, 'entity-count')).toHaveText('3');
   });
 });
+
+test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
+  /**
+   * Arc 1: center (0,0), R1, upper half. Arc 2: center (1.5,0), R1, upper half.
+   * Line y = 0.5 from x -2 to 2. Returns world → page coordinates.
+   */
+  async function drawing(page: Page) {
+    await page.keyboard.press('a');
+    await page.locator('[data-option="method:sce"]').click();
+    for (const startX of ['1', '2.5']) {
+      await typeValues(page, startX, '0'); // start
+      await typeValues(page, '1', '180'); // center, 1 to the left
+      await typeValues(page, '1', '180'); // end direction from the center
+    }
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('l');
+    await typeValues(page, '-2', '0.5');
+    await typeValues(page, '4', '0');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const scale = Math.min((box.width * 0.9) / 4.5, box.height * 0.9); // extents 4.5 × 1
+    const c = await canvasCenter(page);
+    return (x: number, y: number) => ({ x: c.x + (x - 0.25) * scale, y: c.y - (y - 0.5) * scale });
+  }
+
+  /** Moves near `p` (a few pixels off), checks the snap, and clicks. */
+  async function snapClick(page: Page, p: { x: number; y: number }, snap: string) {
+    await page.mouse.move(p.x + 3, p.y - 2);
+    await expect(page.locator('#canvas')).toHaveAttribute('data-snap', snap);
+    await page.mouse.click(p.x + 3, p.y - 2);
+  }
+
+  async function snapOnce(page: Page, kind: string) {
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.click(box.x + 20, box.y + 20, { button: 'right' });
+    await page.locator('.context-menu button', { hasText: 'Snap once…' }).click();
+    await page.locator('.context-menu button', { hasText: kind }).click();
+  }
+
+  /** ID at a snapped point; returns the full-precision X and Y from the results panel. */
+  async function idAt(page: Page, p: { x: number; y: number }, snap: string) {
+    await page.getByTestId('tool-id').click();
+    await snapClick(page, p, snap);
+    await page.keyboard.press('Escape');
+    const latest = page.locator('#inquiry .inquiry-result').first();
+    const x = Number(await latest.locator('dd[data-prop="X"]').getAttribute('title'));
+    const y = Number(await latest.locator('dd[data-prop="Y"]').getAttribute('title'));
+    return { x, y };
+  }
+
+  const expectAt = (got: { x: number; y: number }, x: number, y: number) => {
+    expect(Math.abs(got.x - x)).toBeLessThanOrEqual(1e-12);
+    expect(Math.abs(got.y - y)).toBeLessThanOrEqual(1e-12);
+  };
+
+  test('line–arc and arc–arc intersections', async ({ page }) => {
+    const at = await drawing(page);
+    expectAt(await idAt(page, at(Math.sqrt(0.75), 0.5), 'int'), Math.sqrt(0.75), 0.5);
+    expectAt(await idAt(page, at(1.5 - Math.sqrt(0.75), 0.5), 'int'), 1.5 - Math.sqrt(0.75), 0.5);
+    expectAt(await idAt(page, at(0.75, Math.sqrt(0.4375)), 'int'), 0.75, Math.sqrt(0.4375));
+  });
+
+  test('a line from a point tangent to an arc', async ({ page }) => {
+    const at = await drawing(page);
+    await page.keyboard.press('l');
+    await typeValues(page, '2', '0'); // from (2, 0): tangent point on arc 1 is (0.5, √0.75)
+    await snapOnce(page, 'Tangent');
+    await snapClick(page, at(0.5, Math.sqrt(0.75)), 'tan');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    expectAt(await idAt(page, at(0.5, Math.sqrt(0.75)), 'end'), 0.5, Math.sqrt(0.75));
+  });
+
+  test('a line tangent to two arcs', async ({ page }) => {
+    const at = await drawing(page);
+    await page.keyboard.press('l');
+    await snapOnce(page, 'Tangent');
+    await snapClick(page, at(0.05, 1), 'tan'); // deferred on arc 1, near its top
+    await snapOnce(page, 'Tangent');
+    await snapClick(page, at(1.45, 1), 'tan'); // and on arc 2: the outer tangent y = 1
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('4');
+    expectAt(await idAt(page, at(0, 1), 'end'), 0, 1);
+    expectAt(await idAt(page, at(1.5, 1), 'end'), 1.5, 1);
+  });
+});

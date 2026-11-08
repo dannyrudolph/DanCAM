@@ -2,6 +2,7 @@ import { createArcTool } from '../commands/arcTool';
 import { createCircleTool } from '../commands/circleTool';
 import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from '../commands/editTools';
 import { gripTool } from '../commands/gripTool';
+import { angleTool, distTool, idTool, listTool } from '../commands/inquiryTools';
 import { lineTool } from '../commands/lineTool';
 import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
@@ -27,6 +28,7 @@ import { DrawingFile } from './fileAccess';
 import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
+import { InquiryPanel } from './inquiryPanel';
 import { LayersPanel } from './layersPanel';
 import { PropertiesPanel } from './propertiesPanel';
 import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
@@ -51,7 +53,8 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
 
 export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
-export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS];
+export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
+export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...INQUIRY_TOOLS];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -93,8 +96,9 @@ function saveSidePanel(shown: boolean): void {
   }
 }
 
-/** "shift+x" → "Shift+X", for tooltips. */
+/** "shift+x" → "Shift+X", for tooltips; "" for a tool with no key. */
 export function shortcutLabel(shortcut: string): string {
+  if (shortcut === '') return '';
   return shortcut.startsWith('shift+') ? `Shift+${shortcut.slice(6).toUpperCase()}` : shortcut.toUpperCase();
 }
 
@@ -142,6 +146,7 @@ export class App {
     },
     message: (m) => this.status.showMessage(m),
   });
+  private readonly inquiry = new InquiryPanel(el('inquiry'));
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
@@ -222,6 +227,7 @@ export class App {
       newProps: () => this.newProps(),
       message: (m) => this.status.showMessage(m),
       selection: () => [...this.selected],
+      report: (r) => this.inquiry.add(r, this.settings.precision),
       continuation: undefined,
     };
     return new ToolRunner(ctx);
@@ -579,6 +585,7 @@ export class App {
       else this.selected.delete(id);
     }
     this.properties.show(this.drawing, picked, this.settings.precision);
+    this.inquiry.show(this.settings.precision);
     this.requestRedraw();
   }
 
@@ -673,7 +680,7 @@ export class App {
       for (const def of defs) {
         const icon = ICONS[def.id as keyof typeof ICONS];
         const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
-        const tip = `${def.label} (${keys})`;
+        const tip = keys ? `${def.label} (${keys})` : def.label;
         const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
         this.toolButtons.set(def.id, b);
         bar.append(b);
@@ -684,6 +691,10 @@ export class App {
     gap.className = 'toolbar-separator';
     bar.append(gap);
     addTools(EDIT_TOOLS);
+    const gap2 = document.createElement('span');
+    gap2.className = 'toolbar-separator';
+    bar.append(gap2);
+    addTools(INQUIRY_TOOLS);
     const u = this.unitsButton;
     u.type = 'button';
     u.className = 'units-button';

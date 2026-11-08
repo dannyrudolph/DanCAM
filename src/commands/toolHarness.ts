@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/vec';
 import { createDrawing } from '../model/drawing';
 import type { Entity, EntityId, LineEntity } from '../model/entity';
 import { UndoStack } from '../model/undo';
-import { type ToolContext, ToolRunner } from './tool';
+import { type Report, type ToolContext, ToolRunner } from './tool';
 
 /**
  * Test harness: runs tools against a fresh drawing without the UI, feeding
@@ -12,6 +12,7 @@ export function setup(style?: 'hidden') {
   const drawing = createDrawing('in');
   const undo = new UndoStack(drawing);
   const messages: string[] = [];
+  const reports: Report[] = [];
   /** What the app has selected when a tool starts; tests set it directly. */
   let selected: string[] = [];
   const select = (...ids: string[]): void => {
@@ -23,6 +24,7 @@ export function setup(style?: 'hidden') {
     newProps: () => (style ? { layer: '0', style } : { layer: '0' }),
     message: (m) => messages.push(m),
     selection: () => selected,
+    report: (r) => reports.push(r),
     continuation: undefined,
   };
   const runner = new ToolRunner(ctx);
@@ -45,5 +47,5 @@ export function setup(style?: 'hidden') {
     return [];
   };
   const selectionDone = (...ids: string[]): void => runner.send({ kind: 'selection', ids });
-  return { drawing, undo, messages, ctx, runner, click, value, pick, option, add, entities, last, lines, preview, select, selectionDone };
+  return { drawing, undo, messages, reports, ctx, runner, click, value, pick, option, add, entities, last, lines, preview, select, selectionDone };
 }

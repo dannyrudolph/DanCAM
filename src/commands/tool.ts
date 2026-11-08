@@ -2,6 +2,7 @@ import type { Deferred } from '../geometry/curve';
 import type { Vec2 } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
+import type { Row } from '../model/properties';
 import type { UndoStack } from '../model/undo';
 
 /** A button in the options bar while a step is waiting. `active` marks the chosen method. */
@@ -98,6 +99,9 @@ export type ToolInput =
  */
 export type Continuation = { readonly id: EntityId; readonly end: Vec2; readonly dir: Vec2 };
 
+/** An inquiry result: a heading and exact values, rounded only on display. */
+export type Report = { readonly title: string; readonly rows: readonly Row[] };
+
 /** A tool is a generator: each `yield` is one step waiting for one input. */
 export type ToolGen = Generator<Request, void, ToolInput>;
 
@@ -108,6 +112,8 @@ export interface ToolContext {
   newProps(): EntityProps;
   /** Shows a short message to the user (status line). */
   message(text: string): void;
+  /** Shows an inquiry result (Dist, ID, List, Angle) in the results panel. */
+  report(result: Report): void;
   /** The objects selected now, in the order they were picked (an edit tool's selection-first input). */
   selection(): readonly EntityId[];
   /** Set by the Line and Arc tools each time they add an entity. */
