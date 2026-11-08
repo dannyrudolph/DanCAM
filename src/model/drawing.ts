@@ -31,7 +31,7 @@ export function createDrawing(units: Units): Drawing {
   return {
     schemaVersion: 1,
     units,
-    layers: new Map([[DEFAULT_LAYER, { name: DEFAULT_LAYER, color: '#e6e6e6', visible: true, style: 'visible' }]]),
+    layers: new Map([[DEFAULT_LAYER, { name: DEFAULT_LAYER, color: '#000000', visible: true, style: 'visible' }]]),
     entities: new Map(),
     nextId: 1,
   };

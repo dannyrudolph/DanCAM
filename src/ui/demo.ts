@@ -7,12 +7,12 @@ import type { LineStyleName } from '../model/lineStyle';
  * Development-only test drawing, loaded with `?demo`: the upper half of a 2"
  * turned profile on its centerline, with a 0.0005" step on the largest diameter
  * for checking deep zoom, a hidden bore and a tangent edge to show the line
- * styles, plus an end view to the right with circles, a bolt-circle arc and
+ * styles, plus an end view to the left with circles, a bolt-circle arc and
  * a vertical construction line. Loaded as initial state, like opening a file, so it is not on the
  * undo stack.
  */
 export function loadDemo(d: Drawing): void {
-  d.layers.set('CENTER', { name: 'CENTER', color: '#c0a040', visible: true, style: 'center' });
+  d.layers.set('CENTER', { name: 'CENTER', color: '#000000', visible: true, style: 'center' });
 
   const addLine = (start: Vec2, end: Vec2, layer = '0', style?: LineStyleName): void => {
     const id = newEntityId(d);
@@ -41,8 +41,8 @@ export function loadDemo(d: Drawing): void {
 
   addLine({ x: -0.1, y: 0 }, { x: 2.1, y: 0 }, 'CENTER');
 
-  // End view at X 2.6: outside diameter, hidden bore, part of a bolt circle, and a vertical xline through the center.
-  const endView = { x: 2.6, y: 0 };
+  // End view at X -0.6: outside diameter, hidden bore, part of a bolt circle, and a vertical xline through the center.
+  const endView = { x: -0.6, y: 0 };
   const add = (e: DistributiveOmit<Entity, 'id'>): void => {
     const id = newEntityId(d);
     d.entities.set(id, { ...e, id } as Entity);
