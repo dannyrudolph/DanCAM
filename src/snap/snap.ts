@@ -1,6 +1,6 @@
 import { arcContainsDeg, arcEnd, arcMid, arcStart } from '../geometry/arc';
 import { pointAtDeg } from '../geometry/circle';
-import { type Curve, intersectCurves, nearestOnCurve, perpendicularFeet, tangentPointsFrom } from '../geometry/curve';
+import { type Curve, type Deferred, intersectCurves, nearestOnCurve, perpendicularFeet, tangentPointsFrom } from '../geometry/curve';
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
@@ -27,10 +27,11 @@ export const SNAP_LABEL: Readonly<Record<SnapKind, string>> = {
 /** Running snaps in a new session. Perpendicular, Tangent and Nearest are opt-in. */
 export const DEFAULT_SNAP_KINDS: readonly SnapKind[] = ['end', 'mid', 'cen', 'quad', 'int', 'node'];
 
-/** Snaps that need the step's base point (the line is drawn from it). */
+/** Snaps that need the step's base point (the line is drawn from it), unless the step takes a deferred pick. */
 export const NEEDS_BASE: ReadonlySet<SnapKind> = new Set<SnapKind>(['perp', 'tan']);
 
-export type Snap = { readonly kind: SnapKind; readonly at: Vec2 };
+/** `deferred`: a Tangent or Perpendicular picked with no base point yet; `at` is the point on the curve under the cursor. */
+export type Snap = { readonly kind: SnapKind; readonly at: Vec2; readonly deferred?: Deferred };
 
 /** The entity as a curve with its real extent, or undefined for a point. */
 export function entityCurve(e: Entity): Curve | undefined {
@@ -62,7 +63,10 @@ type Candidate = Snap & { readonly score: number; readonly dist: number };
  * anywhere, as long as their object is under the cursor; they rank as if
  * they were at the edge of the aperture, so a point snap close to the cursor
  * beats them. Otherwise the point nearest the cursor wins, and Nearest only
- * when nothing else is found. Perpendicular and Tangent need `base`.
+ * when nothing else is found. Perpendicular and Tangent need `base`; without
+ * one, `deferOk` lets them give a deferred snap on the object under the
+ * cursor (Tangent on circles and arcs, Perpendicular on anything), ranked
+ * like Center so that point snaps in the aperture win.
  */
 export function findSnap(
   d: Drawing,
@@ -70,6 +74,7 @@ export function findSnap(
   aperture: number,
   kinds: ReadonlySet<SnapKind>,
   base?: Vec2,
+  deferOk = false,
 ): Snap | undefined {
   const found: Candidate[] = [];
   const point = (kind: SnapKind, at: Vec2): void => {
@@ -122,6 +127,13 @@ export function findSnap(
     if (base) {
       for (const p of perpendicularFeet(c, base)) fromObject('perp', p);
       for (const p of tangentPointsFrom(c, base)) fromObject('tan', p);
+    } else if (deferOk) {
+      const at = nearestOnCurve(c, cursor);
+      const dist = distance(cursor, at);
+      for (const kind of ['tan', 'perp'] as const) {
+        if (!kinds.has(kind) || (kind === 'tan' && (c.kind !== 'circle' && c.kind !== 'arc'))) continue;
+        found.push({ kind, at, score: aperture, dist, deferred: { kind, curve: c, pick: at } });
+      }
     }
     point('nea', nearestOnCurve(c, cursor));
   }
@@ -137,7 +149,8 @@ export function findSnap(
   const pool = ranked.length > 0 ? ranked : found;
   let best: Candidate | undefined;
   for (const c of pool) if (!best || beats(c, best)) best = c;
-  return best && { kind: best.kind, at: best.at };
+  if (!best) return undefined;
+  return best.deferred ? { kind: best.kind, at: best.at, deferred: best.deferred } : { kind: best.kind, at: best.at };
 }
 
 /** Lower score wins, then the nearer point; snaps at the same point go by SNAP_KINDS order. */

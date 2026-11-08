@@ -345,7 +345,8 @@ export class App {
       }
       if (req.kind === 'point') {
         this.onceSnap = undefined;
-        this.send({ kind: 'point', at: this.nextPoint(snap) });
+        if (snap?.deferred) this.send({ kind: 'point', at: snap.at, deferred: snap.deferred });
+        else this.send({ kind: 'point', at: this.nextPoint(snap) });
         return;
       }
       const at = snap?.at ?? cursor;
@@ -430,7 +431,9 @@ export class App {
     if (!req || req.kind === 'entity' || !this.cursorScreen) return undefined;
     const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.osnap ? this.settings.snapKinds : undefined;
     if (!kinds) return undefined;
-    return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base);
+    // Typed values pin the point, so a sliding (deferred) end can't apply.
+    const deferOk = req.kind === 'point' && req.acceptsDeferred === true && !this.boxes.hasLocks;
+    return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base, deferOk);
   }
 
   /** The status bar's snap list; stays open while kinds are switched on and off. */
@@ -453,15 +456,19 @@ export class App {
     );
   }
 
-  /** Right-click "Snap once…": the snap kinds for the next point. Perpendicular and Tangent need a base point. */
+  /**
+   * Right-click "Snap once…": the snap kinds for the next point. Perpendicular
+   * and Tangent need a base point, or a step that takes a deferred pick.
+   */
   private openSnapOnceMenu(x: number, y: number): void {
-    const base = this.runner.request?.base;
+    const req = this.runner.request;
+    const fromSomething = req?.base !== undefined || (req?.kind === 'point' && req.acceptsDeferred === true);
     this.menu.open(
       x,
       y,
       SNAP_KINDS.map((k) => ({
         label: SNAP_LABEL[k],
-        enabled: base !== undefined || !NEEDS_BASE.has(k),
+        enabled: fromSomething || !NEEDS_BASE.has(k),
         checked: this.onceSnap === k,
         run: () => {
           this.onceSnap = k;
@@ -535,8 +542,8 @@ export class App {
     let snap = this.currentSnap();
     if (req && cursor) {
       if (req.kind === 'point') {
-        next = this.nextPoint(snap);
-        preview = req.preview?.(next) ?? [];
+        next = snap?.deferred ? snap.at : this.nextPoint(snap);
+        preview = req.preview?.(next, snap?.deferred) ?? [];
         // Locked values moved the point off the snap, so the snap isn't what a click gives.
         if (snap && !vecNearlyEqual(next, snap.at)) snap = undefined;
       } else if (req.kind === 'value') {

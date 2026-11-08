@@ -1,8 +1,8 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { type Curve, intersectCurves, nearestOnCurve, perpendicularFeet, tangentPointsFrom } from './curve';
+import { type Curve, commonTangents, intersectCurves, nearestOnCurve, perpendicularFeet, resolveDeferred, resolveDeferredPair, tangentPointsFrom } from './curve';
 import { TOL } from './tolerance';
-import { distance, dot, sub } from './vec';
+import { type Vec2, distance, dot, sub } from './vec';
 
 const seg = (ax: number, ay: number, bx: number, by: number): Curve => ({ kind: 'segment', a: { x: ax, y: ay }, b: { x: bx, y: by } });
 const circle = (x: number, y: number, r: number): Curve => ({ kind: 'circle', center: { x, y }, radius: r });
@@ -150,5 +150,98 @@ describe('tangentPointsFrom', () => {
         }
       }),
     );
+  });
+});
+
+describe('commonTangents', () => {
+  const c1 = { kind: 'circle' as const, center: { x: 0, y: 0 }, radius: 1 };
+  const c2 = { kind: 'circle' as const, center: { x: 4, y: 1 }, radius: 0.5 };
+
+  /** Each end on its circle and the line square to both radii, within TOL. */
+  function expectTangent(p1: Vec2, p2: Vec2, a: { center: Vec2; radius: number }, b: { center: Vec2; radius: number }) {
+    expect(Math.abs(distance(p1, a.center) - a.radius)).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(distance(p2, b.center) - b.radius)).toBeLessThanOrEqual(TOL);
+    const d = sub(p2, p1);
+    const len = Math.hypot(d.x, d.y);
+    expect(Math.abs(dot(sub(p1, a.center), d) / len)).toBeLessThanOrEqual(TOL);
+    expect(Math.abs(dot(sub(p2, b.center), d) / len)).toBeLessThanOrEqual(TOL);
+  }
+
+  it('gives two outer and two crossing tangents for separate circles, all exact', () => {
+    const t = commonTangents(c1, c2);
+    expect(t).toHaveLength(4);
+    for (const [p1, p2] of t) expectTangent(p1, p2, c1, c2);
+    // outer: both ends on the same side of the center line; crossing: opposite sides
+    const side = (p: Vec2) => Math.sign((4 - 0) * (p.y - 0) - (1 - 0) * (p.x - 0));
+    expect(t.slice(0, 2).map(([a, b]) => side(a) === side(b))).toEqual([true, true]);
+    expect(t.slice(2).map(([a, b]) => side(a) === side(b))).toEqual([false, false]);
+  });
+
+  it('gives only the outer tangents for overlapping circles', () => {
+    const t = commonTangents(c1, { kind: 'circle', center: { x: 1.2, y: 0 }, radius: 0.5 });
+    expect(t).toHaveLength(2);
+  });
+
+  it('gives none for a circle inside another, concentric circles or straight curves', () => {
+    expect(commonTangents(c1, { kind: 'circle', center: { x: 0.2, y: 0 }, radius: 0.3 })).toEqual([]);
+    expect(commonTangents(c1, { kind: 'circle', center: { x: 0, y: 0 }, radius: 2 })).toEqual([]);
+    expect(commonTangents(c1, { kind: 'segment', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } })).toEqual([]);
+  });
+
+  it('keeps only tangents whose ends lie on the arcs', () => {
+    const top = { kind: 'arc' as const, center: { x: 0, y: 0 }, radius: 1, startDeg: 0, endDeg: 180 };
+    const top2 = { kind: 'arc' as const, center: { x: 4, y: 0 }, radius: 1, startDeg: 0, endDeg: 180 };
+    expect(commonTangents(top, top2)).toEqual([[{ x: 0, y: 1 }, { x: 4, y: 1 }]]);
+  });
+});
+
+describe('resolveDeferred', () => {
+  const circle = { kind: 'circle' as const, center: { x: 0, y: 0 }, radius: 1 };
+
+  it('a deferred tangent takes the tangent point on the side that was picked', () => {
+    const from = { x: 3, y: 0 };
+    const upper = resolveDeferred({ kind: 'tan', curve: circle, pick: { x: 0, y: 1 } }, from)!;
+    const lower = resolveDeferred({ kind: 'tan', curve: circle, pick: { x: 0, y: -1 } }, from)!;
+    expect(upper.x).toBeCloseTo(1 / 3, 15);
+    expect(upper.y).toBeCloseTo(Math.sqrt(8) / 3, 15);
+    expect(lower.y).toBeCloseTo(-Math.sqrt(8) / 3, 15);
+  });
+
+  it('a deferred perpendicular takes the foot on a line, and none past a segment end', () => {
+    const seg = { kind: 'segment' as const, a: { x: 0, y: 0 }, b: { x: 2, y: 0 } };
+    expect(resolveDeferred({ kind: 'perp', curve: seg, pick: { x: 0.3, y: 0 } }, { x: 1.5, y: 3 })).toEqual({ x: 1.5, y: 0 });
+    expect(resolveDeferred({ kind: 'perp', curve: seg, pick: { x: 0.3, y: 0 } }, { x: 2.5, y: 3 })).toBeUndefined();
+  });
+
+  it('no tangent from inside the circle', () => {
+    expect(resolveDeferred({ kind: 'tan', curve: circle, pick: { x: 1, y: 0 } }, { x: 0.5, y: 0 })).toBeUndefined();
+  });
+});
+
+describe('resolveDeferredPair', () => {
+  const c1 = { kind: 'circle' as const, center: { x: 0, y: 0 }, radius: 1 };
+  const c2 = { kind: 'circle' as const, center: { x: 4, y: 0 }, radius: 1 };
+
+  it('takes the common tangent nearest both picks', () => {
+    const outerTop = resolveDeferredPair(
+      { kind: 'tan', curve: c1, pick: { x: 0, y: 1 } },
+      { kind: 'tan', curve: c2, pick: { x: 4, y: 1 } },
+    )!;
+    expect(outerTop[0].x).toBeCloseTo(0, 15);
+    expect(outerTop[0].y).toBeCloseTo(1, 15);
+    expect(outerTop[1].x).toBeCloseTo(4, 15);
+    expect(outerTop[1].y).toBeCloseTo(1, 15);
+    const crossing = resolveDeferredPair(
+      { kind: 'tan', curve: c1, pick: { x: 0.5, y: 0.87 } },
+      { kind: 'tan', curve: c2, pick: { x: 3.5, y: -0.87 } },
+    )!;
+    expect(crossing[0].y).toBeGreaterThan(0);
+    expect(crossing[1].y).toBeLessThan(0);
+    expect(crossing[0].x).toBeCloseTo(0.5, 15); // cos θ = 2r/d = 0.5
+  });
+
+  it('only solves tangent to tangent', () => {
+    const seg = { kind: 'segment' as const, a: { x: 0, y: -3 }, b: { x: 4, y: -3 } };
+    expect(resolveDeferredPair({ kind: 'tan', curve: c1, pick: { x: 0, y: -1 } }, { kind: 'perp', curve: seg, pick: { x: 0, y: -3 } })).toBeUndefined();
   });
 });

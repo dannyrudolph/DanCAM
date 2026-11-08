@@ -62,7 +62,7 @@ export function render(
   for (const e of overlay.preview) {
     drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
-  if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind);
+  if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind, overlay.snap.deferred !== undefined);
   else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
 }
 
@@ -159,7 +159,7 @@ function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
 }
 
 /** The snap's glyph (AutoCAD's shapes) at `s`, with its name in a tooltip above right, clear of the input boxes. */
-function drawSnapMark(ctx: CanvasRenderingContext2D, s: Vec2, kind: SnapKind): void {
+function drawSnapMark(ctx: CanvasRenderingContext2D, s: Vec2, kind: SnapKind, deferred: boolean): void {
   const r = SNAP_MARK_PX;
   ctx.strokeStyle = COLORS.snap;
   ctx.lineWidth = 2;
@@ -223,7 +223,7 @@ function drawSnapMark(ctx: CanvasRenderingContext2D, s: Vec2, kind: SnapKind): v
   }
   ctx.stroke();
 
-  const label = SNAP_LABEL[kind];
+  const label = deferred ? `Deferred ${SNAP_LABEL[kind]}` : SNAP_LABEL[kind];
   ctx.font = '12px system-ui, sans-serif';
   ctx.textBaseline = 'middle';
   const w = ctx.measureText(label).width + 10;

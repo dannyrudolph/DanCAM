@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Entity } from '../model/entity';
+import { TOL } from '../geometry/tolerance';
+import type { Entity, LineEntity } from '../model/entity';
 import { lineTool } from './lineTool';
 import { pointTool } from './pointTool';
 import type { ToolDef } from './tool';
@@ -197,5 +198,68 @@ describe('ToolRunner', () => {
     const t = setup();
     t.click(0, 0);
     expect(t.drawing.entities.size).toBe(0);
+  });
+});
+
+describe('Line tool with a deferred start', () => {
+  const circle = { kind: 'circle', center: { x: 0, y: 0 }, radius: 1 } as const;
+  const tanAt = (x: number, y: number) => ({ kind: 'tan' as const, curve: circle, pick: { x, y } });
+
+  it('the start slides to stay tangent in the preview and is fixed exactly when the end is placed', () => {
+    const t = setup();
+    t.runner.start(lineTool);
+    const req = t.runner.request;
+    expect(req?.kind === 'point' && req.acceptsDeferred).toBe(true);
+    t.runner.send({ kind: 'point', at: { x: 0, y: 1 }, deferred: tanAt(0, 1) });
+    expect(t.runner.request?.base).toBeUndefined();
+
+    const shown = t.preview({ x: 3, y: 0 })[0] as LineEntity;
+    expect(shown.start.x).toBeCloseTo(1 / 3, 15);
+    expect(shown.start.y).toBeCloseTo(Math.sqrt(8) / 3, 15);
+    const moved = t.preview({ x: -3, y: 0 })[0] as LineEntity; // the start follows to the other side
+    expect(moved.start.x).toBeCloseTo(-1 / 3, 15);
+
+    t.click(3, 0);
+    const [l] = t.entities() as LineEntity[];
+    expect(l!.end).toEqual({ x: 3, y: 0 });
+    expect(Math.abs(Math.hypot(l!.start.x, l!.start.y) - 1)).toBeLessThanOrEqual(TOL);
+    const dir = { x: l!.end.x - l!.start.x, y: l!.end.y - l!.start.y };
+    expect(Math.abs(l!.start.x * dir.x + l!.start.y * dir.y)).toBeLessThanOrEqual(TOL);
+    // the chain carries on from the end
+    expect(t.runner.request?.base).toEqual({ x: 3, y: 0 });
+  });
+
+  it('a deferred perpendicular start drops square onto a line', () => {
+    const t = setup();
+    const seg = { kind: 'segment', a: { x: 0, y: 0 }, b: { x: 4, y: 0 } } as const;
+    t.runner.start(lineTool);
+    t.runner.send({ kind: 'point', at: { x: 1, y: 0 }, deferred: { kind: 'perp', curve: seg, pick: { x: 1, y: 0 } } });
+    t.click(2.5, 1.75);
+    expect(t.lines()).toEqual([[2.5, 0, 2.5, 1.75]]);
+  });
+
+  it('tangent to tangent gives the common tangent nearest the picks', () => {
+    const t = setup();
+    const other = { kind: 'circle', center: { x: 4, y: 0 }, radius: 1 } as const;
+    t.runner.start(lineTool);
+    t.runner.send({ kind: 'point', at: { x: 0, y: 1 }, deferred: tanAt(0, 1) });
+    t.runner.send({ kind: 'point', at: { x: 4, y: 1 }, deferred: { kind: 'tan', curve: other, pick: { x: 4, y: 1 } } });
+    const [l] = t.entities() as LineEntity[];
+    expect(l!.start.x).toBeCloseTo(0, 15);
+    expect(l!.start.y).toBeCloseTo(1, 15);
+    expect(l!.end.x).toBeCloseTo(4, 15);
+    expect(l!.end.y).toBeCloseTo(1, 15);
+  });
+
+  it('an end with no tangent (inside the circle) places nothing and says why', () => {
+    const t = setup();
+    t.runner.start(lineTool);
+    t.runner.send({ kind: 'point', at: { x: 0, y: 1 }, deferred: tanAt(0, 1) });
+    expect(t.preview({ x: 0.2, y: 0 })).toEqual([]);
+    t.click(0.2, 0);
+    expect(t.entities()).toEqual([]);
+    expect(t.messages.at(-1)).toBe('No tangent line from there; pick another point.');
+    t.click(3, 0); // still waiting for the end
+    expect(t.entities()).toHaveLength(1);
   });
 });

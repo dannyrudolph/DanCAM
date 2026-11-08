@@ -618,3 +618,38 @@ test('a one-time Endpoint snap from the right-click menu ignores the midpoint un
   await page.mouse.move(c.x + 5, c.y + 3);
   await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid');
 });
+
+test('a line started with a one-time Tangent on a circle ends up tangent to it', async ({ page }) => {
+  await page.keyboard.press('c'); // circle R1 at the origin
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const c = await canvasCenter(page);
+  const scale = (Math.min(box.width, box.height) * 0.9) / 2; // px per inch after Zoom Extents (5% margins)
+
+  await page.keyboard.press('l');
+  await page.mouse.click(c.x, c.y - scale, { button: 'right' });
+  await page.locator('.context-menu button', { hasText: 'Snap once…' }).click();
+  await page.locator('.context-menu button', { hasText: 'Tangent' }).click();
+  await page.mouse.move(c.x + 2, c.y - scale + 1); // on the top of the circle
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'tan');
+  await page.mouse.click(c.x + 2, c.y - scale + 1);
+  await typeValues(page, '1.2', '0.3'); // the end, as X and Y
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+
+  // The start is the upper tangent point from (1.2, 0.3); click the line's middle.
+  const e = { x: 1.2, y: 0.3 };
+  const d = Math.hypot(e.x, e.y);
+  const [ux, uy] = [e.x / d, e.y / d];
+  const [a, h] = [1 / d, Math.sqrt(1 - 1 / (d * d))];
+  const s = { x: ux * a - uy * h, y: uy * a + ux * h };
+  await page.mouse.click(c.x + ((s.x + e.x) / 2) * scale, c.y - ((s.y + e.y) / 2) * scale);
+  await page.getByTestId('precision').selectOption('8');
+  await expect(prop(page, 'End X')).toHaveText('1.20000000');
+  await expect(prop(page, 'Length')).toHaveText(Math.sqrt(d * d - 1).toFixed(8)); // tangent length √(d² − r²)
+  await expect(prop(page, 'Start X')).toHaveText(s.x.toFixed(8));
+  await expect(prop(page, 'Start Y')).toHaveText(s.y.toFixed(8));
+});

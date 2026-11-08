@@ -178,3 +178,36 @@ describe('findSnap perpendicular and tangent', () => {
     expect(findSnap(d, { x: 1, y: 0.02 }, AP, only('tan'), { x: 0.2, y: 0 })).toBeUndefined();
   });
 });
+
+describe('findSnap deferred tangent and perpendicular', () => {
+  it('with no base point and deferOk, Tangent on a circle is deferred at the point under the cursor', () => {
+    const d = drawing(circle({ x: 0, y: 0 }, 1));
+    const s = findSnap(d, { x: 0.6, y: 0.82 }, AP, only('tan'), undefined, true)!;
+    expect(s.kind).toBe('tan');
+    expect(s.deferred?.kind).toBe('tan');
+    expect(s.deferred?.curve).toEqual({ kind: 'circle', center: { x: 0, y: 0 }, radius: 1 });
+    expect(Math.abs(distance(s.at, { x: 0, y: 0 }) - 1)).toBeLessThanOrEqual(TOL);
+    expect(s.deferred?.pick).toEqual(s.at);
+  });
+
+  it('is never deferred without deferOk, or with a base point', () => {
+    const d = drawing(circle({ x: 0, y: 0 }, 1));
+    expect(findSnap(d, { x: 0.6, y: 0.82 }, AP, only('tan'))).toBeUndefined();
+    expect(findSnap(d, { x: 0.6, y: 0.82 }, AP, only('tan'), { x: 3, y: 0 }, true)?.deferred).toBeUndefined();
+  });
+
+  it('Perpendicular defers on a line; Tangent does not', () => {
+    const d = drawing(line({ x: 0, y: 0 }, { x: 4, y: 0 }));
+    expect(findSnap(d, { x: 3, y: 0.02 }, AP, only('perp'), undefined, true)).toEqual({
+      kind: 'perp',
+      at: { x: 3, y: 0 },
+      deferred: { kind: 'perp', curve: { kind: 'segment', a: { x: 0, y: 0 }, b: { x: 4, y: 0 } }, pick: { x: 3, y: 0 } },
+    });
+    expect(findSnap(d, { x: 3, y: 0.02 }, AP, only('tan'), undefined, true)).toBeUndefined();
+  });
+
+  it('a nearby point snap still wins over a deferred one', () => {
+    const d = drawing(circle({ x: 0, y: 0 }, 1));
+    expect(findSnap(d, { x: 1.01, y: 0.03 }, AP, only('quad', 'tan'), undefined, true)).toEqual({ kind: 'quad', at: { x: 1, y: 0 } });
+  });
+});

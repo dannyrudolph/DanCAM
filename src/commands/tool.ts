@@ -1,3 +1,4 @@
+import type { Deferred } from '../geometry/curve';
 import type { Vec2 } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
@@ -18,8 +19,14 @@ export type PointRequest = {
   readonly prompt: string;
   /** The previous point: enables length/angle and dX/dY entry and the rubber band. */
   readonly base?: Vec2;
-  /** Entities to draw as a preview for a candidate point. */
-  readonly preview?: (p: Vec2) => readonly Entity[];
+  /** Entities to draw as a preview for a candidate point, or a deferred one. */
+  readonly preview?: (p: Vec2, deferred?: Deferred) => readonly Entity[];
+  /**
+   * True when, with no base point yet, the step takes a deferred Tangent or
+   * Perpendicular pick (a line end that slides along a curve until the other
+   * end is known).
+   */
+  readonly acceptsDeferred?: boolean;
   readonly options?: readonly ToolOption[];
   /** True when Enter with nothing locked finishes the tool, as in a line chain. */
   readonly canFinish?: boolean;
@@ -62,7 +69,8 @@ export type EntityRequest = {
 export type Request = PointRequest | ValueRequest | EntityRequest;
 
 export type ToolInput =
-  | { readonly kind: 'point'; readonly at: Vec2 }
+  /** `deferred` is set only for a step that `acceptsDeferred`; `at` is then where the curve was clicked. */
+  | { readonly kind: 'point'; readonly at: Vec2; readonly deferred?: Deferred }
   /** `at` is the cursor when the value was given. */
   | { readonly kind: 'value'; readonly value: number; readonly at: Vec2 }
   /** `at` is where the entity was clicked. */

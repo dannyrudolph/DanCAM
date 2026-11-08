@@ -62,6 +62,13 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    a tooltip label; OSNAP button + F3 (on by default: End, Mid, Cen, Quad,
    Int, Node), a menu of kinds; right-click "Snap once..." for the next point
    (no snap found: nothing placed; Esc drops it). Settings not persisted.
+   **Deferred Tan/Perp for a line's first point** (brought forward from the
+   deferred list at the user's request, 2026-11-08): with no base point, the
+   Line tool's first point can be a deferred Tangent (circle/arc) or
+   Perpendicular (any curve); the start slides as the end moves and is fixed
+   on placement. Tangent to tangent uses `geometry/curve.commonTangents`;
+   other pairings ask for a point. Deferred snaps rank like Center. Line tool
+   only; Circle/Arc/Xline/Ray don't take deferred picks.
 3. **Selection.** Multi-select; Shift-click removes; left-to-right window
    (inside), right-to-left crossing (touching); Esc clears; not undoable.
 4. **Grips and properties editing.** Arc end grips slide along the circle
@@ -76,8 +83,8 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 
 Decisions (user, 2026-11-08): shortcuts as above plus F3 for snaps (Stretch
 needs a key other than S); arc grips as in step 4; sidebar results panel;
-deferred: extension/tracking snaps, Perp/Tan for a first point, multi-object
-grip edits.
+deferred: extension/tracking snaps, multi-object grip edits (Perp/Tan for a
+line's first point was brought forward into step 2).
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current

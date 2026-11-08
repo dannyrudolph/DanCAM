@@ -147,3 +147,76 @@ export function tangentPointsFrom(c: Curve, from: Vec2): Vec2[] {
   ];
   return pts.filter((q) => withinExtent(c, q));
 }
+
+/**
+ * Lines touching both circles or arcs, as [point on c1, point on c2]: the two
+ * outer tangents, then the two crossing ones, each kept only when both
+ * points fall within the arcs' extents. None for straight curves, concentric
+ * circles, or a circle inside the other.
+ */
+export function commonTangents(c1: Curve, c2: Curve): [Vec2, Vec2][] {
+  if (isStraight(c1) || isStraight(c2)) return [];
+  const dx = c2.center.x - c1.center.x;
+  const dy = c2.center.y - c1.center.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= TOL) return [];
+  const vx = dx / d;
+  const vy = dy / d;
+  const out: [Vec2, Vec2][] = [];
+  for (const side of [1, -1]) {
+    // The unit normal n of a tangent line satisfies n·v = (r1 − side·r2) / d.
+    const c = (c1.radius - side * c2.radius) / d;
+    if (c * c > 1 + TOL) continue;
+    const h = Math.sqrt(Math.max(0, 1 - c * c));
+    for (const turn of [1, -1]) {
+      const nx = vx * c - turn * h * vy;
+      const ny = vy * c + turn * h * vx;
+      const p1 = { x: c1.center.x + c1.radius * nx, y: c1.center.y + c1.radius * ny };
+      const p2 = { x: c2.center.x + side * c2.radius * nx, y: c2.center.y + side * c2.radius * ny };
+      if (distance(p1, p2) > TOL && withinExtent(c1, p1) && withinExtent(c2, p2)) out.push([p1, p2]);
+    }
+  }
+  return out;
+}
+
+/**
+ * A line end picked as "tangent to" or "perpendicular to" a curve before the
+ * other end is known (AutoCAD's deferred snap). `pick` is where it was
+ * clicked; of the possible points, the one nearest it is used.
+ */
+export type Deferred = { readonly kind: 'tan' | 'perp'; readonly curve: Curve; readonly pick: Vec2 };
+
+function nearestTo(pts: readonly Vec2[], target: Vec2): Vec2 | undefined {
+  let best: Vec2 | undefined;
+  for (const p of pts) if (!best || distance(p, target) < distance(best, target)) best = p;
+  return best;
+}
+
+/**
+ * Where a line from `other` meets a deferred end: the tangent point or
+ * perpendicular foot nearest the pick. Undefined when there is none (a point
+ * inside the circle, a foot past a segment's end).
+ */
+export function resolveDeferred(d: Deferred, other: Vec2): Vec2 | undefined {
+  const pts = d.kind === 'tan' ? tangentPointsFrom(d.curve, other) : perpendicularFeet(d.curve, other);
+  return nearestTo(pts, d.pick);
+}
+
+/**
+ * Both ends deferred: a line tangent to both curves, the common tangent whose
+ * ends lie nearest the two picks. Only tangent–tangent is solved; other
+ * pairings give undefined.
+ */
+export function resolveDeferredPair(a: Deferred, b: Deferred): [Vec2, Vec2] | undefined {
+  if (a.kind !== 'tan' || b.kind !== 'tan') return undefined;
+  let best: [Vec2, Vec2] | undefined;
+  let bestCost = Infinity;
+  for (const pair of commonTangents(a.curve, b.curve)) {
+    const cost = distance(pair[0], a.pick) + distance(pair[1], b.pick);
+    if (cost < bestCost) {
+      best = pair;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
