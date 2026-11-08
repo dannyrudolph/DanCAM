@@ -142,4 +142,23 @@ export function entityCurve(e: Entity): Curve | undefined {
   }
 }
 
+/**
+ * `e` reshaped to the curve `c`, keeping its id, layer and style. The kind
+ * follows the curve: a trimmed xline becomes a ray, a trimmed circle an arc.
+ */
+export function entityFromCurve(e: Pick<Entity, 'id' | 'layer' | 'style'>, c: Curve): Entity {
+  const base = { id: e.id, layer: e.layer, ...(e.style ? { style: e.style } : {}) };
+  switch (c.kind) {
+    case 'segment':
+      return { ...base, kind: 'line', start: c.a, end: c.b };
+    case 'ray':
+    case 'xline':
+      return { ...base, kind: c.kind, base: c.base, dir: c.dir };
+    case 'circle':
+      return { ...base, kind: 'circle', center: c.center, radius: c.radius };
+    case 'arc':
+      return { ...base, kind: 'arc', center: c.center, radius: c.radius, startDeg: c.startDeg, endDeg: c.endDeg };
+  }
+}
+
 /** `score` ranks it; `dist` (true distance to the cursor) breaks ties. */

@@ -995,3 +995,44 @@ test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
     expectAt(await idAt(page, at(1.5, 1), 'end'), 1.5, 1);
   });
 });
+
+test.describe('trim and extend', () => {
+  test('Enter takes every object as an edge; a click trims and a Shift-click extends', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '0.5', '0');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('l');
+    await typeValues(page, '1', '-1');
+    await typeValues(page, '2', '90');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const scale = Math.min(box.width * 0.9, (box.height * 0.9) / 2); // extents 1 × 2
+    const c = await canvasCenter(page);
+    const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
+
+    await page.keyboard.press('t');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Trim: select cutting edges, then Enter (Enter alone: all objects)');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText(/^Trim: pick the part to remove/);
+    const short = at(0.4, 0);
+    await page.keyboard.down('Shift');
+    await page.mouse.click(short.x, short.y);
+    await page.keyboard.up('Shift');
+    const upper = at(1, 0.5);
+    await page.mouse.click(upper.x, upper.y);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('tool-select')).toHaveClass(/active/);
+
+    await page.getByTestId('precision').selectOption('8');
+    await page.mouse.click(short.x, short.y);
+    await expect(prop(page, 'End X')).toHaveText('1.00000000');
+    await page.keyboard.press('Escape');
+    const lower = at(1, -0.5);
+    await page.mouse.click(lower.x, lower.y);
+    await expect(prop(page, 'Start Y')).toHaveText('-1.00000000');
+    await expect(prop(page, 'End Y')).toHaveText('0.00000000');
+  });
+});

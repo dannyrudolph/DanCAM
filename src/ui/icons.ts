@@ -16,6 +16,8 @@ export const ICONS = {
   rotate: svg('<path d="M16 10 A6 6 0 1 1 13 4.8"/><path d="M13 1.5 V5 H16.5"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/>'),
   mirror: svg('<path d="M10 2 V18" stroke-dasharray="2 1.5"/><path d="M3 15 L8 15 L8 6 Z"/><path d="M17 15 L12 15 L12 6 Z"/>'),
   scale: svg('<rect x="2" y="10" width="6" height="6"/><rect x="2" y="3" width="13" height="13" stroke-dasharray="2 1.5"/><path d="M8 10 L17 1 M17 1 H13.5 M17 1 V4.5"/>'),
+  trim: svg('<path d="M3 10 H11" /><path d="M11 10 H17" stroke-dasharray="1.5 2"/><path d="M11 3 V17"/><path d="M14 4 L17 7 M17 4 L14 7"/>'),
+  extend: svg('<path d="M3 10 H9"/><path d="M9 10 H15" stroke-dasharray="1.5 2"/><path d="M16 3 V17"/><path d="M12 7.5 L15 10 L12 12.5"/>'),
   dist: svg('<path d="M3 10 H17 M3 6 V14 M17 6 V14 M6 8 L3 10 L6 12 M14 8 L17 10 L14 12"/>'),
   id: svg('<path d="M10 2 V7 M10 13 V18 M2 10 H7 M13 10 H18"/><circle cx="10" cy="10" r="3"/>'),
   list: svg('<path d="M7 5 H17 M7 10 H17 M7 15 H17"/><circle cx="3.5" cy="5" r="1" fill="currentColor"/><circle cx="3.5" cy="10" r="1" fill="currentColor"/><circle cx="3.5" cy="15" r="1" fill="currentColor"/>'),

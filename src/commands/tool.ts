@@ -61,6 +61,12 @@ export type EntityRequest = {
   readonly prompt: string;
   /** Which entities can be picked; others are passed over. */
   readonly accepts: (e: Entity) => boolean;
+  /**
+   * What picking `id` at `at` would do, drawn while hovering; `shift` is
+   * whether Shift is held (Trim and Extend swap modes with it). Absent: the
+   * entity under the cursor is highlighted.
+   */
+  readonly preview?: (id: EntityId, at: Vec2, shift: boolean) => readonly Entity[];
   /** No base point; declared so `request.base` reads on any request. */
   readonly base?: never;
   readonly options?: readonly ToolOption[];
@@ -76,6 +82,7 @@ export type SelectionRequest = {
   readonly prompt: string;
   readonly base?: never;
   readonly options?: readonly ToolOption[];
+  /** True when Enter with nothing selected answers `finish` (Trim's "Enter = all edges"). */
   readonly canFinish?: boolean;
 };
 
@@ -86,8 +93,8 @@ export type ToolInput =
   | { readonly kind: 'point'; readonly at: Vec2; readonly deferred?: Deferred }
   /** `at` is the cursor when the value was given. */
   | { readonly kind: 'value'; readonly value: number; readonly at: Vec2 }
-  /** `at` is where the entity was clicked. */
-  | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2 }
+  /** `at` is where the entity was clicked; `shift` is true for a Shift-click. */
+  | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2; readonly shift?: boolean }
   | { readonly kind: 'selection'; readonly ids: readonly EntityId[] }
   | { readonly kind: 'option'; readonly key: string }
   | { readonly kind: 'finish' };

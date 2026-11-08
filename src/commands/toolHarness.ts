@@ -30,7 +30,8 @@ export function setup(style?: 'hidden') {
   const runner = new ToolRunner(ctx);
   const click = (x: number, y: number): void => runner.send({ kind: 'point', at: { x, y } });
   const value = (v: number, at: Vec2 = { x: 0, y: 0 }): void => runner.send({ kind: 'value', value: v, at });
-  const pick = (id: EntityId, x: number, y: number): void => runner.send({ kind: 'entity', id, at: { x, y } });
+  const pick = (id: EntityId, x: number, y: number, shift = false): void => runner.send({ kind: 'entity', id, at: { x, y }, shift });
+  const finish = (): void => runner.send({ kind: 'finish' });
   const option = (key: string): void => runner.send({ kind: 'option', key });
   const add = (e: Entity): void => void drawing.entities.set(e.id, e);
   const entities = (): Entity[] => [...drawing.entities.values()];
@@ -39,13 +40,24 @@ export function setup(style?: 'hidden') {
     entities()
       .filter((e): e is LineEntity => e.kind === 'line')
       .map((l) => [l.start.x, l.start.y, l.end.x, l.end.y]);
-  /** The waiting step's preview for a cursor point (point steps) or value (value steps). */
+  let previewTarget: EntityId | undefined;
+  let previewShift = false;
+  /** Sets the entity an `entity` step's preview hovers over (the harness has no picking). */
+  const hover = (id: EntityId, shift = false): void => {
+    previewTarget = id;
+    previewShift = shift;
+  };
+  /** The waiting step's preview for a cursor point (point steps), value (value steps) or hovered entity. */
   const preview = (p: Vec2, v?: number): readonly Entity[] => {
     const req = runner.request;
     if (req?.kind === 'point') return req.preview?.(p) ?? [];
     if (req?.kind === 'value') return req.preview?.(v ?? req.fromCursor?.(p) ?? 0, p) ?? [];
+    if (req?.kind === 'entity') {
+      const hit = entities().find((e) => req.accepts(e) && e.id === previewTarget);
+      return hit ? (req.preview?.(hit.id, p, previewShift) ?? []) : [];
+    }
     return [];
   };
   const selectionDone = (...ids: string[]): void => runner.send({ kind: 'selection', ids });
-  return { drawing, undo, messages, reports, ctx, runner, click, value, pick, option, add, entities, last, lines, preview, select, selectionDone };
+  return { drawing, undo, messages, reports, ctx, runner, click, value, pick, finish, option, add, entities, last, lines, preview, hover, select, selectionDone };
 }

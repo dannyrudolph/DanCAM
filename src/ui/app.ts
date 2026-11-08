@@ -8,6 +8,7 @@ import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
 import { rayTool } from '../commands/rayTool';
+import { extendTool, trimTool } from '../commands/trimTools';
 import { createXlineTool } from '../commands/xlineTool';
 import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
@@ -53,8 +54,9 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
 
 export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
+export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
-export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...INQUIRY_TOOLS];
+export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...INQUIRY_TOOLS];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -178,6 +180,8 @@ export class App {
   private frameRequested = false;
   /** Space held: left-drag pans. */
   private spaceHeld = false;
+  /** Shift held: Trim and Extend preview the other mode. */
+  private shiftHeld = false;
   /** Pan button on: left-drag pans until it is turned off or Esc. */
   private panMode = false;
   private panButton: HTMLButtonElement | undefined;
@@ -351,14 +355,16 @@ export class App {
   }
 
   private enter(action: EnterAction): void {
-    if (this.runner.request?.kind === 'selection') this.submitSelection();
+    const req = this.runner.request;
+    if (req?.kind === 'selection' && this.selected.size === 0 && req.canFinish) this.send({ kind: 'finish' });
+    else if (req?.kind === 'selection') this.submitSelection();
     else if (action === 'place') this.place();
     else if (action === 'finish') this.send({ kind: 'finish' });
     else this.requestRedraw();
   }
 
   /** A click, or Enter with values locked: answers the waiting step from the cursor and the boxes. */
-  private place(): void {
+  private place(shift = false): void {
     const req = this.runner.request;
     if (!req) return;
     const cursor = this.cursorWorld();
@@ -384,7 +390,7 @@ export class App {
       this.send({ kind: 'value', value, at });
     } else if (req.kind === 'entity') {
       const id = this.pickAt(cursor, req.accepts);
-      if (id) this.send({ kind: 'entity', id, at: cursor });
+      if (id) this.send({ kind: 'entity', id, at: cursor, shift });
       else this.status.showMessage('Nothing there that this step can use.');
     }
   }
@@ -641,7 +647,7 @@ export class App {
         // Highlight what a click would pick.
         const hit = this.pickAt(cursor, req.accepts);
         const e = hit && this.drawing.entities.get(hit);
-        if (e) preview = [e];
+        if (e) preview = req.preview ? req.preview(e.id, cursor, this.shiftHeld) : [e];
       }
     }
     render(this.g, this.view, this.drawing, {
@@ -691,6 +697,10 @@ export class App {
     gap.className = 'toolbar-separator';
     bar.append(gap);
     addTools(EDIT_TOOLS);
+    const gapModify = document.createElement('span');
+    gapModify.className = 'toolbar-separator';
+    bar.append(gapModify);
+    addTools(MODIFY_TOOLS);
     const gap2 = document.createElement('span');
     gap2.className = 'toolbar-separator';
     bar.append(gap2);
@@ -814,7 +824,7 @@ export class App {
       click: (screen, shift) => {
         this.cursorScreen = screen;
         if (this.runner.request && this.runner.request.kind !== 'selection') {
-          this.place();
+          this.place(shift);
         } else {
           this.clickSelect(this.pickAt(this.cursorWorld()), shift);
         }
@@ -862,6 +872,13 @@ export class App {
     window.addEventListener('beforeunload', (e) => {
       if (this.undo.dirty) e.preventDefault(); // the browser asks before leaving
     });
+    const trackShift = (e: KeyboardEvent): void => {
+      if (e.shiftKey === this.shiftHeld) return;
+      this.shiftHeld = e.shiftKey;
+      if (this.runner.request?.kind === 'entity') this.requestRedraw();
+    };
+    window.addEventListener('keydown', trackShift);
+    window.addEventListener('keyup', trackShift);
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') {
         this.spaceHeld = false;
@@ -870,6 +887,7 @@ export class App {
     });
     window.addEventListener('blur', () => {
       this.spaceHeld = false;
+      this.shiftHeld = false;
       this.updateCanvasCursor(false);
     });
   }

@@ -118,8 +118,16 @@ points along an edge, then its new angle).
    line) and `geometry/extend.extendCurve` (segment end nearer the pick, ray
    base, arc end along its circle; an end already on a boundary goes on to
    the next). Unit and property tests.
-2. Trim (T) and Extend (Shift+T) tools: edges or Enter = all, repeated
-   picks, Shift-pick swaps mode, preview; `shift` flag on entity input.
+2. **Trim (T) and Extend (Shift+T) tools (done).** `commands/trimTools`:
+   edges from the selection, a selection step, or Enter alone = every
+   visible object (re-read at each pick; never the picked object itself);
+   then picks until Enter, each its own undo step; Shift-pick does the other
+   mode. A split keeps the id on the first piece, the other gets a new id,
+   same layer and style (`model/entity.entityFromCurve`). Hover previews the
+   removed piece or the extended object (Shift held previews the other mode;
+   previews allocate no ids). `EntityRequest.preview`, entity input `shift`,
+   `SelectionRequest.canFinish` (Enter with nothing selected = finish).
+   Toolbar: fourth group (Modify).
 3. Fillet (F) and Chamfer (Shift+F).
 4. Offset (O), Break (B), Join (J), Lengthen (Shift+L).
 5. Array (Shift+A) and Stretch (Shift+S).
