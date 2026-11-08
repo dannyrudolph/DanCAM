@@ -4,7 +4,9 @@ import { createChamferTool, createFilletTool } from '../commands/cornerTools';
 import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from '../commands/editTools';
 import { gripTool } from '../commands/gripTool';
 import { angleTool, distTool, idTool, listTool } from '../commands/inquiryTools';
+import { createBreakTool, createLengthenTool, joinTool } from '../commands/lengthTools';
 import { lineTool } from '../commands/lineTool';
+import { createOffsetTool } from '../commands/offsetTool';
 import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
@@ -55,7 +57,7 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
 
 export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
-export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool()];
+export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool(), createOffsetTool(), createBreakTool(), joinTool, createLengthenTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...INQUIRY_TOOLS];
 

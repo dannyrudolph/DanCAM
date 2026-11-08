@@ -7,14 +7,14 @@ import type { Change } from '../model/undo';
 import type { PointRequest, Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption, ValueRequest } from './tool';
 
 /** A step generator's result: the payload, or undefined when the run should end. */
-type Step<T> = Generator<Request, T | undefined, ToolInput>;
+export type Step<T> = Generator<Request, T | undefined, ToolInput>;
 
 /**
  * The objects to edit: the selection when there is one (selection first), or
  * else a `selection` step until some are picked. Undefined if the user
  * finishes without picking any.
  */
-function* objects(ctx: ToolContext, verb: string): Step<Entity[]> {
+export function* objects(ctx: ToolContext, verb: string): Step<Entity[]> {
   let ids = ctx.selection();
   for (;;) {
     const found = ids.map((id) => ctx.drawing.entities.get(id)).filter((e): e is Entity => e !== undefined);

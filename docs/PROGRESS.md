@@ -140,7 +140,20 @@ points along an edge, then its new angle).
    Angle, Trim / No trim, all remembered for the session. Defaults R 0,
    chamfer 0 × 0 (AutoCAD's). The joint takes the objects' layer and style
    when they share them, else the current ones.
-4. Offset (O), Break (B), Join (J), Lengthen (Shift+L).
+4. **Offset (O), Break (B), Join (J), Lengthen (Shift+L) (done).**
+   Geometry: `offset` (sideways / concentric, exact for H/V lines;
+   `offsetThrough`), `breakCurve` (`breakAt`, `breakBetween` via
+   `trimCurve`; circle CCW from the first point), `join` (collinear
+   segments across gaps; arcs on one circle CCW from the first, a circle
+   when closed), `lengthen` (delta / total / percent at the end nearer the
+   pick). Tools: `commands/offsetTool` (Distance… or Through point,
+   object after object until Enter, each its own step; remembered),
+   `commands/lengthTools` (Break: Two points / At point, sticky; Join:
+   selection first, merges every joinable pair, the smaller gap for arcs,
+   one step; Lengthen: Delta / Total / Percent, value asked on change and
+   remembered, picks until Enter). `editTools.objects` is now exported.
+   Also: `intersect.lineLine` takes x from a vertical line and y from a
+   horizontal one exactly (separate commit).
 5. Array (Shift+A) and Stretch (Shift+S).
 6. Done-when e2e: turned profile from xlines by trimming, R.020 fillet,
    .010 x 45° chamfer, checked with ID/List to 1e-12.
