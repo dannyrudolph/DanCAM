@@ -34,7 +34,7 @@ export function loadDemo(d: Drawing): void {
   // Hidden bore, 0.0625" radius, 0.75" deep from the right face.
   addLine({ x: 1.25, y: 0.0625 }, { x: 2, y: 0.0625 }, '0', 'hidden');
   addLine({ x: 1.25, y: 0 }, { x: 1.25, y: 0.0625 }, '0', 'hidden');
-  // Tangent edge where a blend would meet the face.
+  // Tangent edge where a blend would meet the face: it stops short of the centerline and the top edge.
   addLine({ x: 0.25, y: 0 }, { x: 0.25, y: 0.125 }, '0', 'tangent');
 
   addLine({ x: -0.1, y: 0 }, { x: 2.1, y: 0 }, 'CENTER');

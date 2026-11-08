@@ -27,37 +27,42 @@ export type CanvasHandlers = {
   click(screen: Vec2): void;
   /** Right click, in page coordinates for placing a menu. */
   contextMenu(pageX: number, pageY: number): void;
+  /** True when a left drag should pan (Space held, or the Pan button is on). */
+  leftDragPans(): boolean;
+  /** Called when panning starts or stops, to show a grab cursor. */
+  panningChanged(panning: boolean): void;
 };
 
 /** A left press that moves less than this many pixels counts as a click. */
 const CLICK_SLOP_PX = 4;
 
 /**
- * Wheel zoom at the cursor, middle-drag pan, double-middle-click Zoom Extents,
- * left click and right-click menu.
+ * Wheel zoom at the cursor; pan by middle-drag, or left-drag while Space is
+ * held or the Pan button is on; double-middle-click Zoom Extents; left click;
+ * right-click menu.
  */
 export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): void {
-  let panning: Vec2 | undefined;
+  /** Last pointer position of an active pan, and which button started it. */
+  let pan: { at: Vec2; button: number } | undefined;
   let lastMiddleDown = 0;
   let leftDown: Vec2 | undefined;
-
-  canvas.addEventListener('pointerdown', (e) => {
-    if (e.button === 0) leftDown = { x: e.clientX, y: e.clientY };
-  });
-  canvas.addEventListener('pointerup', (e) => {
-    if (e.button !== 0 || !leftDown) return;
-    const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
-    leftDown = undefined;
-    if (moved <= CLICK_SLOP_PX) h.click(local(e));
-  });
-  canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    h.contextMenu(e.pageX, e.pageY);
-  });
 
   const local = (e: MouseEvent): Vec2 => {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const startPan = (e: PointerEvent): void => {
+    pan = { at: { x: e.clientX, y: e.clientY }, button: e.button };
+    canvas.setPointerCapture(e.pointerId);
+    h.panningChanged(true);
+  };
+
+  const endPan = (e: PointerEvent): void => {
+    if (!pan || (e.type === 'pointerup' && e.button !== pan.button)) return;
+    pan = undefined;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    h.panningChanged(false);
   };
 
   canvas.addEventListener(
@@ -70,6 +75,14 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
   );
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (e.button === 0) {
+      if (h.leftDragPans()) {
+        startPan(e);
+        return;
+      }
+      leftDown = { x: e.clientX, y: e.clientY };
+      return;
+    }
     if (e.button !== 1) return;
     e.preventDefault(); // stop the browser's middle-click autoscroll
     const now = performance.now();
@@ -79,26 +92,33 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
       return;
     }
     lastMiddleDown = now;
-    panning = { x: e.clientX, y: e.clientY };
-    canvas.setPointerCapture(e.pointerId);
+    startPan(e);
   });
 
   canvas.addEventListener('pointermove', (e) => {
     h.cursor(local(e));
-    if (!panning) return;
-    h.pan(e.clientX - panning.x, e.clientY - panning.y);
-    panning = { x: e.clientX, y: e.clientY };
+    if (!pan) return;
+    h.pan(e.clientX - pan.at.x, e.clientY - pan.at.y);
+    pan.at = { x: e.clientX, y: e.clientY };
   });
 
-  const endPan = (e: PointerEvent): void => {
-    if (e.button !== 1 && e.type === 'pointerup') return;
-    panning = undefined;
-    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-  };
-  canvas.addEventListener('pointerup', endPan);
+  canvas.addEventListener('pointerup', (e) => {
+    if (pan) {
+      endPan(e);
+      return;
+    }
+    if (e.button !== 0 || !leftDown) return;
+    const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
+    leftDown = undefined;
+    if (moved <= CLICK_SLOP_PX) h.click(local(e));
+  });
   canvas.addEventListener('pointercancel', endPan);
   canvas.addEventListener('pointerleave', () => {
-    if (!panning) h.cursor(undefined);
+    if (!pan) h.cursor(undefined);
+  });
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    h.contextMenu(e.pageX, e.pageY);
   });
   canvas.addEventListener('auxclick', (e) => e.preventDefault());
 }

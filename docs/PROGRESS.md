@@ -11,8 +11,10 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
   (fractions, arithmetic, in/mm suffixes), Ortho (F8) and polar tracking (F10),
   Line and Point tools, single-key shortcuts (L, P), click-to-pick with a
   read-only properties panel, display precision 0–8, right-click menu.
-  Line styles: Visible, Hidden, Center, Tangent (phantom), set per layer with
-  a per-entity override; a "Style" selector applies to new objects.
+  Line styles: Visible (heavy), Hidden (dashed), Center (long-short), Tangent
+  (light, continuous, with a 4px gap at each end, display only), set per
+  layer with a per-entity override; a "Style" selector applies to new objects.
+  Panning: middle-drag, Space + left-drag, or the Pan button (H).
   Playwright browser tests, also run in CI.
 
 ## In flight
@@ -30,6 +32,6 @@ space for deep zoom.
 
 ## Open questions
 
-- Tangent style uses the phantom pattern (long-short-short). Confirm with the
-  user that this matches their drafting standard.
+- Trackpad: two-finger scroll currently zooms (like a mouse wheel). Ask
+  whether it should pan instead, with pinch to zoom.
 - Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 6.

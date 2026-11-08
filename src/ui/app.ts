@@ -65,6 +65,11 @@ export class App {
   private selected: EntityId | undefined;
   private currentStyle: LineStyleName | undefined;
   private frameRequested = false;
+  /** Space held: left-drag pans. */
+  private spaceHeld = false;
+  /** Pan button on: left-drag pans until it is turned off or Esc. */
+  private panMode = false;
+  private panButton: HTMLButtonElement | undefined;
 
   constructor(private readonly drawing: Drawing) {
     const g = this.canvas.getContext('2d');
@@ -112,9 +117,13 @@ export class App {
     this.refresh();
   }
 
-  /** Esc: close the menu, else clear locked values, else leave the tool, else clear the selection. */
+  /**
+   * Esc: close the menu, else leave Pan, else clear locked values, else leave
+   * the tool, else clear the selection.
+   */
   private escape(): void {
     if (this.menu.isOpen) this.menu.close();
+    else if (this.panMode) this.setPanMode(false);
     else if (this.boxes.hasLocks || this.boxes.focused) this.boxes.clearLocks();
     else if (this.runner.tool) this.runner.stop();
     else this.selected = undefined;
@@ -144,6 +153,18 @@ export class App {
     const label = this.undo.redoLabel;
     this.status.showMessage(this.undo.redo() ? `Redo: ${label}` : 'Nothing to redo');
     this.refresh();
+  }
+
+  private setPanMode(on: boolean): void {
+    this.panMode = on;
+    this.panButton?.classList.toggle('active', on);
+    this.updateCanvasCursor(false);
+  }
+
+  private updateCanvasCursor(dragging: boolean): void {
+    const pans = this.panMode || this.spaceHeld;
+    this.canvas.classList.toggle('pan-ready', pans && !dragging);
+    this.canvas.classList.toggle('panning', dragging);
   }
 
   private zoomExtents(): void {
@@ -273,9 +294,16 @@ export class App {
       this.currentStyle = style.value === '' ? undefined : (style.value as LineStyleName);
       style.blur();
     });
+    this.panButton = button(
+      ICONS.pan,
+      'Pan (H): drag with the left button. You can also hold Space and drag, or drag with the middle button',
+      () => this.setPanMode(!this.panMode),
+      'pan',
+    );
     bar.append(
       button(ICONS.undo, 'Undo (Ctrl+Z)', () => this.doUndo(), 'undo'),
       button(ICONS.redo, 'Redo (Ctrl+Y)', () => this.doRedo(), 'redo'),
+      this.panButton,
       button(ICONS.extents, 'Zoom Extents (double-click middle button)', () => this.zoomExtents(), 'zoom-extents'),
       style,
     );
@@ -322,9 +350,21 @@ export class App {
         }
       },
       contextMenu: (x, y) => this.menu.open(x, y, this.contextItems()),
+      leftDragPans: () => this.panMode || this.spaceHeld,
+      panningChanged: (panning) => this.updateCanvasCursor(panning),
     });
 
     window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ') {
+        this.spaceHeld = false;
+        this.updateCanvasCursor(false);
+      }
+    });
+    window.addEventListener('blur', () => {
+      this.spaceHeld = false;
+      this.updateCanvasCursor(false);
+    });
   }
 
   private onKey(e: KeyboardEvent): void {
@@ -345,7 +385,13 @@ export class App {
     }
     if (inField) return; // the input boxes handle their own Tab, Enter and Esc
 
-    if (e.key === 'F8' || e.key === 'F10') {
+    if (e.key === ' ') {
+      e.preventDefault(); // no page scroll
+      if (!this.spaceHeld) {
+        this.spaceHeld = true;
+        this.updateCanvasCursor(false);
+      }
+    } else if (e.key === 'F8' || e.key === 'F10') {
       e.preventDefault();
       if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
       else this.settings.polar = !this.settings.polar;
@@ -362,6 +408,9 @@ export class App {
     } else if (!mod && !e.altKey && this.runner.request && VALUE_START.test(e.key)) {
       e.preventDefault();
       this.boxes.startTyping(e.key);
+    } else if (!mod && !e.altKey && key === 'h') {
+      e.preventDefault();
+      this.setPanMode(!this.panMode);
     } else if (!mod && !e.altKey) {
       const def = TOOLS.find((t) => t.shortcut === key);
       if (def) {

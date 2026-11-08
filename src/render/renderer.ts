@@ -4,7 +4,7 @@ import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
-import { type LineStyle, dashOffset } from '../model/lineStyle';
+import { type LineStyle, dashOffset, insetSegment } from '../model/lineStyle';
 import { gridLines, gridSpacing } from './grid';
 import { type Viewport, visibleBBox, worldToScreen } from './viewport';
 
@@ -129,8 +129,9 @@ function drawEntity(
   switch (e.kind) {
     case 'line': {
       // Clip in float64 screen space so the canvas never sees huge coordinates at deep zoom.
-      const a = worldToScreen(v, e.start);
-      const seg = clipSegment(a, worldToScreen(v, e.end), screenClipBox(v));
+      // Tangent edges stop short of their ends; done in screen pixels so the gap is the same at every zoom.
+      const [a, b] = insetSegment(worldToScreen(v, e.start), worldToScreen(v, e.end), style.endGap);
+      const seg = clipSegment(a, b, screenClipBox(v));
       if (!seg) return;
       ctx.setLineDash(style.dash);
       ctx.lineDashOffset = dashOffset(style.dash, distance(a, seg[0]));

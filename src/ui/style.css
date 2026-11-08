@@ -18,6 +18,11 @@
   box-sizing: border-box;
 }
 
+/* Elements styled with display:flex would otherwise ignore the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -135,6 +140,14 @@ input {
   height: 100%;
   cursor: crosshair;
   touch-action: none;
+}
+
+#canvas.pan-ready {
+  cursor: grab;
+}
+
+#canvas.panning {
+  cursor: grabbing;
 }
 
 #properties {

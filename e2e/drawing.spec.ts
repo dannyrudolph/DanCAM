@@ -161,3 +161,71 @@ test('a focused box that has not been typed in keeps following the cursor', asyn
   await page.mouse.move(c.x - 100, c.y - 1); // just above 180°, caught by polar tracking
   await expect(angle).toHaveValue('180.0000');
 });
+
+test.describe('right-click menu', () => {
+  test('closes after choosing an item', async ({ page }) => {
+    const c = await canvasCenter(page);
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    const menu = page.locator('.context-menu');
+    await expect(menu).toBeVisible();
+    await menu.getByRole('button', { name: 'Zoom Extents' }).click();
+    await expect(menu).toBeHidden();
+  });
+
+  test('closes when clicking elsewhere, without placing a point', async ({ page }) => {
+    const c = await canvasCenter(page);
+    await page.keyboard.press('l');
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    await expect(page.locator('.context-menu')).toBeVisible();
+    await page.locator('#properties').click();
+    await expect(page.locator('.context-menu')).toBeHidden();
+  });
+
+  test('Cancel leaves the tool and closes the menu', async ({ page }) => {
+    const c = await canvasCenter(page);
+    await page.keyboard.press('l');
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    await page.locator('.context-menu').getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('.context-menu')).toBeHidden();
+    await expect(page.getByTestId('tool-line')).not.toHaveClass(/active/);
+  });
+});
+
+test.describe('panning without a middle button', () => {
+  const coordsAt = async (page: Page, x: number, y: number): Promise<string> => {
+    await page.mouse.move(x, y);
+    return (await page.locator('.status-coords').textContent()) ?? '';
+  };
+
+  test('holding Space and dragging with the left button pans the view', async ({ page }) => {
+    const c = await canvasCenter(page);
+    const before = await coordsAt(page, c.x, c.y);
+    await page.keyboard.down(' ');
+    await expect(page.locator('#canvas')).toHaveClass(/pan-ready/);
+    await page.mouse.down();
+    await page.mouse.move(c.x + 200, c.y, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up(' ');
+    await expect(page.locator('#canvas')).not.toHaveClass(/pan-ready/);
+    // The world point that was under the cursor moved 200px right with the drag.
+    expect(await coordsAt(page, c.x + 200, c.y)).toBe(before);
+  });
+
+  test('the Pan button makes left-drag pan, without placing points, until turned off', async ({ page }) => {
+    const c = await canvasCenter(page);
+    await page.keyboard.press('l');
+    await page.getByTestId('pan').click();
+    await expect(page.getByTestId('pan')).toHaveClass(/active/);
+    const before = await coordsAt(page, c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x, c.y + 150, { steps: 5 });
+    await page.mouse.up();
+    expect(await coordsAt(page, c.x, c.y + 150)).toBe(before);
+    await expect(page.locator('.options-tool')).toHaveText('Line');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Line: pick the first point');
+
+    await page.keyboard.press('Escape'); // first Esc leaves Pan, the Line tool stays
+    await expect(page.getByTestId('pan')).not.toHaveClass(/active/);
+    await expect(page.getByTestId('tool-line')).toHaveClass(/active/);
+  });
+});
