@@ -7,6 +7,7 @@ export const ICONS = {
   circle: svg('<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/>'),
   arc: svg('<path d="M3 15 A8 8 0 0 1 17 9"/><circle cx="3" cy="15" r="1.4" fill="currentColor"/><circle cx="17" cy="9" r="1.4" fill="currentColor"/>'),
   xline: svg('<path d="M1 16 L19 4"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/>'),
+  ray: svg('<path d="M3 16 L19 4"/><circle cx="3" cy="16" r="1.6" fill="currentColor"/>'),
   point: svg('<path d="M10 5 V15 M5 10 H15"/><circle cx="10" cy="10" r="1.6" fill="currentColor"/>'),
   new: svg('<path d="M5 2 H12 L16 6 V18 H5 Z"/><path d="M12 2 V6 H16"/>'),
   open: svg('<path d="M2 5 H8 L10 7 H17 V16 H2 Z"/>'),

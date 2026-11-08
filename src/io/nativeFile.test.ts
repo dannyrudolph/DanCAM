@@ -58,6 +58,13 @@ describe('native file', () => {
     );
   });
 
+  it('round-trips a ray', () => {
+    const d = createDrawing('mm');
+    const ray: Entity = { kind: 'ray', id: 'e1', layer: '0', base: { x: 0.1, y: -2 }, dir: { x: 0.6, y: 0.8 } };
+    d.entities.set('e1', ray);
+    expect(reopen(serializeDrawing(d)).entities.get('e1')).toEqual(ray);
+  });
+
   it('writes readable, indented JSON with the format and version first', () => {
     const text = serializeDrawing(createDrawing('in'));
     expect(text.startsWith(`{\n  "format": "DanCAM drawing",\n  "schemaVersion": ${SCHEMA_VERSION},`)).toBe(true);
@@ -98,6 +105,9 @@ describe('native file', () => {
       errorOf(v1({ entities: [{ kind: 'arc', id: 'e1', layer: '0', center: { x: 0, y: 0 }, radius: 1, startDeg: 0, endDeg: 360 }] })),
     ).toBe('entities[0].endDeg must be at least 0 and below 360.');
     expect(errorOf(v1({ entities: [{ kind: 'xline', id: 'e1', layer: '0', base: { x: 0, y: 0 }, dir: { x: 1, y: 1 } }] }))).toBe(
+      'entities[0].dir must be a unit vector.',
+    );
+    expect(errorOf(v1({ entities: [{ kind: 'ray', id: 'e1', layer: '0', base: { x: 0, y: 0 }, dir: { x: 0, y: 2 } }] }))).toBe(
       'entities[0].dir must be a unit vector.',
     );
     const twice = { kind: 'point', id: 'e1', layer: '0', at: { x: 0, y: 0 } };

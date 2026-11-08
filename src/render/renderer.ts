@@ -2,7 +2,7 @@ import { degToRad } from '../geometry/angle';
 import { arcSweepDeg } from '../geometry/arc';
 import { arcScreenPieces } from '../geometry/arcPolyline';
 import type { BBox } from '../geometry/bbox';
-import { clipLine, clipSegment } from '../geometry/clip';
+import { clipLine, clipRay, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, effectiveStyle } from '../model/drawing';
@@ -119,10 +119,11 @@ function drawEntity(
       ctx.setLineDash([]);
       return;
     }
-    case 'xline': {
+    case 'xline':
+    case 'ray': {
       const base = worldToScreen(v, e.base);
       const dir = { x: e.dir.x, y: -e.dir.y }; // screen Y points down
-      const seg = clipLine(base, dir, screenClipBox(v));
+      const seg = (e.kind === 'ray' ? clipRay : clipLine)(base, dir, screenClipBox(v));
       if (!seg) return;
       // Dashes are anchored at the base point, so they stay put while panning.
       const fromBase = (seg[0].x - base.x) * dir.x + (seg[0].y - base.y) * dir.y;

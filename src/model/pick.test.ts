@@ -76,4 +76,11 @@ describe('pickEntity on curves and xlines', () => {
   it('picks an xline far from its base point', () => {
     expect(pickEntity(drawing(), { x: -1000, y: 10.01 }, 0.05)).toBe('x');
   });
+
+  it('picks a ray ahead of its base but not behind it', () => {
+    const d = drawing();
+    d.entities.set('r', { kind: 'ray', id: 'r', layer: '0', base: { x: 0, y: 20 }, dir: { x: 1, y: 0 } });
+    expect(pickEntity(d, { x: 500, y: 20.01 }, 0.05)).toBe('r');
+    expect(pickEntity(d, { x: -500, y: 20.01 }, 0.05)).toBeUndefined();
+  });
 });

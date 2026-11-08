@@ -143,10 +143,11 @@ function readEntity(o: Record<string, unknown>, at: string): Entity {
         startDeg: degrees(o.startDeg, `${at}.startDeg`),
         endDeg: degrees(o.endDeg, `${at}.endDeg`),
       };
-    case 'xline': {
+    case 'xline':
+    case 'ray': {
       const dir = vec(o.dir, `${at}.dir`);
       if (!nearlyEqual(Math.hypot(dir.x, dir.y), 1)) throw new FileError(`${at}.dir must be a unit vector.`);
-      return { kind: 'xline', ...base, base: vec(o.base, `${at}.base`), dir };
+      return { kind: o.kind, ...base, base: vec(o.base, `${at}.base`), dir };
     }
     default:
       throw new FileError(`${at}: unknown kind ${JSON.stringify(o.kind)}.`);

@@ -19,7 +19,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
   Panning: middle-drag, Space + left-drag, or the Pan button (H).
   Playwright browser tests, also run in CI.
 
-## Phase 1b (plan approved 2026-11-08): all five steps done; awaiting the user's review
+## Phase 1b (plan approved 2026-11-08): done, reviewed by the user 2026-11-08
 
 1. **Geometry kernel.** `geometry/`: `angle`, `circle` (2P, 3P), `arc` (3P,
    S-C-E, S-E-R, S-C-Angle, tangent-from-direction), `xline`, `intersect`,
@@ -44,8 +44,36 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    System Access API with fallbacks; convert/relabel from the status bar
    units (undoable `units` record); unsaved-changes marker and prompts.
 
-Next: Phase 2 (snaps, selection, grips, editing). Don't start it until the
-user says so (CAD-7).
+## Phase 2 (plan approved 2026-11-08): in progress
+
+1. **Geometry and rays (done).** Bounded curves (segment, ray, xline, circle, arc):
+   intersections that respect ends, nearest, perpendicular feet, tangent
+   points from a point; move/rotate/mirror/scale transforms (exact at 90°,
+   mirror swaps arc ends); Ray entity and tool (Shift+X); TTR between
+   parallel lines. `geometry/curve`, `geometry/transform`, `geometry/ray`,
+   `commands/rayTool`. Rays need no file migration: the kind is new, so
+   older files read unchanged (schemaVersion stays 1).
+2. **Object snaps** (`snap/`): End, Mid, Cen, Quad, Int, Perp, Tan, Nea,
+   Node; markers with tooltips; nearest-to-cursor ranking, Nearest last;
+   Perp/Tan from a base point only; snaps feed point and value steps, beat
+   Ortho/polar, lose to locked values; OSNAP button + F3, snap-type menu,
+   one-time snap from the right-click menu.
+3. **Selection.** Multi-select; Shift-click removes; left-to-right window
+   (inside), right-to-left crossing (touching); Esc clears; not undoable.
+4. **Grips and properties editing.** Arc end grips slide along the circle
+   (center and radius fixed); arc mid grip changes radius keeping both ends.
+   Each drag is one `modify`. Panel fields editable with the value parser;
+   multi-select edits layer and style only.
+5. **Edit tools.** Erase (E, Del), Move (M), Copy (Shift+C, repeats),
+   Rotate (R), Mirror (I, keep/erase), Scale (S); selection first or a new
+   `selection` request.
+6. **Inquiry.** Dist (D), ID, List, Angle; results in a sidebar panel; e2e
+   for the phase's done-when (line-arc and arc-arc Tan/Int checked with ID).
+
+Decisions (user, 2026-11-08): shortcuts as above plus F3 for snaps (Stretch
+needs a key other than S); arc grips as in step 4; sidebar results panel;
+deferred: extension/tracking snaps, Perp/Tan for a first point, multi-object
+grip edits.
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
@@ -53,10 +81,6 @@ layer is saved in the file but not undoable; ray and IndexedDB autosave are
 deferred (ray to Phase 2, autosave to Phase 6).
 
 ## Open questions
-
-- TTR between two parallel lines finds nothing: the kernel treats the
-  coincident offset lines as having no intersection, where AutoCAD places the
-  circle nearest the picks. Fix in `tangentTangentRadius` when it matters.
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).

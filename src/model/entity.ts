@@ -50,14 +50,21 @@ export type XlineEntity = EntityBase & {
   readonly dir: Vec2;
 };
 
-export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity;
+/** Ray: starts at `base`, infinite along `dir`, a unit vector (the geometry `Ray`). */
+export type RayEntity = EntityBase & {
+  readonly kind: 'ray';
+  readonly base: Vec2;
+  readonly dir: Vec2;
+};
+
+export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity;
 
 /** The layer and style a tool gives each new entity. */
 export type EntityProps = { readonly layer: string; readonly style?: LineStyleName };
 
 /**
- * Bounds used by Zoom Extents. Xlines are infinite, so they contribute
- * nothing, as in AutoCAD.
+ * Bounds used by Zoom Extents. Xlines and rays are infinite, so they
+ * contribute nothing, as in AutoCAD.
  */
 export function entityBBox(e: Entity): BBox {
   switch (e.kind) {
@@ -70,6 +77,7 @@ export function entityBBox(e: Entity): BBox {
     case 'arc':
       return arcBBox(e);
     case 'xline':
+    case 'ray':
       return EMPTY_BBOX;
   }
 }
@@ -92,6 +100,7 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
     case 'arc':
       return { ...e, center: p(e.center), radius: f(e.radius) };
     case 'xline':
+    case 'ray':
       return { ...e, base: p(e.base) };
   }
 }

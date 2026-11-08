@@ -94,7 +94,7 @@ export interface ToolContext {
 export type ToolDef = {
   readonly id: string;
   readonly label: string;
-  /** Single-key shortcut, lowercase. */
+  /** Single-key shortcut, lowercase, optionally with a `shift+` prefix ("x", "shift+x"). */
   readonly shortcut: string;
   run(ctx: ToolContext): ToolGen;
 };

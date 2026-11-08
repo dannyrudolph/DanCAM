@@ -52,6 +52,12 @@ describe('tangentTangentRadius', () => {
     expect(tangentTangentRadius(xAxis, y1, 0.25)).toEqual([]);
   });
 
+  it('places the circle nearest the hint between parallel lines exactly 2r apart', () => {
+    const y1: TangentTarget = { kind: 'line', a: { x: 0, y: 1 }, b: { x: 1, y: 1 } };
+    expect(tangentTangentRadius(xAxis, y1, 0.5, { x: 3, y: 0.9 })).toEqual([{ center: { x: 3, y: 0.5 }, radius: 0.5 }]);
+    expect(tangentTangentRadius(xAxis, y1, 0.5)).toEqual([]);
+  });
+
   it('accepts the targets in either order', () => {
     const a = sortByCenter(tangentTangentRadius(xAxis, unit, 0.5));
     const b = sortByCenter(tangentTangentRadius(unit, xAxis, 0.5));

@@ -1,6 +1,7 @@
 import { distanceToArc } from '../geometry/arc';
 import { distanceToCircle } from '../geometry/circle';
 import { distanceToSegment } from '../geometry/distance';
+import { distanceToRay } from '../geometry/ray';
 import { distanceToXline } from '../geometry/xline';
 import type { Vec2 } from '../geometry/vec';
 import type { Drawing } from './drawing';
@@ -18,6 +19,8 @@ export function distanceToEntity(p: Vec2, e: Entity): number {
       return distanceToArc(p, e);
     case 'xline':
       return distanceToXline(p, e);
+    case 'ray':
+      return distanceToRay(p, e);
   }
 }
 

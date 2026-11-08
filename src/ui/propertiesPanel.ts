@@ -59,6 +59,7 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       ];
     }
     case 'xline':
+    case 'ray':
       return [
         ...common,
         { label: 'Base X', value: e.base.x },
@@ -74,6 +75,7 @@ const KIND_LABEL: Record<Entity['kind'], string> = {
   circle: 'Circle',
   arc: 'Arc',
   xline: 'Xline',
+  ray: 'Ray',
 };
 
 /**

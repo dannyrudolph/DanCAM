@@ -559,3 +559,11 @@ test('the sidebar hides and shows, and stays hidden after a reload', async ({ pa
   await page.getByTestId('side-panel').click();
   await expect(side).toBeVisible();
 });
+
+test('Shift+X starts the Ray tool and X still starts Xline', async ({ page }) => {
+  await page.keyboard.press('Shift+X');
+  await expect(page.getByTestId('tool-ray')).toHaveClass(/active/);
+  await expect(page.getByTestId('tool-ray')).toHaveAttribute('title', 'Ray (Shift+X)');
+  await page.keyboard.press('x');
+  await expect(page.getByTestId('tool-xline')).toHaveClass(/active/);
+});

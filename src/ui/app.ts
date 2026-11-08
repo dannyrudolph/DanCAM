@@ -4,6 +4,7 @@ import { lineTool } from '../commands/lineTool';
 import type { Tracking } from '../commands/pointInput';
 import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
+import { rayTool } from '../commands/rayTool';
 import { createXlineTool } from '../commands/xlineTool';
 import type { Vec2 } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
@@ -41,7 +42,7 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
   };
 }
 
-export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), pointTool];
+export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -81,6 +82,11 @@ function saveSidePanel(shown: boolean): void {
   } catch {
     // Not persisted; fine.
   }
+}
+
+/** "shift+x" → "Shift+X", for tooltips. */
+export function shortcutLabel(shortcut: string): string {
+  return shortcut.startsWith('shift+') ? `Shift+${shortcut.slice(6).toUpperCase()}` : shortcut.toUpperCase();
 }
 
 function el<T extends HTMLElement>(id: string): T {
@@ -486,7 +492,7 @@ export class App {
     const bar = el('toolbar');
     for (const def of TOOLS) {
       const icon = ICONS[def.id as keyof typeof ICONS];
-      const b = button(icon, `${def.label} (${def.shortcut.toUpperCase()})`, () => this.startTool(def), `tool-${def.id}`);
+      const b = button(icon, `${def.label} (${shortcutLabel(def.shortcut)})`, () => this.startTool(def), `tool-${def.id}`);
       this.toolButtons.set(def.id, b);
       bar.append(b);
     }
@@ -687,7 +693,8 @@ export class App {
       e.preventDefault();
       this.setPanMode(!this.panMode);
     } else if (!mod && !e.altKey) {
-      const def = TOOLS.find((t) => t.shortcut === key);
+      const combo = e.shiftKey ? `shift+${key}` : key;
+      const def = TOOLS.find((t) => t.shortcut === combo);
       if (def) {
         e.preventDefault();
         this.startTool(def);
