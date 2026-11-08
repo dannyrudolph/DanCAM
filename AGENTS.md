@@ -41,11 +41,11 @@ keep them current when they change.
 
 | Task | Command |
 |---|---|
-| Test | _not set yet — run `/jgl-init`_ |
-| Type check | _not set yet_ |
-| Lint | _not set yet_ |
-| Build | _not set yet_ |
-| Dev server | _not set yet_ |
+| Test | `npm test` (Vitest + fast-check) |
+| Type check | `npm run typecheck` (`tsc --noEmit`) |
+| Lint | none |
+| Build | `npm run build` (type check + `vite build` → `dist/`) |
+| Dev server | `npm run dev` (open `/?demo` for the test drawing) |
 
 ## Done means
 

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Mirror the CI gate locally (CI-5, CI-6): type check + unit tests before every push.
+set -euo pipefail
+echo "pre-push: type check"
+npm run --silent typecheck
+echo "pre-push: unit tests"
+npm test --silent
