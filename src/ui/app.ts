@@ -6,14 +6,17 @@ import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
 import { createXlineTool } from '../commands/xlineTool';
 import type { Vec2 } from '../geometry/vec';
-import { DEFAULT_LAYER, type Drawing, drawingBBox } from '../model/drawing';
+import { parseDrawing, serializeDrawing } from '../io/nativeFile';
+import { DEFAULT_LAYER, type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
-import { UndoStack } from '../model/undo';
+import { type Transaction, UndoStack } from '../model/undo';
+import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { render } from '../render/renderer';
 import * as vp from '../render/viewport';
 import { ContextMenu, type MenuItem } from './contextMenu';
+import { DrawingFile } from './fileAccess';
 import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
@@ -22,8 +25,19 @@ import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
 
 /** Pick radius around the cursor, CSS pixels. */
 const PICK_RADIUS_PX = 6;
-/** Initial view: about 4 drawing units across a 1000px canvas. */
-const INITIAL_SCALE = 250;
+/** Initial view of an inch drawing: about 4" across a 1000px canvas (the same size in mm). */
+const INITIAL_SCALE_PER_INCH = 250;
+const INITIAL_CENTER_INCH = { x: 1.5, y: 1 };
+
+function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewport {
+  const k = units === 'mm' ? MM_PER_INCH : 1;
+  return {
+    center: { x: INITIAL_CENTER_INCH.x * k, y: INITIAL_CENTER_INCH.y * k },
+    scale: INITIAL_SCALE_PER_INCH / k,
+    widthPx,
+    heightPx,
+  };
+}
 
 export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), pointTool];
 
@@ -69,8 +83,12 @@ function button(icon: string, title: string, onClick: () => void, testId: string
 
 /** The whole editor: owns the drawing, the view and the UI pieces, and routes input between them. */
 export class App {
-  private readonly undo: UndoStack;
-  private readonly runner: ToolRunner;
+  private drawing: Drawing;
+  private undo: UndoStack;
+  private runner: ToolRunner;
+  private readonly file = new DrawingFile();
+  /** Units the status bar and view were last set up for; a change (convert, relabel, undo) refits the view. */
+  private shownUnits: Units;
   private readonly canvas = el<HTMLCanvasElement>('canvas');
   private readonly g: CanvasRenderingContext2D;
   private readonly boxes: InputBoxes;
@@ -87,7 +105,7 @@ export class App {
     precision: DEFAULT_PRECISION,
   };
 
-  private view: vp.Viewport = { center: { x: 1.5, y: 1 }, scale: INITIAL_SCALE, widthPx: 1, heightPx: 1 };
+  private view: vp.Viewport;
   private cursorScreen: Vec2 | undefined;
   private lastCursorWorld: Vec2 = { x: 0, y: 0 };
   private selected: EntityId | undefined;
@@ -99,25 +117,25 @@ export class App {
   private panMode = false;
   private panButton: HTMLButtonElement | undefined;
 
-  constructor(private readonly drawing: Drawing) {
+  constructor(drawing: Drawing) {
     const g = this.canvas.getContext('2d');
     if (!g) throw new Error('Canvas 2D is not available');
     this.g = g;
+    this.drawing = drawing;
     this.undo = new UndoStack(drawing);
+    this.runner = this.makeRunner();
+    this.view = initialView(drawing.units, 1, 1);
+    this.shownUnits = drawing.units;
 
-    const ctx: ToolContext = {
-      drawing,
-      undo: this.undo,
-      newProps: () => this.newProps(),
-      message: (m) => this.status.showMessage(m),
-      continuation: undefined,
-    };
-    this.runner = new ToolRunner(ctx);
-
-    this.status = new StatusBar(el('status'), this.settings, () => {
-      saveScrollMode(this.settings.scrollMode);
-      this.refresh();
-    });
+    this.status = new StatusBar(
+      el('status'),
+      this.settings,
+      () => {
+        saveScrollMode(this.settings.scrollMode);
+        this.refresh();
+      },
+      (anchor) => this.openUnitsMenu(anchor),
+    );
     this.status.setUnits(drawing.units);
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
@@ -134,6 +152,100 @@ export class App {
     this.fitCanvas();
     this.refresh();
     if (drawing.entities.size > 0) requestAnimationFrame(() => this.zoomExtents());
+  }
+
+  // ---- the document ----------------------------------------------------------
+
+  private makeRunner(): ToolRunner {
+    const ctx: ToolContext = {
+      drawing: this.drawing,
+      undo: this.undo,
+      newProps: () => this.newProps(),
+      message: (m) => this.status.showMessage(m),
+      continuation: undefined,
+    };
+    return new ToolRunner(ctx);
+  }
+
+  /** Replaces the open drawing (New, Open): fresh undo history, nothing selected, view fitted. */
+  private setDrawing(d: Drawing): void {
+    this.runner.stop();
+    this.menu.close();
+    this.drawing = d;
+    this.undo = new UndoStack(d);
+    this.runner = this.makeRunner();
+    this.selected = undefined;
+    this.shownUnits = d.units;
+    this.status.setUnits(d.units);
+    this.view = initialView(d.units, this.view.widthPx, this.view.heightPx);
+    if (d.entities.size > 0) this.zoomExtents();
+    this.refresh();
+  }
+
+  /** True when the open drawing can be dropped: nothing unsaved, or the user agrees. */
+  private canDiscard(): boolean {
+    return !this.undo.dirty || window.confirm(`Discard unsaved changes to ${this.file.name}?`);
+  }
+
+  private newDrawing(units: Units): void {
+    if (!this.canDiscard()) return;
+    this.file.reset();
+    this.setDrawing(createDrawing(units));
+    this.status.showMessage(`New ${UNIT_LABEL[units]} drawing`);
+  }
+
+  private async openDrawing(): Promise<void> {
+    if (!this.canDiscard()) return;
+    try {
+      const picked = await this.file.open();
+      if (!picked) return;
+      const result = parseDrawing(picked.text);
+      if (!result.ok) {
+        this.status.showMessage(`Can't open ${picked.name}: ${result.error}`);
+        return;
+      }
+      this.file.adopt(picked);
+      this.setDrawing(result.drawing);
+      this.status.showMessage(`Opened ${picked.name}`);
+    } catch (err) {
+      this.status.showMessage(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async saveDrawing(saveAs: boolean): Promise<void> {
+    try {
+      if (!(await this.file.save(serializeDrawing(this.drawing), saveAs))) return;
+      this.undo.markSaved();
+      this.status.showMessage(`Saved ${this.file.name}`);
+      this.refresh();
+    } catch (err) {
+      this.status.showMessage(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private openUnitsMenu(anchor: DOMRect): void {
+    const other: Units = this.drawing.units === 'in' ? 'mm' : 'in';
+    const op = other === 'mm' ? '×' : '÷';
+    this.menu.open(anchor.left, anchor.top, [
+      {
+        label: `Convert to ${UNIT_LABEL[other]} (same size, numbers ${op} 25.4)`,
+        enabled: true,
+        run: () => this.changeUnits(convertUnits(this.drawing, other)),
+      },
+      {
+        label: `Relabel as ${UNIT_LABEL[other]} (same numbers)`,
+        enabled: true,
+        run: () => this.changeUnits(relabelUnits(this.drawing, other)),
+      },
+    ]);
+  }
+
+  private changeUnits(tx: Transaction | undefined): void {
+    if (!tx) return;
+    this.runner.stop();
+    this.undo.commit(tx);
+    this.status.showMessage(tx.label);
+    this.refresh();
   }
 
   // ---- actions ---------------------------------------------------------------
@@ -250,6 +362,12 @@ export class App {
 
   /** Brings every panel in line with the runner, selection and settings, then redraws. */
   private refresh(): void {
+    if (this.drawing.units !== this.shownUnits) {
+      this.shownUnits = this.drawing.units;
+      this.status.setUnits(this.drawing.units);
+      this.zoomExtents();
+    }
+    document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
     const req = this.runner.request;
     this.boxes.setRequest(req);
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
@@ -363,7 +481,23 @@ export class App {
       () => this.setPanMode(!this.panMode),
       'pan',
     );
+    const newButton = button(
+      ICONS.new,
+      'New drawing',
+      () => {
+        const r = newButton.getBoundingClientRect();
+        this.menu.open(r.left, r.bottom, [
+          { label: 'New inch drawing', enabled: true, run: () => this.newDrawing('in') },
+          { label: 'New mm drawing', enabled: true, run: () => this.newDrawing('mm') },
+        ]);
+      },
+      'new',
+    );
     bar.append(
+      newButton,
+      button(ICONS.open, 'Open (Ctrl+O)', () => void this.openDrawing(), 'open'),
+      button(ICONS.save, 'Save (Ctrl+S)', () => void this.saveDrawing(false), 'save'),
+      button(ICONS.saveAs, 'Save As (Ctrl+Shift+S)', () => void this.saveDrawing(true), 'save-as'),
       button(ICONS.undo, 'Undo (Ctrl+Z)', () => this.doUndo(), 'undo'),
       button(ICONS.redo, 'Redo (Ctrl+Y)', () => this.doRedo(), 'redo'),
       this.panButton,
@@ -419,6 +553,9 @@ export class App {
     });
 
     window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('beforeunload', (e) => {
+      if (this.undo.dirty) e.preventDefault(); // the browser asks before leaving
+    });
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') {
         this.spaceHeld = false;
@@ -437,6 +574,16 @@ export class App {
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
 
+    if (mod && key === 's') {
+      e.preventDefault();
+      void this.saveDrawing(e.shiftKey);
+      return;
+    }
+    if (mod && key === 'o') {
+      e.preventDefault();
+      void this.openDrawing();
+      return;
+    }
     if (mod && key === 'z' && !e.shiftKey) {
       e.preventDefault();
       this.doUndo();

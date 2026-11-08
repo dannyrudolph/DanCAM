@@ -32,9 +32,11 @@ export class ContextMenu {
         return b;
       }),
     );
-    this.root.style.left = `${x}px`;
-    this.root.style.top = `${y}px`;
     this.root.hidden = false;
+    // Keep it inside the window, e.g. when opened from the status bar.
+    const r = this.root.getBoundingClientRect();
+    this.root.style.left = `${Math.max(0, Math.min(x, window.innerWidth - r.width - 4))}px`;
+    this.root.style.top = `${Math.max(0, Math.min(y, window.innerHeight - r.height - 4))}px`;
   }
 
   close(): void {

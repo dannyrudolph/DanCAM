@@ -40,7 +40,7 @@ export class StatusBar {
   private readonly prompt: HTMLElement;
   private readonly coords: HTMLElement;
   private readonly fromBase: HTMLElement;
-  private readonly units: HTMLElement;
+  private readonly units: HTMLButtonElement;
   private readonly ortho: HTMLButtonElement;
   private readonly polar: HTMLButtonElement;
   private readonly increment: HTMLSelectElement;
@@ -51,6 +51,8 @@ export class StatusBar {
     root: HTMLElement,
     private readonly settings: StatusSettings,
     private readonly onSettingsChanged: () => void,
+    /** The units label was clicked; `anchor` is its position for a menu. */
+    onUnitsClick: (anchor: DOMRect) => void,
   ) {
     const span = (cls: string): HTMLElement => {
       const s = document.createElement('span');
@@ -60,7 +62,13 @@ export class StatusBar {
     this.prompt = span('status-prompt');
     this.coords = span('status-coords');
     this.fromBase = span('status-from-base');
-    this.units = span('status-units');
+    this.units = document.createElement('button');
+    this.units.type = 'button';
+    this.units.className = 'status-units';
+    this.units.title = 'Drawing units: convert or relabel';
+    this.units.tabIndex = -1;
+    this.units.dataset.testid = 'units';
+    this.units.addEventListener('click', () => onUnitsClick(this.units.getBoundingClientRect()));
 
     this.ortho = this.toggle('Ortho', 'Ortho (F8): horizontal and vertical only', () => {
       settings.ortho = !settings.ortho;

@@ -18,7 +18,8 @@ export type Layer = {
  */
 export type Drawing = {
   readonly schemaVersion: 1;
-  readonly units: Units;
+  /** Changed only through the undo stack (a `units` change). */
+  units: Units;
   readonly layers: Map<string, Layer>;
   readonly entities: Map<EntityId, Entity>;
   /** Next id counter. Ids are never reused, even after undo. */

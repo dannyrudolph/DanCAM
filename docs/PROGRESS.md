@@ -6,6 +6,8 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 
 - **Phase 0:** canvas, grid, zoom and pan, Zoom Extents, undo stack. Pushed, CI green.
 - **Spec change (2026-11-08):** mouse-first GUI, no command line (CAD-9).
+- **Since 1b step 3 (2026-11-08):** white drawing area, black lines, no grid;
+  the demo's end view sits left of the profile.
 - **Phase 1a:** toolbar, options bar, status line, input boxes at the cursor
   (length/angle, ΔX/ΔY, X/Y; Tab locks, Enter places), value parser
   (fractions, arithmetic, in/mm suffixes), Ortho (F8) and polar tracking (F10),
@@ -45,8 +47,18 @@ Five steps, one commit each:
    Continue (from `ToolContext.continuation`, set by Line and Arc; falls back
    to 3P when the last one was undone). Xline (X): H, V, Angle (point then
    angle), 2P, Offset (pick a line or xline; distance and side from the cursor).
-4. **Next: layers** — undoable layer records, layers panel, current layer.
-5. Units and files — new drawing, convert/relabel, `.cad2d.json` save/load.
+4. **Next (deferred by the user, 2026-11-08; done after step 5): layers** —
+   undoable layer records, layers panel, current layer. Also add the current
+   layer to the file as an optional field (default "0"), so version 1 files
+   still open.
+5. **Units and files — done.** New (inch or mm), Open, Save, Save As in the
+   top bar; Ctrl+O, Ctrl+S, Ctrl+Shift+S. `io/nativeFile`: indented
+   `.cad2d.json`, schemaVersion 1, a migrations table, and a strict reader
+   that says what is wrong. File System Access API with input/download
+   fallbacks; a file that fails to open never becomes the Save target.
+   Clicking the units in the status bar converts (×/÷ 25.4, undoable, a
+   `units` change record) or relabels. The title shows • when unsaved; New,
+   Open and closing the tab ask first.
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current

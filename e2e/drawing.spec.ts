@@ -1,5 +1,8 @@
 import { type Page, expect, test } from '@playwright/test';
 
+/** Node's Buffer, which Playwright runs these tests under; declared here rather than adding @types/node. */
+declare const Buffer: { from(text: string): Uint8Array };
+
 /** Number shown in the properties panel row with this label. */
 const prop = (page: Page, label: string) => page.locator(`#properties dd[data-prop="${label}"]`);
 
@@ -387,5 +390,100 @@ test.describe('trackpad and wheel', () => {
     await wheel(page, c.x, c.y, { deltaY: -100 });
     expect(await coordsAt(page, c.x, c.y)).toBe(at);
     expect(await coordsAt(page, c.x + 200, c.y)).not.toBe(off);
+  });
+});
+
+test.describe('files and units', () => {
+  // Playwright can't drive the native file pickers, so use the fallbacks: a file input and a download.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
+      Object.defineProperty(window, 'showOpenFilePicker', { value: undefined });
+    });
+    await page.goto('/');
+  });
+
+  async function drawLine(page: Page): Promise<void> {
+    await page.keyboard.press('l');
+    await typeValues(page, '0.1', '0.2');
+    await typeValues(page, '1', '30');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+  }
+
+  async function selectOnlyEntity(page: Page): Promise<void> {
+    await page.getByTestId('zoom-extents').click();
+    const c = await canvasCenter(page);
+    await page.mouse.click(c.x, c.y);
+  }
+
+  test('a saved drawing reopens with exactly the same coordinates', async ({ page }, info) => {
+    await drawLine(page);
+    await expect(page).toHaveTitle('• Untitled.cad2d.json — DanCAM');
+
+    const downloading = page.waitForEvent('download');
+    await page.getByTestId('save').click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe('Untitled.cad2d.json');
+    const path = info.outputPath('saved.cad2d.json');
+    await download.saveAs(path);
+    await expect(page).toHaveTitle('Untitled.cad2d.json — DanCAM');
+
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New inch drawing' }).click();
+    await expect(prop(page, 'entity-count')).toHaveText('0'); // saved, so no question asked
+
+    const choosing = page.waitForEvent('filechooser');
+    await page.getByTestId('open').click();
+    await (await choosing).setFiles(path);
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Opened saved.cad2d.json');
+
+    await selectOnlyEntity(page);
+    await expect(prop(page, 'End X')).toHaveAttribute('title', String(0.1 + Math.cos(Math.PI / 6)));
+    await expect(prop(page, 'End Y')).toHaveAttribute('title', String(0.2 + 0.5));
+  });
+
+  test('New asks before discarding unsaved work, and starts in the chosen unit', async ({ page }) => {
+    await drawLine(page);
+    page.once('dialog', (d) => void d.dismiss());
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    page.once('dialog', (d) => void d.accept());
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+    await expect(page.getByTestId('units')).toHaveText('mm');
+  });
+
+  test('Convert to mm scales by 25.4; Undo converts back', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('units').click();
+    await page.locator('.context-menu').getByRole('button', { name: /^Convert to mm/ }).click();
+    await expect(page.getByTestId('units')).toHaveText('mm');
+    await selectOnlyEntity(page);
+    await expect(prop(page, 'Length')).toHaveText('25.4000');
+
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('units')).toHaveText('in');
+    await expect(prop(page, 'Length')).toHaveText('1.0000');
+  });
+
+  test('a file that is not a drawing is refused and the open drawing is kept', async ({ page }) => {
+    await drawLine(page);
+    const choosing = page.waitForEvent('filechooser');
+    page.once('dialog', (d) => void d.accept());
+    await page.getByTestId('open').click();
+    await (await choosing).setFiles({ name: 'bad.cad2d.json', mimeType: 'application/json', buffer: Buffer.from('{oops') });
+    await expect(page.locator('#status .status-prompt')).toHaveText("Can't open bad.cad2d.json: This file is not valid JSON.");
+    await expect(prop(page, 'entity-count')).toHaveText('1');
   });
 });

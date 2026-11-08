@@ -73,3 +73,25 @@ export function entityBBox(e: Entity): BBox {
       return EMPTY_BBOX;
   }
 }
+
+/**
+ * The entity with every length passed through `f` (a scale about the origin):
+ * positions and radii change; angles and xline directions don't. Used to
+ * convert units, where `f` divides by 25.4 exactly rather than multiplying by
+ * a rounded reciprocal.
+ */
+export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
+  const p = (v: Vec2): Vec2 => ({ x: f(v.x), y: f(v.y) });
+  switch (e.kind) {
+    case 'point':
+      return { ...e, at: p(e.at) };
+    case 'line':
+      return { ...e, start: p(e.start), end: p(e.end) };
+    case 'circle':
+      return { ...e, center: p(e.center), radius: f(e.radius) };
+    case 'arc':
+      return { ...e, center: p(e.center), radius: f(e.radius) };
+    case 'xline':
+      return { ...e, base: p(e.base) };
+  }
+}

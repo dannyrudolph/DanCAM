@@ -108,3 +108,36 @@ describe('UndoStack', () => {
     );
   });
 });
+
+describe('UndoStack saved state', () => {
+  it('is clean when new, dirty after a change, clean again after save or undoing back to it', () => {
+    const { undo } = setup();
+    expect(undo.dirty).toBe(false);
+    undo.commit({ label: 'LINE', changes: [{ op: 'add', entity: line('e1') }] });
+    expect(undo.dirty).toBe(true);
+    undo.markSaved();
+    expect(undo.dirty).toBe(false);
+    undo.commit({ label: 'LINE', changes: [{ op: 'add', entity: line('e2') }] });
+    expect(undo.dirty).toBe(true);
+    undo.undo();
+    expect(undo.dirty).toBe(false);
+    undo.undo();
+    expect(undo.dirty).toBe(true);
+  });
+
+  it('stays dirty after undoing past the save and drawing something else', () => {
+    const { undo } = setup();
+    undo.commit({ label: 'LINE', changes: [{ op: 'add', entity: line('e1') }] });
+    undo.markSaved();
+    undo.undo();
+    undo.commit({ label: 'LINE', changes: [{ op: 'add', entity: line('e2') }] });
+    expect(undo.dirty).toBe(true);
+  });
+
+  it('refuses a units change that does not match the drawing', () => {
+    const { undo } = setup();
+    expect(() => undo.commit({ label: 'UNITS', changes: [{ op: 'units', before: 'mm', after: 'in' }] })).toThrow(
+      'units: drawing is in, expected mm',
+    );
+  });
+});

@@ -239,7 +239,17 @@ input {
 
 .status-units {
   margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
   color: var(--muted);
+  cursor: pointer;
+}
+
+.status-units:hover {
+  border-color: var(--border);
+  color: var(--text);
 }
 
 .input-boxes {

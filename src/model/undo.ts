@@ -1,11 +1,13 @@
-import type { Drawing } from './drawing';
+import type { Drawing, Units } from './drawing';
 import type { Entity } from './entity';
 
 /** One reversible change to the drawing. */
 export type Change =
   | { readonly op: 'add'; readonly entity: Entity }
   | { readonly op: 'remove'; readonly entity: Entity }
-  | { readonly op: 'modify'; readonly before: Entity; readonly after: Entity };
+  | { readonly op: 'modify'; readonly before: Entity; readonly after: Entity }
+  /** The drawing's unit label (converting also scales every entity, in the same transaction). */
+  | { readonly op: 'units'; readonly before: Units; readonly after: Units };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -21,6 +23,8 @@ function invert(c: Change): Change {
       return { op: 'add', entity: c.entity };
     case 'modify':
       return { op: 'modify', before: c.after, after: c.before };
+    case 'units':
+      return { op: 'units', before: c.after, after: c.before };
   }
 }
 
@@ -40,6 +44,10 @@ function apply(d: Drawing, c: Change): void {
       if (!d.entities.has(c.before.id)) throw new Error(`modify: ${c.before.id} not found`);
       d.entities.set(c.after.id, c.after);
       return;
+    case 'units':
+      if (d.units !== c.before) throw new Error(`units: drawing is ${d.units}, expected ${c.before}`);
+      d.units = c.after;
+      return;
   }
 }
 
@@ -50,6 +58,8 @@ function apply(d: Drawing, c: Change): void {
 export class UndoStack {
   private readonly done: Transaction[] = [];
   private readonly undone: Transaction[] = [];
+  /** The newest applied transaction when the drawing was last saved or opened. */
+  private savedAt: Transaction | undefined;
 
   constructor(private readonly drawing: Drawing) {}
 
@@ -78,6 +88,16 @@ export class UndoStack {
     for (const c of tx.changes) apply(this.drawing, c);
     this.done.push(tx);
     return true;
+  }
+
+  /** Records that the drawing as it is now has been saved. */
+  markSaved(): void {
+    this.savedAt = this.done.at(-1);
+  }
+
+  /** True when the drawing differs from the last save (undoing back to it makes it clean again). */
+  get dirty(): boolean {
+    return this.done.at(-1) !== this.savedAt;
   }
 
   get undoLabel(): string | undefined {
