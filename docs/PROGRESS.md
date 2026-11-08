@@ -53,11 +53,15 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    parallel lines. `geometry/curve`, `geometry/transform`, `geometry/ray`,
    `commands/rayTool`. Rays need no file migration: the kind is new, so
    older files read unchanged (schemaVersion stays 1).
-2. **Object snaps** (`snap/`): End, Mid, Cen, Quad, Int, Perp, Tan, Nea,
-   Node; markers with tooltips; nearest-to-cursor ranking, Nearest last;
-   Perp/Tan from a base point only; snaps feed point and value steps, beat
-   Ortho/polar, lose to locked values; OSNAP button + F3, snap-type menu,
-   one-time snap from the right-click menu.
+2. **Object snaps (done).** `snap/snap.findSnap`: End, Mid, Cen, Quad, Int,
+   Perp, Tan, Nea, Node within a 10px aperture; nearest-to-cursor ranking,
+   Nearest last, ties by kind order (End before Int). Cen/Perp/Tan count
+   whenever their object is under the cursor and rank as if at the aperture
+   edge. Perp/Tan need a base point. Snaps feed point and value steps, beat
+   Ortho/polar, lose to locked values (`resolvePoint`'s `snap`). Markers with
+   a tooltip label; OSNAP button + F3 (on by default: End, Mid, Cen, Quad,
+   Int, Node), a menu of kinds; right-click "Snap once..." for the next point
+   (no snap found: nothing placed; Esc drops it). Settings not persisted.
 3. **Selection.** Multi-select; Shift-click removes; left-to-right window
    (inside), right-to-left crossing (touching); Esc clears; not undoable.
 4. **Grips and properties editing.** Arc end grips slide along the circle

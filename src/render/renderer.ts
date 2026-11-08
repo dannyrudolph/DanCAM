@@ -8,6 +8,7 @@ import type { Vec2 } from '../geometry/vec';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
+import { SNAP_LABEL, type Snap, type SnapKind } from '../snap/snap';
 import { type Viewport, worldToScreen } from './viewport';
 
 /** Paper-style drawing area: black lines on white, no grid. */
@@ -18,6 +19,8 @@ const COLORS = {
   selected: '#0969da',
   preview: '#d4760a',
   cursor: '#d4760a',
+  snap: '#1a7f37',
+  tooltipText: '#ffffff',
 } as const;
 
 /** Half-size of the point marker in CSS pixels. */
@@ -28,6 +31,8 @@ const SELECTED_EXTRA_PX = 1;
 const ARC_ERROR_PX = 0.25;
 /** Half-size of the marker where the next point will land. */
 const CURSOR_MARK_PX = 4;
+/** Half-size of an object snap marker, CSS pixels. */
+const SNAP_MARK_PX = 6;
 
 /** Things drawn over the drawing: tool preview, selection and the next-point marker. */
 export type Overlay = {
@@ -35,6 +40,8 @@ export type Overlay = {
   readonly selected: EntityId | undefined;
   /** Where a click or Enter would place the point now (after locks and tracking). */
   readonly nextPoint: Vec2 | undefined;
+  /** The object snap the cursor is on; drawn instead of the next-point marker. */
+  readonly snap: Snap | undefined;
 };
 
 /**
@@ -55,7 +62,8 @@ export function render(
   for (const e of overlay.preview) {
     drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
-  if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
+  if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind);
+  else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
 }
 
 function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: EntityId | undefined): void {
@@ -148,6 +156,83 @@ function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.strokeRect(s.x - CURSOR_MARK_PX, s.y - CURSOR_MARK_PX, CURSOR_MARK_PX * 2, CURSOR_MARK_PX * 2);
+}
+
+/** The snap's glyph (AutoCAD's shapes) at `s`, with its name in a tooltip above right, clear of the input boxes. */
+function drawSnapMark(ctx: CanvasRenderingContext2D, s: Vec2, kind: SnapKind): void {
+  const r = SNAP_MARK_PX;
+  ctx.strokeStyle = COLORS.snap;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  switch (kind) {
+    case 'end':
+      ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+      break;
+    case 'mid':
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.closePath();
+      break;
+    case 'cen':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      break;
+    case 'quad':
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      ctx.lineTo(s.x - r, s.y);
+      ctx.closePath();
+      break;
+    case 'int':
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.moveTo(s.x + r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      break;
+    case 'perp':
+      // ⊥ with the corner square
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.moveTo(s.x - r, s.y);
+      ctx.lineTo(s.x, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      break;
+    case 'tan':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y - r);
+      break;
+    case 'nea':
+      // hourglass
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.closePath();
+      break;
+    case 'node':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      ctx.moveTo(s.x - r * 0.7, s.y - r * 0.7);
+      ctx.lineTo(s.x + r * 0.7, s.y + r * 0.7);
+      ctx.moveTo(s.x + r * 0.7, s.y - r * 0.7);
+      ctx.lineTo(s.x - r * 0.7, s.y + r * 0.7);
+      break;
+  }
+  ctx.stroke();
+
+  const label = SNAP_LABEL[kind];
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(label).width + 10;
+  const x = s.x + r + 8;
+  const y = s.y - r - 8 - 18;
+  ctx.fillStyle = COLORS.snap;
+  ctx.fillRect(x, y, w, 18);
+  ctx.fillStyle = COLORS.tooltipText;
+  ctx.fillText(label, x + 5, y + 9);
 }
 
 /** The canvas rectangle plus a margin wider than any line cap, in CSS pixels. */

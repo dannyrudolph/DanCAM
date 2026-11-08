@@ -1,4 +1,5 @@
-export type MenuItem = { readonly label: string; readonly enabled: boolean; readonly run: () => void };
+/** `checked`, when given, shows a check mark column (on or off). */
+export type MenuItem = { readonly label: string; readonly enabled: boolean; readonly run: () => void; readonly checked?: boolean };
 
 /** A small right-click menu. Closes on pick, Esc or any click elsewhere. */
 export class ContextMenu {
@@ -25,6 +26,12 @@ export class ContextMenu {
         b.type = 'button';
         b.textContent = item.label;
         b.disabled = !item.enabled;
+        if (item.checked !== undefined) {
+          b.classList.add('checkable');
+          b.classList.toggle('checked', item.checked);
+          b.setAttribute('role', 'menuitemcheckbox');
+          b.setAttribute('aria-checked', String(item.checked));
+        }
         b.addEventListener('click', () => {
           this.close();
           item.run();

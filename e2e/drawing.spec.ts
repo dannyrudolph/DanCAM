@@ -567,3 +567,54 @@ test('Shift+X starts the Ray tool and X still starts Xline', async ({ page }) =>
   await page.keyboard.press('x');
   await expect(page.getByTestId('tool-xline')).toHaveClass(/active/);
 });
+
+test('a click near a midpoint snaps to it exactly; F3 turns snaps off', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const c = await canvasCenter(page); // the line's midpoint (0.5, 0)
+
+  await page.keyboard.press('l');
+  await page.mouse.move(c.x + 4, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid');
+  await page.mouse.click(c.x + 4, c.y + 3);
+  await typeValues(page, '0.1', '90');
+  await page.keyboard.press('Escape');
+
+  await page.mouse.click(c.x, c.y - 30); // on the new vertical line, well off the first
+  await page.getByTestId('precision').selectOption('8');
+  await expect(prop(page, 'Start X')).toHaveText('0.50000000');
+  await expect(prop(page, 'Start Y')).toHaveText('0.00000000');
+
+  await page.keyboard.press('l');
+  await page.mouse.move(c.x + 4, c.y + 3);
+  // the new line starts there too, and Endpoint wins a tie with Midpoint
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await page.keyboard.press('F3');
+  await expect(page.getByTestId('osnap')).not.toHaveClass(/\bon\b/);
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', '');
+});
+
+test('a one-time Endpoint snap from the right-click menu ignores the midpoint under the cursor', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const c = await canvasCenter(page);
+
+  await page.keyboard.press('l');
+  await page.mouse.click(c.x, c.y + 3, { button: 'right' });
+  await page.locator('.context-menu button', { hasText: 'Snap once…' }).click();
+  await page.locator('.context-menu button', { hasText: 'Endpoint' }).click();
+  await page.mouse.move(c.x + 4, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', '');
+  await page.mouse.click(c.x + 4, c.y + 3); // no endpoint here: nothing placed
+  await expect(page.locator('#status .status-prompt')).toContainText('No Endpoint point here');
+  await page.keyboard.press('Escape'); // drops the one-time snap; the running Midpoint is back
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid');
+});

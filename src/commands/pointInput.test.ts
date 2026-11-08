@@ -129,3 +129,17 @@ describe('fieldValue', () => {
     expect(fieldValue('angle', { x: 1, y: 3 }, base)).toBe(90);
   });
 });
+
+describe('resolvePoint with an object snap', () => {
+  const snap = { x: 3, y: 2.4 }; // 7.6° from the base: polar would pull it to 0°
+
+  it('the snap point beats polar tracking and Ortho', () => {
+    expect(resolvePoint({ x: 3.05, y: 2.41 }, base, 'polar', {}, polar15, snap)).toEqual(snap);
+    expect(resolvePoint({ x: 3.05, y: 2.41 }, base, 'polar', {}, ortho, snap)).toEqual(snap);
+  });
+
+  it('locked values beat the snap', () => {
+    expect(resolvePoint(snap, base, 'polar', { angle: 90 }, polar15, snap)).toEqual({ x: 1, y: 2.4 });
+    expect(resolvePoint(snap, undefined, 'absolute', { x: 0.5 }, free, snap)).toEqual({ x: 0.5, y: 2.4 });
+  });
+});

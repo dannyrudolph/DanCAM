@@ -475,6 +475,16 @@ input {
   background: #1d3a57;
 }
 
+.context-menu button.checkable::before {
+  content: '';
+  display: inline-block;
+  width: 1.4em;
+}
+
+.context-menu button.checked::before {
+  content: '✓';
+}
+
 .context-menu button:disabled {
   opacity: 0.4;
 }

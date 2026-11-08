@@ -91,8 +91,8 @@ export class InputBoxes {
   }
 
   /** The point a click or Enter would place now, counting valid text still being typed. */
-  resolve(cursor: Vec2, tracking: Tracking): Vec2 {
-    return resolvePoint(cursor, this.request?.base, this.effectiveMode(), this.provisionalLocks(), tracking);
+  resolve(cursor: Vec2, tracking: Tracking, snap?: Vec2): Vec2 {
+    return resolvePoint(cursor, this.request?.base, this.effectiveMode(), this.provisionalLocks(), tracking, snap);
   }
 
   /** The value a click or Enter would give a value request now: typed, else from the cursor. */

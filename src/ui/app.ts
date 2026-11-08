@@ -6,7 +6,7 @@ import { pointTool } from '../commands/pointTool';
 import { type ToolContext, type ToolDef, type ToolInput, ToolRunner } from '../commands/tool';
 import { rayTool } from '../commands/rayTool';
 import { createXlineTool } from '../commands/xlineTool';
-import type { Vec2 } from '../geometry/vec';
+import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
 import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
@@ -17,6 +17,7 @@ import { ensureCurrentLayer } from '../model/layers';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { render } from '../render/renderer';
 import * as vp from '../render/viewport';
+import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
 import { DrawingFile } from './fileAccess';
 import { ICONS } from './icons';
@@ -28,6 +29,8 @@ import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
 
 /** Pick radius around the cursor, CSS pixels. */
 const PICK_RADIUS_PX = 6;
+/** Object snap aperture around the cursor, CSS pixels. */
+const SNAP_APERTURE_PX = 10;
 /** Initial view of an inch drawing: about 4" across a 1000px canvas (the same size in mm). */
 const INITIAL_SCALE_PER_INCH = 250;
 const INITIAL_CENTER_INCH = { x: 1.5, y: 1 };
@@ -140,7 +143,11 @@ export class App {
     polar: true,
     polarIncrementDeg: 15,
     precision: DEFAULT_PRECISION,
+    osnap: true,
+    snapKinds: new Set(DEFAULT_SNAP_KINDS),
   };
+  /** A snap picked from the right-click menu for the next point only; it replaces the running snaps. */
+  private onceSnap: SnapKind | undefined;
 
   private view: vp.Viewport;
   private cursorScreen: Vec2 | undefined;
@@ -164,10 +171,15 @@ export class App {
     this.view = initialView(drawing.units, 1, 1);
     this.shownUnits = drawing.units;
 
-    this.status = new StatusBar(el('status'), this.settings, () => {
-      saveScrollMode(this.settings.scrollMode);
-      this.refresh();
-    });
+    this.status = new StatusBar(
+      el('status'),
+      this.settings,
+      () => {
+        saveScrollMode(this.settings.scrollMode);
+        this.refresh();
+      },
+      (anchor) => this.openSnapMenu(anchor),
+    );
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
       precision: () => this.settings.precision,
@@ -301,12 +313,13 @@ export class App {
   }
 
   /**
-   * Esc: close the menu, else leave Pan, else clear locked values, else leave
-   * the tool, else clear the selection.
+   * Esc: close the menu, else leave Pan, else drop a one-time snap, else clear
+   * locked values, else leave the tool, else clear the selection.
    */
   private escape(): void {
     if (this.menu.isOpen) this.menu.close();
     else if (this.panMode) this.setPanMode(false);
+    else if (this.onceSnap) this.onceSnap = undefined;
     else if (this.boxes.hasLocks || this.boxes.focused) this.boxes.clearLocks();
     else if (this.runner.tool) this.runner.stop();
     else this.selected = undefined;
@@ -324,12 +337,25 @@ export class App {
     const req = this.runner.request;
     if (!req) return;
     const cursor = this.cursorWorld();
-    if (req.kind === 'point') {
-      this.send({ kind: 'point', at: this.nextPoint() });
-    } else if (req.kind === 'value') {
-      const value = this.boxes.resolveValue(cursor);
-      if (value === undefined) this.status.showMessage(`Type a value for ${req.label}, then press Enter.`);
-      else this.send({ kind: 'value', value, at: cursor });
+    if (req.kind === 'point' || req.kind === 'value') {
+      const snap = this.currentSnap();
+      if (this.onceSnap && !snap) {
+        this.status.showMessage(`No ${SNAP_LABEL[this.onceSnap]} point here. Esc drops the one-time snap.`);
+        return;
+      }
+      if (req.kind === 'point') {
+        this.onceSnap = undefined;
+        this.send({ kind: 'point', at: this.nextPoint(snap) });
+        return;
+      }
+      const at = snap?.at ?? cursor;
+      const value = this.boxes.resolveValue(at);
+      if (value === undefined) {
+        this.status.showMessage(`Type a value for ${req.label}, then press Enter.`);
+        return;
+      }
+      this.onceSnap = undefined;
+      this.send({ kind: 'value', value, at });
     } else {
       const id = this.pickAt(cursor, req.accepts);
       if (id) this.send({ kind: 'entity', id, at: cursor });
@@ -394,8 +420,56 @@ export class App {
   }
 
   /** Where a click or Enter places the point now. */
-  private nextPoint(): Vec2 {
-    return this.boxes.resolve(this.cursorWorld(), this.tracking());
+  private nextPoint(snap: Snap | undefined): Vec2 {
+    return this.boxes.resolve(this.cursorWorld(), this.tracking(), snap?.at);
+  }
+
+  /** The object snap under the cursor for the waiting point or value step, if any. */
+  private currentSnap(): Snap | undefined {
+    const req = this.runner.request;
+    if (!req || req.kind === 'entity' || !this.cursorScreen) return undefined;
+    const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.osnap ? this.settings.snapKinds : undefined;
+    if (!kinds) return undefined;
+    return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base);
+  }
+
+  /** The status bar's snap list; stays open while kinds are switched on and off. */
+  private openSnapMenu(anchor: DOMRect): void {
+    const kinds = this.settings.snapKinds;
+    this.menu.open(
+      anchor.left,
+      anchor.top,
+      SNAP_KINDS.map((k) => ({
+        label: SNAP_LABEL[k],
+        enabled: true,
+        checked: kinds.has(k),
+        run: () => {
+          if (kinds.has(k)) kinds.delete(k);
+          else kinds.add(k);
+          this.refresh();
+          this.openSnapMenu(anchor);
+        },
+      })),
+    );
+  }
+
+  /** Right-click "Snap once…": the snap kinds for the next point. Perpendicular and Tangent need a base point. */
+  private openSnapOnceMenu(x: number, y: number): void {
+    const base = this.runner.request?.base;
+    this.menu.open(
+      x,
+      y,
+      SNAP_KINDS.map((k) => ({
+        label: SNAP_LABEL[k],
+        enabled: base !== undefined || !NEEDS_BASE.has(k),
+        checked: this.onceSnap === k,
+        run: () => {
+          this.onceSnap = k;
+          this.status.showMessage(`${SNAP_LABEL[k]} for the next point`);
+          this.refresh();
+        },
+      })),
+    );
   }
 
   // ---- UI sync ---------------------------------------------------------------
@@ -411,6 +485,7 @@ export class App {
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     this.layers.show(this.drawing);
     const req = this.runner.request;
+    if (!req || req.kind === 'entity') this.onceSnap = undefined;
     this.boxes.setRequest(req);
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
@@ -457,13 +532,18 @@ export class App {
     const cursor = this.cursorScreen ? this.cursorWorld() : undefined;
     let next: Vec2 | undefined;
     let preview: readonly Entity[] = [];
+    let snap = this.currentSnap();
     if (req && cursor) {
       if (req.kind === 'point') {
-        next = this.nextPoint();
+        next = this.nextPoint(snap);
         preview = req.preview?.(next) ?? [];
+        // Locked values moved the point off the snap, so the snap isn't what a click gives.
+        if (snap && !vecNearlyEqual(next, snap.at)) snap = undefined;
       } else if (req.kind === 'value') {
-        const value = this.boxes.resolveValue(cursor);
-        if (value !== undefined) preview = req.preview?.(value, cursor) ?? [];
+        if (this.boxes.hasLocks) snap = undefined;
+        const at = snap?.at ?? cursor;
+        const value = this.boxes.resolveValue(at);
+        if (value !== undefined) preview = req.preview?.(value, at) ?? [];
       } else {
         // Highlight what a click would pick.
         const hit = this.pickAt(cursor, req.accepts);
@@ -471,9 +551,10 @@ export class App {
         if (e) preview = [e];
       }
     }
-    render(this.g, this.view, this.drawing, { preview, selected: this.selected, nextPoint: next }, window.devicePixelRatio || 1);
-    this.status.setCursor(next ?? cursor, req?.base);
-    this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : cursor);
+    render(this.g, this.view, this.drawing, { preview, selected: this.selected, nextPoint: next, snap }, window.devicePixelRatio || 1);
+    this.canvas.dataset.snap = snap?.kind ?? '';
+    this.status.setCursor(next ?? snap?.at ?? cursor, req?.base);
+    this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : (snap?.at ?? cursor));
   }
 
   private fitCanvas(): void {
@@ -576,7 +657,7 @@ export class App {
     this.setSidePanel(loadSidePanel());
   }
 
-  private contextItems(): MenuItem[] {
+  private contextItems(x: number, y: number): MenuItem[] {
     const req = this.runner.request;
     if (!req) {
       return [
@@ -588,6 +669,7 @@ export class App {
     return [
       { label: 'Enter', enabled: this.boxes.hasLocks || req.canFinish === true, run: () => this.enter(this.boxes.enterAction()) },
       { label: 'Cancel', enabled: true, run: () => this.escape() },
+      ...(req.kind === 'entity' ? [] : [{ label: 'Snap once…', enabled: true, run: () => this.openSnapOnceMenu(x, y) }]),
       ...(req.options ?? []).map((o) => ({ label: o.label, enabled: o.enabled, run: () => this.send({ kind: 'option', key: o.key }) })),
     ];
   }
@@ -616,7 +698,7 @@ export class App {
           this.refresh();
         }
       },
-      contextMenu: (x, y) => this.menu.open(x, y, this.contextItems()),
+      contextMenu: (x, y) => this.menu.open(x, y, this.contextItems(x, y)),
       leftDragPans: () => this.panMode || this.spaceHeld,
       panningChanged: (panning) => this.updateCanvasCursor(panning),
       scrollMode: () => this.settings.scrollMode,
@@ -672,9 +754,10 @@ export class App {
         this.spaceHeld = true;
         this.updateCanvasCursor(false);
       }
-    } else if (e.key === 'F8' || e.key === 'F10') {
+    } else if (e.key === 'F3' || e.key === 'F8' || e.key === 'F10') {
       e.preventDefault();
-      if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
+      if (e.key === 'F3') this.settings.osnap = !this.settings.osnap;
+      else if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
       else this.settings.polar = !this.settings.polar;
       this.refresh();
     } else if (e.key === 'Escape') {
