@@ -110,7 +110,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 Also in Phase 2, at the user's request: Rotate's Reference option (two
 points along an edge, then its new angle).
 
-## Phase 3 (plan approved 2026-11-08): in progress
+## Phase 3 (plan approved 2026-11-08): done 2026-11-08, awaiting the user's review
 
 1. **Trim/extend kernel (done).** `geometry/trim.trimCurve` (removed piece +
    kept pieces; new ends are the cut points; cuts within TOL of an end or of
@@ -168,8 +168,15 @@ points along an edge, then its new angle).
    and second point; visible objects only; one step. No selection-first
    for Stretch (it needs the window itself). `editTools.point` / `value`
    exported and reused. `ui/shortcuts.test` guards unique tool keys.
-6. Done-when e2e: turned profile from xlines by trimming, R.020 fillet,
-   .010 x 45° chamfer, checked with ID/List to 1e-12.
+6. **Done-when e2e (done).** Six xlines (centerline, Ø.250, Ø.375, front
+   face, shoulder, back face) trimmed with Trim / Enter = all into a shaft
+   step, then a .010 x 45° chamfer and an R.020 fillet; every vertex
+   checked in the properties panel at full precision to 1e-12. Also: the
+   toolbar wraps to a second row on narrow windows (at 1024px the extra
+   buttons had pushed the page wider than the window).
+
+**Next:** Phase 4, after the user's go-ahead (CAD-7). Re-read the spec's
+"Dimensioning" section and propose a plan first.
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results

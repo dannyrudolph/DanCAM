@@ -41,6 +41,7 @@ input {
 #app {
   display: grid;
   grid-template-rows: auto auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr); /* no bar can widen the page past the window */
   height: 100%;
 }
 
@@ -99,6 +100,7 @@ input {
 /* Drawing tools: their own row under the file and view buttons. */
 #toolbar {
   gap: 4px;
+  flex-wrap: wrap; /* a second row on narrow windows */
 }
 
 .units-button {

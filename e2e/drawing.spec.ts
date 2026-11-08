@@ -1036,3 +1036,78 @@ test.describe('trim and extend', () => {
     await expect(prop(page, 'End Y')).toHaveText('0.00000000');
   });
 });
+
+test.describe('Phase 3 done-when: a turned profile built from construction lines by trimming alone', () => {
+  test('six xlines trimmed to a shaft step, with a .010 x 45° chamfer and an R.020 fillet, exact to 1e-12', async ({ page }) => {
+    // Xlines: centerline and two radii (Ø.250, Ø.375), the front face, shoulder at Z .4 and back face at Z 1.
+    await page.keyboard.press('x');
+    await expect(page.locator('[data-option="method:h"]')).toHaveClass(/active/);
+    for (const y of ['0', '0.125', '0.1875']) await typeValues(page, '0', y);
+    await page.locator('[data-option="method:v"]').click();
+    for (const x of ['0', '0.4', '1']) await typeValues(page, x, '0');
+    await page.keyboard.press('Escape');
+    // Two points frame the part, since Zoom Extents leaves xlines out.
+    await page.keyboard.press('p');
+    await typeValues(page, '-0.1', '-0.05');
+    await typeValues(page, '1.1', '0.25');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('8');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -0.1, maxX: 1.1, minY: -0.05, maxY: 0.25 });
+    const click = async (x: number, y: number) => {
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+    };
+
+    await page.keyboard.press('t');
+    await page.keyboard.press('Enter'); // every object is a cutting edge
+    // Each xline: one far side, then inward from that side, then the other far side.
+    const picks: [number, number][] = [
+      [-0.05, 0], [1.05, 0], // centerline: Z 0 to 1
+      [1.05, 0.125], [0.7, 0.125], [-0.05, 0.125], // Ø.250: Z 0 to .4
+      [-0.05, 0.1875], [0.2, 0.1875], [1.05, 0.1875], // Ø.375: Z .4 to 1
+      [0, 0.22], [0, -0.03], // front face: centerline to Ø.250
+      [0.4, -0.03], [0.4, 0.06], [0.4, 0.22], // shoulder: Ø.250 to Ø.375
+      [1, 0.22], [1, -0.03], // back face: Ø.375 to centerline
+    ];
+    for (const [x, y] of picks) await click(x, y);
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('8'); // trimmed in place, nothing split off
+
+    await page.keyboard.press('Shift+F');
+    await page.locator('[data-option="angle"]').click();
+    await page.locator('[data-option="sizes"]').click();
+    await typeValues(page, '0.010');
+    await typeValues(page, '45');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer (0.01 × 45°): pick the first object');
+    await click(0.2, 0.125); // the Ø.250 line, measured along it
+    await click(0, 0.06); // the front face
+    await page.keyboard.press('Escape');
+
+    await page.keyboard.press('f');
+    await page.locator('[data-option="radius"]').click();
+    await typeValues(page, '0.020');
+    await click(0.3, 0.125);
+    await click(0.4, 0.17);
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('10');
+
+    const exact = async (label: string) => Number(await prop(page, label).getAttribute('title'));
+    const expectProps = async (x: number, y: number, kind: RegExp, want: Record<string, number>) => {
+      await page.keyboard.press('Escape'); // clear the selection
+      await click(x, y);
+      await expect(page.locator('#properties h2')).toHaveText(kind);
+      for (const [label, value] of Object.entries(want)) expect(Math.abs((await exact(label)) - value), label).toBeLessThanOrEqual(1e-12);
+    };
+    const line = (sx: number, sy: number, ex: number, ey: number) => ({ 'Start X': sx, 'Start Y': sy, 'End X': ex, 'End Y': ey });
+    await expectProps(0.5, 0, /^Line /, line(0, 0, 1, 0));
+    await expectProps(0, 0.05, /^Line /, line(0, 0.115, 0, 0));
+    await expectProps(0.005, 0.12, /^Line /, line(0.01, 0.125, 0, 0.115)); // the chamfer
+    await expectProps(0.2, 0.125, /^Line /, line(0.38, 0.125, 0.01, 0.125));
+    const m = 0.02 * Math.SQRT1_2;
+    await expectProps(0.38 + m, 0.145 - m, /^Arc /, { 'Center X': 0.38, 'Center Y': 0.145, Radius: 0.02, 'Start X': 0.38, 'Start Y': 0.125, 'End X': 0.4, 'End Y': 0.145 });
+    await expectProps(0.4, 0.17, /^Line /, line(0.4, 0.145, 0.4, 0.1875));
+    await expectProps(0.7, 0.1875, /^Line /, line(0.4, 0.1875, 1, 0.1875));
+    await expectProps(1, 0.1, /^Line /, line(1, 0.1875, 1, 0));
+  });
+});
