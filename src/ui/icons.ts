@@ -18,6 +18,8 @@ export const ICONS = {
   scale: svg('<rect x="2" y="10" width="6" height="6"/><rect x="2" y="3" width="13" height="13" stroke-dasharray="2 1.5"/><path d="M8 10 L17 1 M17 1 H13.5 M17 1 V4.5"/>'),
   trim: svg('<path d="M3 10 H11" /><path d="M11 10 H17" stroke-dasharray="1.5 2"/><path d="M11 3 V17"/><path d="M14 4 L17 7 M17 4 L14 7"/>'),
   extend: svg('<path d="M3 10 H9"/><path d="M9 10 H15" stroke-dasharray="1.5 2"/><path d="M16 3 V17"/><path d="M12 7.5 L15 10 L12 12.5"/>'),
+  fillet: svg('<path d="M3 3 V10 A7 7 0 0 0 10 17 H17"/>'),
+  chamfer: svg('<path d="M3 3 V11 L9 17 H17"/>'),
   dist: svg('<path d="M3 10 H17 M3 6 V14 M17 6 V14 M6 8 L3 10 L6 12 M14 8 L17 10 L14 12"/>'),
   id: svg('<path d="M10 2 V7 M10 13 V18 M2 10 H7 M13 10 H18"/><circle cx="10" cy="10" r="3"/>'),
   list: svg('<path d="M7 5 H17 M7 10 H17 M7 15 H17"/><circle cx="3.5" cy="5" r="1" fill="currentColor"/><circle cx="3.5" cy="10" r="1" fill="currentColor"/><circle cx="3.5" cy="15" r="1" fill="currentColor"/>'),

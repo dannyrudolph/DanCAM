@@ -128,7 +128,18 @@ points along an edge, then its new angle).
    previews allocate no ids). `EntityRequest.preview`, entity input `shift`,
    `SelectionRequest.canFinish` (Enter with nothing selected = finish).
    Toolbar: fourth group (Modify).
-3. Fillet (F) and Chamfer (Shift+F).
+3. **Fillet (F) and Chamfer (Shift+F) (done).** `geometry/corner`:
+   `filletCurves` (lines, rays, xlines, arcs, circles; the center is on the
+   side of each curve where the other pick is, then nearest the picks;
+   straight curves keep the part running away from the arc, arcs the part
+   with the pick, circles stay whole; parallel lines get a half-circle at
+   the first line's picked end; radius 0 = sharp corner) and `chamferLines`
+   (straight curves; distances or distance + angle from the first line).
+   `commands/cornerTools`: pick two objects (second previews), one undo
+   step, sticky; Radius… / Sizes… (typed values), Distances / Distance,
+   Angle, Trim / No trim, all remembered for the session. Defaults R 0,
+   chamfer 0 × 0 (AutoCAD's). The joint takes the objects' layer and style
+   when they share them, else the current ones.
 4. Offset (O), Break (B), Join (J), Lengthen (Shift+L).
 5. Array (Shift+A) and Stretch (Shift+S).
 6. Done-when e2e: turned profile from xlines by trimming, R.020 fillet,
