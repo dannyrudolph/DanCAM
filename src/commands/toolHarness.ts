@@ -12,11 +12,17 @@ export function setup(style?: 'hidden') {
   const drawing = createDrawing('in');
   const undo = new UndoStack(drawing);
   const messages: string[] = [];
+  /** What the app has selected when a tool starts; tests set it directly. */
+  let selected: string[] = [];
+  const select = (...ids: string[]): void => {
+    selected = ids;
+  };
   const ctx: ToolContext = {
     drawing,
     undo,
     newProps: () => (style ? { layer: '0', style } : { layer: '0' }),
     message: (m) => messages.push(m),
+    selection: () => selected,
     continuation: undefined,
   };
   const runner = new ToolRunner(ctx);
@@ -38,5 +44,6 @@ export function setup(style?: 'hidden') {
     if (req?.kind === 'value') return req.preview?.(v ?? req.fromCursor?.(p) ?? 0, p) ?? [];
     return [];
   };
-  return { drawing, undo, messages, ctx, runner, click, value, pick, option, add, entities, last, lines, preview };
+  const selectionDone = (...ids: string[]): void => runner.send({ kind: 'selection', ids });
+  return { drawing, undo, messages, ctx, runner, click, value, pick, option, add, entities, last, lines, preview, select, selectionDone };
 }

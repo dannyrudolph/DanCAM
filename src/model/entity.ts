@@ -2,6 +2,7 @@ import { arcBBox } from '../geometry/arc';
 import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
 import { circleBBox } from '../geometry/circle';
 import type { Curve } from '../geometry/curve';
+import { type Transform, transformArc, transformDir, transformLength, transformPoint } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
 import type { LineStyleName } from './lineStyle';
 
@@ -80,6 +81,24 @@ export function entityBBox(e: Entity): BBox {
     case 'xline':
     case 'ray':
       return EMPTY_BBOX;
+  }
+}
+
+/** The entity moved, rotated, mirrored or scaled; same id, layer and style. */
+export function transformEntity(e: Entity, t: Transform): Entity {
+  const p = (v: Vec2): Vec2 => transformPoint(t, v);
+  switch (e.kind) {
+    case 'point':
+      return { ...e, at: p(e.at) };
+    case 'line':
+      return { ...e, start: p(e.start), end: p(e.end) };
+    case 'circle':
+      return { ...e, center: p(e.center), radius: transformLength(t, e.radius) };
+    case 'arc':
+      return { ...e, ...transformArc(t, e) };
+    case 'xline':
+    case 'ray':
+      return { ...e, base: p(e.base), dir: transformDir(t, e.dir) };
   }
 }
 

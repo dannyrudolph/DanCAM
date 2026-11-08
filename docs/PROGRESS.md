@@ -91,9 +91,14 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    keeps start+angle, Angle keeps start+length, arc Included angle / Arc
    length keep the start. Layer and Style dropdowns, also for multi-select
    ("(varies)"). Also added: Select arrow button (no tool), arrow cursor.
-5. **Edit tools.** Erase (E, Del), Move (M), Copy (Shift+C, repeats),
-   Rotate (R), Mirror (I, keep/erase), Scale (S); selection first or a new
-   `selection` request.
+5. **Edit tools (done).** `commands/editTools`: Erase (E, Delete/Backspace
+   with a selection), Move (M), Copy (Shift+C, a copy per point until Enter),
+   Rotate (R, angle typed or from the cursor), Mirror (I, Keep/Erase
+   originals option, remembered), Scale (S, `factor` quantity: plain number,
+   or cursor distance). Selection first (`ToolContext.selection()`), else a
+   `selection` request (clicks and boxes as usual, Enter hands it over).
+   Edit tools are one-shot (`repeat: false`) and the selection is kept after.
+   `model/entity.transformEntity`. Toolbar: separator, then edit tools.
 6. **Inquiry.** Dist (D), ID, List, Angle; results in a sidebar panel; e2e
    for the phase's done-when (line-arc and arc-arc Tan/Int checked with ID).
 

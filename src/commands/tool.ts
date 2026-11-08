@@ -42,8 +42,8 @@ export type ValueRequest = {
   readonly prompt: string;
   /** Label on the input box, e.g. "R", "Ø", "∠". */
   readonly label: string;
-  /** How typed text is read: lengths take unit suffixes, angles are degrees. */
-  readonly quantity: 'length' | 'angle';
+  /** How typed text is read: lengths take unit suffixes, angles are degrees, factors are plain numbers. */
+  readonly quantity: 'length' | 'angle' | 'factor';
   /** The value the cursor gives. Absent when the value can only be typed. */
   readonly fromCursor?: (cursor: Vec2) => number | undefined;
   /** Point the value is measured from, for the status line. */
@@ -66,7 +66,19 @@ export type EntityRequest = {
   readonly canFinish?: boolean;
 };
 
-export type Request = PointRequest | ValueRequest | EntityRequest;
+/**
+ * A step that asks for objects to work on. Clicks and window/crossing drags
+ * build the selection as they do with no tool; Enter answers with it.
+ */
+export type SelectionRequest = {
+  readonly kind: 'selection';
+  readonly prompt: string;
+  readonly base?: never;
+  readonly options?: readonly ToolOption[];
+  readonly canFinish?: boolean;
+};
+
+export type Request = PointRequest | ValueRequest | EntityRequest | SelectionRequest;
 
 export type ToolInput =
   /** `deferred` is set only for a step that `acceptsDeferred`; `at` is then where the curve was clicked. */
@@ -75,6 +87,7 @@ export type ToolInput =
   | { readonly kind: 'value'; readonly value: number; readonly at: Vec2 }
   /** `at` is where the entity was clicked. */
   | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2 }
+  | { readonly kind: 'selection'; readonly ids: readonly EntityId[] }
   | { readonly kind: 'option'; readonly key: string }
   | { readonly kind: 'finish' };
 
@@ -95,6 +108,8 @@ export interface ToolContext {
   newProps(): EntityProps;
   /** Shows a short message to the user (status line). */
   message(text: string): void;
+  /** The objects selected now, in the order they were picked (an edit tool's selection-first input). */
+  selection(): readonly EntityId[];
   /** Set by the Line and Arc tools each time they add an entity. */
   continuation: Continuation | undefined;
 }

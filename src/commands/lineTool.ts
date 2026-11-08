@@ -61,6 +61,7 @@ export const lineTool: ToolDef = {
         }
         continue;
       }
+      if (input.kind === 'selection') continue;
       if (vecNearlyEqual(input.at, from)) {
         ctx.message('That point is the same as the last one; pick another.');
         continue;

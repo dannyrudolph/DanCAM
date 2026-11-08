@@ -842,3 +842,66 @@ test.describe('editing', () => {
     await expect(prop(page, 'End Y')).toHaveText('0.00000000');
   });
 });
+
+test.describe('edit tools', () => {
+  /** One line (0,0)-(1,0), fitted and selected; returns the canvas center (its midpoint). */
+  async function oneSelectedLine(page: Page) {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const c = await canvasCenter(page);
+    await page.mouse.click(c.x, c.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    return c;
+  }
+
+  test('Move with typed points moves the selection exactly and returns to selecting', async ({ page }) => {
+    await oneSelectedLine(page);
+    await page.keyboard.press('m');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Move: pick the base point');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '0.5', '90'); // up 0.5
+    await expect(page.getByTestId('tool-select')).toHaveClass(/active/);
+    await expect(prop(page, 'Start X')).toHaveText('0.0000');
+    await expect(prop(page, 'Start Y')).toHaveText('0.5000');
+    await expect(prop(page, 'End Y')).toHaveText('0.5000');
+  });
+
+  test('Delete erases the selection; Undo brings it back', async ({ page }) => {
+    await oneSelectedLine(page);
+    await page.keyboard.press('Delete');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+  });
+
+  test('with nothing selected, a tool asks for objects; a window and Enter give them', async ({ page }) => {
+    await oneSelectedLine(page);
+    await page.keyboard.press('Escape'); // clear the selection
+    await page.getByTestId('tool-erase').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Erase: select objects, then press Enter');
+    await expect(page.locator('#canvas')).toHaveClass(/selecting/);
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.move(box.x + 5, box.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(box.x + box.width - 5, box.y + box.height - 5);
+    await page.mouse.up();
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /); // selected, not erased until Enter
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+  });
+
+  test('Copy places a copy at each point until Enter', async ({ page }) => {
+    await oneSelectedLine(page);
+    await page.keyboard.press('Shift+C');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '0.25', '90');
+    await typeValues(page, '0.5', '90');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+  });
+});

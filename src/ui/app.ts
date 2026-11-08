@@ -1,5 +1,6 @@
 import { createArcTool } from '../commands/arcTool';
 import { createCircleTool } from '../commands/circleTool';
+import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from '../commands/editTools';
 import { gripTool } from '../commands/gripTool';
 import { lineTool } from '../commands/lineTool';
 import type { Tracking } from '../commands/pointInput';
@@ -48,7 +49,9 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
   };
 }
 
-export const TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
+export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
+export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
+export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -218,6 +221,7 @@ export class App {
       undo: this.undo,
       newProps: () => this.newProps(),
       message: (m) => this.status.showMessage(m),
+      selection: () => [...this.selected],
       continuation: undefined,
     };
     return new ToolRunner(ctx);
@@ -341,7 +345,8 @@ export class App {
   }
 
   private enter(action: EnterAction): void {
-    if (action === 'place') this.place();
+    if (this.runner.request?.kind === 'selection') this.submitSelection();
+    else if (action === 'place') this.place();
     else if (action === 'finish') this.send({ kind: 'finish' });
     else this.requestRedraw();
   }
@@ -371,11 +376,20 @@ export class App {
       }
       this.onceSnap = undefined;
       this.send({ kind: 'value', value, at });
-    } else {
+    } else if (req.kind === 'entity') {
       const id = this.pickAt(cursor, req.accepts);
       if (id) this.send({ kind: 'entity', id, at: cursor });
       else this.status.showMessage('Nothing there that this step can use.');
     }
+  }
+
+  /** Enter at a `selection` step: hands the tool what is selected. */
+  private submitSelection(): void {
+    if (this.selected.size === 0) {
+      this.status.showMessage('Select objects first: click them or drag a window.');
+      return;
+    }
+    this.send({ kind: 'selection', ids: [...this.selected] });
   }
 
   private pickAt(world: Vec2, accepts?: (e: Entity) => boolean): EntityId | undefined {
@@ -483,7 +497,7 @@ export class App {
   /** The object snap under the cursor for the waiting point or value step, if any. */
   private currentSnap(): Snap | undefined {
     const req = this.runner.request;
-    if (!req || req.kind === 'entity' || !this.cursorScreen) return undefined;
+    if (!req || (req.kind !== 'point' && req.kind !== 'value') || !this.cursorScreen) return undefined;
     const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.osnap ? this.settings.snapKinds : undefined;
     if (!kinds) return undefined;
     // Typed values pin the point, so a sliding (deferred) end can't apply.
@@ -547,14 +561,14 @@ export class App {
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     this.layers.show(this.drawing);
     const req = this.runner.request;
-    if (!req || req.kind === 'entity') this.onceSnap = undefined;
+    if (!req || (req.kind !== 'point' && req.kind !== 'value')) this.onceSnap = undefined;
     this.boxes.setRequest(req);
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
     if (this.runner.tool?.id !== 'grip') this.hotGrip = undefined;
-    const selecting = !this.runner.tool;
-    this.selectButton?.classList.toggle('active', selecting && !this.panMode);
+    const selecting = !this.runner.tool || req?.kind === 'selection';
+    this.selectButton?.classList.toggle('active', !this.runner.tool && !this.panMode);
     this.canvas.classList.toggle('selecting', selecting);
     this.renderOptions();
     // Undo may have removed a selected entity, or its layer may now be hidden.
@@ -616,7 +630,7 @@ export class App {
         const at = snap?.at ?? cursor;
         const value = this.boxes.resolveValue(at);
         if (value !== undefined) preview = req.preview?.(value, at) ?? [];
-      } else {
+      } else if (req.kind === 'entity') {
         // Highlight what a click would pick.
         const hit = this.pickAt(cursor, req.accepts);
         const e = hit && this.drawing.entities.get(hit);
@@ -655,12 +669,21 @@ export class App {
     const bar = el('toolbar');
     this.selectButton = button(ICONS.select, 'Select (Esc): pick objects, or drag a window', () => this.selectMode(), 'tool-select');
     bar.append(this.selectButton);
-    for (const def of TOOLS) {
-      const icon = ICONS[def.id as keyof typeof ICONS];
-      const b = button(icon, `${def.label} (${shortcutLabel(def.shortcut)})`, () => this.startTool(def), `tool-${def.id}`);
-      this.toolButtons.set(def.id, b);
-      bar.append(b);
-    }
+    const addTools = (defs: readonly ToolDef[]): void => {
+      for (const def of defs) {
+        const icon = ICONS[def.id as keyof typeof ICONS];
+        const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
+        const tip = `${def.label} (${keys})`;
+        const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
+        this.toolButtons.set(def.id, b);
+        bar.append(b);
+      }
+    };
+    addTools(DRAW_TOOLS);
+    const gap = document.createElement('span');
+    gap.className = 'toolbar-separator';
+    bar.append(gap);
+    addTools(EDIT_TOOLS);
     const u = this.unitsButton;
     u.type = 'button';
     u.className = 'units-button';
@@ -751,9 +774,13 @@ export class App {
       ];
     }
     return [
-      { label: 'Enter', enabled: this.boxes.hasLocks || req.canFinish === true, run: () => this.enter(this.boxes.enterAction()) },
+      {
+        label: 'Enter',
+        enabled: req.kind === 'selection' ? this.selected.size > 0 : this.boxes.hasLocks || req.canFinish === true,
+        run: () => this.enter(this.boxes.enterAction()),
+      },
       { label: 'Cancel', enabled: true, run: () => this.escape() },
-      ...(req.kind === 'entity' ? [] : [{ label: 'Snap once…', enabled: true, run: () => this.openSnapOnceMenu(x, y) }]),
+      ...(req.kind === 'entity' || req.kind === 'selection' ? [] : [{ label: 'Snap once…', enabled: true, run: () => this.openSnapOnceMenu(x, y) }]),
       ...(req.options ?? []).map((o) => ({ label: o.label, enabled: o.enabled, run: () => this.send({ kind: 'option', key: o.key }) })),
     ];
   }
@@ -775,7 +802,7 @@ export class App {
       },
       click: (screen, shift) => {
         this.cursorScreen = screen;
-        if (this.runner.request) {
+        if (this.runner.request && this.runner.request.kind !== 'selection') {
           this.place();
         } else {
           this.clickSelect(this.pickAt(this.cursorWorld()), shift);
@@ -796,7 +823,7 @@ export class App {
         this.cursorScreen = screen;
         if (this.runner.tool?.id === 'grip') this.place();
       },
-      leftDragSelects: () => !this.runner.request,
+      leftDragSelects: () => !this.runner.request || this.runner.request.kind === 'selection',
       box: (from, to, done, shift) => {
         const mode = boxModeFor(from.x, to.x);
         if (!done) {
@@ -879,6 +906,9 @@ export class App {
     } else if (e.key === 'Escape') {
       e.preventDefault();
       this.escape();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && !this.runner.tool && this.selected.size > 0) {
+      e.preventDefault();
+      this.startTool(eraseTool);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       this.enter(this.boxes.enterAction());

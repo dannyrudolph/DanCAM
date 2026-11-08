@@ -166,6 +166,13 @@ input {
 }
 
 /* No tool: picking and selection boxes, so an arrow rather than crosshairs. */
+.toolbar-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
 #canvas.selecting {
   cursor: default;
 }

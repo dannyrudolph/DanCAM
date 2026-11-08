@@ -8,7 +8,7 @@ import {
   resolvePoint,
 } from '../commands/pointInput';
 import type { Request } from '../commands/tool';
-import { type ParseResult, parseAngle, parseLength } from '../commands/valueExpr';
+import { type ParseResult, parseAngle, parseFactor, parseLength } from '../commands/valueExpr';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
 import { formatNumber } from './statusBar';
@@ -191,8 +191,10 @@ export class InputBoxes {
   }
 
   private parse(f: Field): ParseResult {
-    const angle = f.key === 'angle' || (f.key === 'value' && this.request?.kind === 'value' && this.request.quantity === 'angle');
-    return angle ? parseAngle(f.input.value) : parseLength(f.input.value, this.host.units());
+    const q = f.key === 'value' && this.request?.kind === 'value' ? this.request.quantity : undefined;
+    if (f.key === 'angle' || q === 'angle') return parseAngle(f.input.value);
+    if (q === 'factor') return parseFactor(f.input.value);
+    return parseLength(f.input.value, this.host.units());
   }
 
   /** Locks a typed value, or unlocks the field when it was emptied. False if the text is invalid. */
