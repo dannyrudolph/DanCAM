@@ -675,6 +675,11 @@ input {
   align-items: center;
   padding: 2px;
   border-radius: 4px;
+  cursor: pointer;
+}
+
+.block-row:hover {
+  background: var(--panel-2);
 }
 
 .block-preview {

@@ -502,6 +502,14 @@ Spec: "Blocks".
    pixels; fails if inserts aren't drawn) and its properties.
    Unit scaling on insert moves to step 6, where blocks come from a library
    in another unit; a drawing's own blocks are always in its units.
+   **2b (done)** `createInsertTool` (Shift+I, sticky, one undo step per
+   copy): the block last chosen (Blocks panel row click, or its button in
+   the options bar), else the first by name; click the base point (preview
+   at the cursor), then pick or type the rotation (Enter keeps the last).
+   Options Mirror (toggle) and Scale (typed, more than zero); block,
+   rotation, mirror and scale kept for the session. On the current layer
+   and style. Browser test: panel click → Insert, a copy turned 90°, a
+   mirrored copy, both drawn (canvas pixels) and shown in properties.
 3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
    Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
    Z/X, rotation, scale, mirrored), List; Explode (Shift+U).

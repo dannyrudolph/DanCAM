@@ -4,12 +4,21 @@ import { type BlockDef, insertsOf } from '../model/block';
 import type { Drawing } from '../model/drawing';
 import { entityBBox } from '../model/entity';
 
+export type BlocksHost = {
+  /** Starts Insert with the block named `name`. */
+  insert(name: string): void;
+};
+
 /**
  * The Blocks panel (spec, "Blocks"): the drawing's blocks by name, each
  * with a small preview, how many instances there are, and its description.
+ * Clicking one starts Insert with it.
  */
 export class BlocksPanel {
-  constructor(private readonly root: HTMLElement) {}
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly host: BlocksHost,
+  ) {}
 
   show(d: Drawing): void {
     const title = document.createElement('h2');
@@ -31,7 +40,8 @@ export class BlocksPanel {
       const li = document.createElement('li');
       li.className = 'block-row';
       li.dataset.block = def.name;
-      li.title = def.description === '' ? def.name : `${def.name}: ${def.description}`;
+      li.title = `Insert ${def.name}${def.description === '' ? '' : `: ${def.description}`}`;
+      li.addEventListener('click', () => this.host.insert(def.name));
       const preview = document.createElement('span');
       preview.className = 'block-preview';
       preview.innerHTML = blockPreviewSvg(def);

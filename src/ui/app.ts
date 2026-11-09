@@ -1,6 +1,6 @@
 import { createArcTool } from '../commands/arcTool';
 import { createArrayTool } from '../commands/arrayTool';
-import { createBlockTool } from '../commands/blockTools';
+import { createBlockTool, createInsertTool } from '../commands/blockTools';
 import { createCircleTool } from '../commands/circleTool';
 import { createChamferTool, createFilletTool } from '../commands/cornerTools';
 import { createBaselineDimTool, createContinueDimTool } from '../commands/chainDimTools';
@@ -70,7 +70,9 @@ export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), cre
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
 export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool(), createOffsetTool(), createBreakTool(), joinTool, createLengthenTool(), createArrayTool(), stretchTool];
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
-export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool()];
+/** Shared so the Blocks panel can point it at a block before starting it. */
+const INSERT_TOOL = createInsertTool();
+export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool(), INSERT_TOOL];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...BLOCK_TOOLS, ...INQUIRY_TOOLS];
 
@@ -180,7 +182,12 @@ export class App {
     },
     message: (m) => this.status.showMessage(m),
   });
-  private readonly blocksPanel = new BlocksPanel(el('blocks'));
+  private readonly blocksPanel = new BlocksPanel(el('blocks'), {
+    insert: (name) => {
+      INSERT_TOOL.use(name);
+      this.startTool(INSERT_TOOL);
+    },
+  });
   private readonly inquiry = new InquiryPanel(el('inquiry'));
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');

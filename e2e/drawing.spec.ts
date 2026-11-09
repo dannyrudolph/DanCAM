@@ -1726,8 +1726,30 @@ test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by te
 });
 
 test.describe('blocks', () => {
-  test('Create block (K): the selection becomes a block, listed in the Blocks panel and drawn as one instance', async ({ page }) => {
-    await expect(page.locator('#blocks .blocks-empty')).toHaveText('None yet. Select geometry and choose Create block (K).');
+  /** Ink, paper, or not painted yet, at a world point, after Zoom Extents fitted `extents`. */
+  async function prober(page: Page, extents: { minX: number; maxX: number; minY: number; maxY: number }) {
+    const at = await extentsMapper(page, extents);
+    const probe = async (x: number, y: number): Promise<string> => {
+      const p = at(x, y);
+      return page.evaluate(([sx, sy]) => {
+        const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
+        const r = c.getBoundingClientRect();
+        const k = c.width / r.width;
+        const data = c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k) - 2, Math.round((sy! - r.top) * k) - 2, 5, 5).data;
+        let paper = true;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3]! === 0) return 'not painted';
+          if (data[i]! < 128) return 'ink';
+          if (data[i]! < 250) paper = false;
+        }
+        return paper ? 'paper' : 'grey';
+      }, [p.x, p.y]);
+    };
+    return { at, probe };
+  }
+
+  /** Draws a line (0,0)-(1,0) and a circle at (1,0) R.25, selects both and makes them block "Tool", described "MGEHR holder". */
+  async function makeToolBlock(page: Page): Promise<void> {
     await page.keyboard.press('l');
     await typeValues(page, '0', '0');
     await typeValues(page, '1', '0'); // length 1 at 0°
@@ -1748,15 +1770,18 @@ test.describe('blocks', () => {
     await expect(page.getByTestId('tool-createBlock')).toHaveClass(/active/);
     await expect(page.locator('[data-option="after:convert"]')).toHaveClass(/active/);
     await typeValues(page, '0', '0'); // base point: the left end
-    const field = page.locator('.input-boxes input[data-field="text"]');
-    await expect(field).toBeFocused();
+    await expect(page.locator('.input-boxes input[data-field="text"]')).toBeFocused();
     await page.keyboard.type('Tool'); // letters are text, not shortcuts
     await page.keyboard.press('Enter');
     await expect(page.locator('#status .status-prompt')).toHaveText('Create block Tool: type a description (holder, insert, notes), or press Enter for none');
     await page.keyboard.type('MGEHR holder');
     await page.keyboard.press('Enter');
-
     await expect(prop(page, 'entity-count')).toHaveText('1');
+  }
+
+  test('Create block (K): the selection becomes a block, listed in the Blocks panel and drawn as one instance', async ({ page }) => {
+    await expect(page.locator('#blocks .blocks-empty')).toHaveText('None yet. Select geometry and choose Create block (K).');
+    await makeToolBlock(page);
     const row = page.locator('#blocks li[data-block="Tool"]');
     await expect(row.locator('.layer-name')).toHaveText('Tool');
     await expect(row.locator('.layer-count')).toHaveText('1');
@@ -1764,23 +1789,7 @@ test.describe('blocks', () => {
     await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
 
     // Drawn: ink on the edge line, paper just above it (polled: the canvas repaints on the next frame).
-    const at = await extentsMapper(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
-    const probe = async (x: number, y: number): Promise<string> => {
-      const p = at(x, y);
-      return page.evaluate(([sx, sy]) => {
-        const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
-        const r = c.getBoundingClientRect();
-        const k = c.width / r.width;
-        const data = c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k) - 2, Math.round((sy! - r.top) * k) - 2, 5, 5).data;
-        let paper = true;
-        for (let i = 0; i < data.length; i += 4) {
-          if (data[i + 3]! === 0) return 'not painted';
-          if (data[i]! < 128) return 'ink';
-          if (data[i]! < 250) paper = false;
-        }
-        return paper ? 'paper' : 'grey';
-      }, [p.x, p.y]);
-    };
+    const { at, probe } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
     await expect.poll(() => probe(0.5, 0)).toBe('ink');
     await expect.poll(() => probe(0.5, 0.15)).toBe('paper');
 
@@ -1794,5 +1803,36 @@ test.describe('blocks', () => {
     await page.keyboard.press('Control+z');
     await expect(prop(page, 'entity-count')).toHaveText('2');
     await expect(page.locator('#blocks .blocks-empty')).toBeVisible();
+  });
+
+  test('Insert: clicking the block in the panel places copies, turned and mirrored as asked', async ({ page }) => {
+    await makeToolBlock(page);
+    await page.locator('#blocks li[data-block="Tool"]').click();
+    await expect(page.getByTestId('tool-insertBlock')).toHaveClass(/active/);
+    await expect(page.locator('#status .status-prompt')).toHaveText('Insert Tool: pick where its base point goes');
+    await expect(page.locator('[data-option="block:Tool"]')).toHaveClass(/active/);
+    await typeValues(page, '0', '1'); // base point at (0, 1)
+    await expect(page.locator('#status .status-prompt')).toHaveText('Insert Tool: pick or type the rotation, or press Enter for 0°');
+    await typeValues(page, '90'); // edge runs straight up
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks li[data-block="Tool"] .layer-count')).toHaveText('2');
+
+    await page.locator('[data-option="mirror"]').click(); // still in Insert: the next copy mirrored
+    await expect(page.locator('[data-option="mirror"]')).toHaveClass(/active/);
+    await typeValues(page, '2', '0');
+    await page.keyboard.press('Enter'); // keeps 90°
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.keyboard.press('Escape');
+
+    // The turned copy's edge runs up from (0, 1) to (0, 2); the mirrored one, turned 90°, runs up from (2, 0) too.
+    await page.getByTestId('zoom-extents').click();
+    const { at, probe } = await prober(page, { minX: -0.25, maxX: 2.25, minY: -0.25, maxY: 2.25 });
+    await expect.poll(() => probe(0, 1.5)).toBe('ink');
+    await expect.poll(() => probe(2, 0.5)).toBe('ink');
+    await expect.poll(() => probe(1, 1.5)).toBe('paper');
+    const p = at(2, 0.5);
+    await page.mouse.click(p.x, p.y);
+    await expect(prop(page, 'Rotation')).toHaveText(/^90/);
+    await expect(prop(page, 'Mirrored')).toHaveText('Yes');
   });
 });

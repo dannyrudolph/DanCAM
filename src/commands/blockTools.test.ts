@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Entity } from '../model/entity';
 import { blockPreviewSvg } from '../ui/blocksPanel';
-import { createBlockTool } from './blockTools';
+import { createBlockTool, createInsertTool } from './blockTools';
 import { setup } from './toolHarness';
 
 const v = (x: number, y: number) => ({ x, y });
@@ -93,6 +93,69 @@ describe('Create block', () => {
     expect(t.messages).toEqual(['A block holds lines, circles, arcs and points, and none are selected.']);
     expect(t.drawing.blocks.size).toBe(0);
     expect(t.runner.tool).toBeUndefined();
+  });
+});
+
+describe('Insert', () => {
+  const line = (id: string) => ({ kind: 'line' as const, id, layer: '0', start: v(0, 0), end: v(1, 0) });
+  function withBlocks() {
+    const t = setup();
+    t.drawing.blocks.set('Tool', { name: 'Tool', description: '', entities: [line('b1')] });
+    t.drawing.blocks.set('Boring bar', { name: 'Boring bar', description: '', entities: [line('b1')] });
+    return t;
+  }
+
+  it('places the first block by name where clicked, at the picked rotation, one undo step each, again and again', () => {
+    const t = withBlocks();
+    t.runner.start(createInsertTool());
+    expect(t.runner.request?.prompt).toBe('Insert Boring bar: pick where its base point goes');
+    expect(t.runner.request?.options?.map((o) => [o.label, o.active ?? false])).toEqual([['Boring bar', true], ['Tool', false], ['Mirror', false], ['Scale 1', false]]);
+    expect(t.preview(v(2, 3))).toEqual([{ kind: 'insert', id: 'preview', layer: '0', block: 'Boring bar', at: v(2, 3), rotationDeg: 0, scale: 1, mirrored: false }]);
+    t.click(2, 3);
+    expect(t.runner.request).toMatchObject({ kind: 'value', prompt: 'Insert Boring bar: pick or type the rotation, or press Enter for 0°', label: '∠', base: v(2, 3) });
+    const req = t.runner.request;
+    expect(req?.kind === 'value' && req.fromCursor?.(v(2, 4))).toBe(90); // straight up from the base point
+    t.value(-90);
+    expect(t.last()).toEqual({ kind: 'insert', id: 'e1', layer: '0', block: 'Boring bar', at: v(2, 3), rotationDeg: 270, scale: 1, mirrored: false });
+    expect(t.undo.undoLabel).toBe('Insert Boring bar');
+    expect(t.runner.request?.prompt).toBe('Insert Boring bar: pick where its base point goes'); // sticky
+    t.click(5, 3);
+    expect(t.runner.request?.prompt).toBe('Insert Boring bar: pick or type the rotation, or press Enter for 270°');
+    t.finish(); // Enter keeps the last rotation
+    expect(t.last()).toMatchObject({ id: 'e2', at: v(5, 3), rotationDeg: 270 });
+  });
+
+  it('another block, Mirror and Scale from the options bar, kept for the session; a bad scale is refused', () => {
+    const t = withBlocks();
+    const tool = createInsertTool();
+    t.runner.start(tool);
+    t.option('block:Tool');
+    t.option('mirror');
+    t.option('scale');
+    expect(t.runner.request).toMatchObject({ kind: 'value', prompt: 'Insert: type the scale (now 1)', label: '×', quantity: 'factor' });
+    t.value(0);
+    expect(t.messages).toEqual(['The scale needs to be more than zero.']);
+    t.value(2.5);
+    expect(t.runner.request?.options?.map((o) => [o.label, o.active ?? false])).toEqual([['Boring bar', false], ['Tool', true], ['Mirror', true], ['Scale 2.5', false]]);
+    t.click(1, 1);
+    t.value(0);
+    expect(t.last()).toMatchObject({ block: 'Tool', at: v(1, 1), scale: 2.5, mirrored: true });
+    t.runner.stop();
+    t.runner.start(tool);
+    expect(t.runner.request?.prompt).toBe('Insert Tool: pick where its base point goes');
+  });
+
+  it('the Blocks panel picks the block; with no blocks it says how to make one', () => {
+    const t = withBlocks();
+    const tool = createInsertTool();
+    tool.use('Tool');
+    t.runner.start(tool);
+    expect(t.runner.request?.prompt).toBe('Insert Tool: pick where its base point goes');
+
+    const u = setup();
+    u.runner.start(createInsertTool());
+    expect(u.messages).toEqual(['No blocks yet: select geometry and choose Create block (K).']);
+    expect(u.runner.tool).toBeUndefined();
   });
 });
 

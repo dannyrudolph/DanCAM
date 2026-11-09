@@ -37,6 +37,7 @@ export const ICONS = {
   dimOrdinate: svg('<circle cx="4" cy="16" r="2"/><path d="M4 16 V3 M10 14 V6 M16 14 V6"/><path d="M8.5 4 H11.5 M14.5 4 H17.5"/>'),
   dimAlignOrdinates: svg('<path d="M3 4 H17" stroke-dasharray="2 1.5"/><path d="M5 18 V7 M10 15 V7 M15 18 V7"/><path d="M8 11 L10 7 L12 11"/>'),
   createBlock: svg('<rect x="3" y="3" width="14" height="14" rx="1.5" stroke-dasharray="2.5 2"/><path d="M6 13 L10 7 L14 13 Z"/><circle cx="6" cy="13" r="1.6" fill="currentColor"/>'),
+  insertBlock: svg('<path d="M8 4 L12 9 L4 9 Z"/><circle cx="4" cy="9" r="1.4" fill="currentColor"/><path d="M14 11 V18 M10.5 14.5 H17.5"/>'),
   centerMark: svg('<circle cx="10" cy="10" r="6"/><path d="M8 10 H12 M10 8 V12 M14 10 H19 M1 10 H6 M10 1 V6 M10 14 V19"/>'),
   dimLeader: svg('<path d="M3 17 L11 7 H18"/><path d="M3 17 L4.2 13.6 L6 15.2 Z" fill="currentColor"/><path d="M12 4 H18"/>'),
   dist: svg('<path d="M3 10 H17 M3 6 V14 M17 6 V14 M6 8 L3 10 L6 12 M14 8 L17 10 L14 12"/>'),
