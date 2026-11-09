@@ -1075,18 +1075,20 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
     await expect(prop(page, 'entity-count')).toHaveText('8'); // trimmed in place, nothing split off
 
     await page.keyboard.press('Shift+F');
+    // The size comes first, in the box at the cursor; the method is a button at that step.
+    await expect(page.locator('.input-field span')).toHaveText(['D1']);
     await page.locator('[data-option="angle"]').click();
-    await page.locator('[data-option="sizes"]').click();
     await typeValues(page, '0.010');
     await typeValues(page, '45');
-    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer (0.01 × 45°): pick the first object');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer 0.01 × 45°: pick the first object');
     await click(0.2, 0.125); // the Ø.250 line, measured along it
     await click(0, 0.06); // the front face
     await page.keyboard.press('Escape');
 
     await page.keyboard.press('f');
-    await page.locator('[data-option="radius"]').click();
+    await expect(page.locator('.input-field span')).toHaveText(['R']);
     await typeValues(page, '0.020');
+    await expect(page.locator('[data-option="size"]')).toHaveText('Change size (R 0.02)…');
     await click(0.3, 0.125);
     await click(0.4, 0.17);
     await page.keyboard.press('Escape');

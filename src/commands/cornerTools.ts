@@ -44,32 +44,40 @@ type CornerTool = {
   accepts(e: Entity): boolean;
   /** Prompt suffix naming the current sizes, e.g. "R 0.02". */
   sizes(): string;
-  /** Options besides Trim / No trim. */
+  /** False until the size has been typed once this session; the tool then asks for it first. */
+  hasSize(): boolean;
+  /** Asks for the size (radius, or chamfer distances / angle) in the input box at the cursor. */
+  askSize(ctx: ToolContext): Generator<Request, void, ToolInput>;
+  /** Options besides Change size and Trim / No trim. */
   options(): ToolOption[];
-  /** Handles one of `options()`; may ask for values. */
-  option(key: string): Generator<Request, void, ToolInput>;
+  /** Handles one of `options()`. */
+  option(key: string): void;
   make(c1: Curve, p1: Vec2, c2: Curve, p2: Vec2): Corner | undefined;
   /** Message when no corner fits. */
   readonly fails: string;
 };
 
 /**
- * The shared run of Fillet and Chamfer: pick two objects, the second
- * previewing the corner, then commit it as one undo step. Sticky, so corner
- * after corner can be made; sizes and the trim mode are remembered.
+ * The shared run of Fillet and Chamfer: the size is asked for first (until it
+ * has been typed once this session), then two objects are picked, the second
+ * previewing the corner, and the corner is committed as one undo step.
+ * Sticky, so corner after corner can be made; the size and the trim mode are
+ * remembered, and the "Change size" button asks again.
  */
 function cornerTool(t: CornerTool): ToolDef {
   let trim = true;
   const allOptions = (): ToolOption[] => [
+    { key: 'size', label: `Change size (${t.sizes()})…`, enabled: true },
     ...t.options(),
     { key: 'trim', label: 'Trim', enabled: true, active: trim },
     { key: 'notrim', label: 'No trim', enabled: true, active: !trim },
   ];
   /** Handles an option input; true when it was one. */
-  function* handled(input: ToolInput): Generator<Request, boolean, ToolInput> {
+  function* handled(ctx: ToolContext, input: ToolInput): Generator<Request, boolean, ToolInput> {
     if (input.kind !== 'option') return false;
     if (input.key === 'trim' || input.key === 'notrim') trim = input.key === 'trim';
-    else yield* t.option(input.key);
+    else if (input.key === 'size') yield* t.askSize(ctx);
+    else t.option(input.key);
     return true;
   }
   return {
@@ -77,11 +85,15 @@ function cornerTool(t: CornerTool): ToolDef {
     label: t.label,
     shortcut: t.shortcut,
     *run(ctx): ToolGen {
+      if (!t.hasSize()) {
+        yield* t.askSize(ctx);
+        if (!t.hasSize()) return;
+      }
       let first: { e: Entity; at: Vec2 } | undefined;
       for (;;) {
-        const input = yield { kind: 'entity', prompt: `${t.label} (${t.sizes()}): pick the first object`, accepts: t.accepts, options: allOptions() };
+        const input = yield { kind: 'entity', prompt: `${t.label} ${t.sizes()}: pick the first object`, accepts: t.accepts, options: allOptions() };
         if (input.kind === 'finish') return;
-        if (yield* handled(input)) continue;
+        if (yield* handled(ctx, input)) continue;
         const e = input.kind === 'entity' ? ctx.drawing.entities.get(input.id) : undefined;
         if (e && input.kind === 'entity') {
           first = { e, at: input.at };
@@ -94,7 +106,7 @@ function cornerTool(t: CornerTool): ToolDef {
       for (;;) {
         const input = yield {
           kind: 'entity',
-          prompt: `${t.label} (${t.sizes()}): pick the second object`,
+          prompt: `${t.label} ${t.sizes()}: pick the second object`,
           accepts: (e) => e.id !== a.id && t.accepts(e),
           options: allOptions(),
           preview: (id, at) => {
@@ -104,7 +116,7 @@ function cornerTool(t: CornerTool): ToolDef {
           },
         };
         if (input.kind === 'finish') return;
-        if (yield* handled(input)) continue;
+        if (yield* handled(ctx, input)) continue;
         if (input.kind !== 'entity') continue;
         const b = ctx.drawing.entities.get(input.id);
         const k = b && corner(b, input.at);
@@ -123,63 +135,94 @@ function cornerTool(t: CornerTool): ToolDef {
 const isCurve = (e: Entity): boolean => entityCurve(e) !== undefined;
 const isStraight = (e: Entity): boolean => e.kind === 'line' || e.kind === 'ray' || e.kind === 'xline';
 
-/** Fillet (F): Radius… option (0 makes a sharp corner), Trim / No trim. */
+/** Fillet (F): asks the radius first (0 makes a sharp corner); Change size, Trim / No trim. */
 export function createFilletTool(): ToolDef {
-  let radius = 0;
+  let radius: number | undefined;
   return cornerTool({
     id: 'fillet',
     label: 'Fillet',
     shortcut: 'f',
     accepts: isCurve,
-    sizes: () => `R ${num(radius)}`,
-    options: () => [{ key: 'radius', label: `Radius ${num(radius)}…`, enabled: true }],
-    *option(key) {
-      if (key !== 'radius') return;
-      const r = yield* value({ prompt: 'Fillet: type the radius', label: 'R', quantity: 'length' });
-      if (r !== undefined && r >= 0) radius = r;
+    sizes: () => `R ${num(radius ?? 0)}`,
+    hasSize: () => radius !== undefined,
+    *askSize(ctx) {
+      for (;;) {
+        const r = yield* value({ prompt: 'Fillet: type the radius, then press Enter (0 makes a sharp corner)', label: 'R', quantity: 'length' });
+        if (r === undefined) return;
+        if (r >= 0) {
+          radius = r;
+          return;
+        }
+        ctx.message('The radius cannot be negative.');
+      }
     },
-    make: (c1, p1, c2, p2) => filletCurves(c1, p1, c2, p2, radius),
+    options: () => [],
+    option: () => {},
+    make: (c1, p1, c2, p2) => filletCurves(c1, p1, c2, p2, radius ?? 0),
     fails: 'No fillet of that radius fits there.',
   });
 }
 
-/** Chamfer (Shift+F): two distances, or a distance and an angle from the first line; Trim / No trim. */
+/**
+ * Chamfer (Shift+F): asks the size first: Distances (one along each line) or
+ * Distance, Angle (along the first line, angle from it), chosen with buttons
+ * while typing the first value; Change size, Trim / No trim.
+ */
 export function createChamferTool(): ToolDef {
   let mode: 'distances' | 'angle' = 'distances';
-  let d1 = 0;
+  let d1: number | undefined;
   let d2 = 0;
   let deg = 45;
-  const spec = (): ChamferSpec => (mode === 'distances' ? { kind: 'distances', d1, d2 } : { kind: 'angle', d1, deg });
+  const spec = (): ChamferSpec => (mode === 'distances' ? { kind: 'distances', d1: d1 ?? 0, d2 } : { kind: 'angle', d1: d1 ?? 0, deg });
+  const modeOptions = (): ToolOption[] => [
+    { key: 'distances', label: 'Distances', enabled: true, active: mode === 'distances' },
+    { key: 'angle', label: 'Distance, Angle', enabled: true, active: mode === 'angle' },
+  ];
   return cornerTool({
     id: 'chamfer',
     label: 'Chamfer',
     shortcut: 'shift+f',
     accepts: isStraight,
-    sizes: () => (mode === 'distances' ? `${num(d1)} × ${num(d2)}` : `${num(d1)} × ${num(deg)}°`),
-    options: () => [
-      { key: 'distances', label: 'Distances', enabled: true, active: mode === 'distances' },
-      { key: 'angle', label: 'Distance, Angle', enabled: true, active: mode === 'angle' },
-      { key: 'sizes', label: 'Sizes…', enabled: true },
-    ],
-    *option(key) {
-      if (key === 'distances' || key === 'angle') {
-        mode = key;
-        return;
+    sizes: () => (mode === 'distances' ? `${num(d1 ?? 0)} × ${num(d2)}` : `${num(d1 ?? 0)} × ${num(deg)}°`),
+    hasSize: () => d1 !== undefined,
+    *askSize(ctx) {
+      let a: number | undefined;
+      while (a === undefined) {
+        const input = yield {
+          kind: 'value',
+          prompt: `Chamfer (${mode === 'distances' ? 'two distances' : 'distance and angle'}): type the distance along the first line you'll pick, then press Enter`,
+          label: 'D1',
+          quantity: 'length',
+          options: modeOptions(),
+        };
+        if (input.kind === 'finish') return;
+        if (input.kind === 'option' && (input.key === 'distances' || input.key === 'angle')) mode = input.key;
+        if (input.kind !== 'value') continue;
+        if (input.value >= 0) a = input.value;
+        else ctx.message('The distance cannot be negative.');
       }
-      if (key !== 'sizes') return;
-      const a = yield* value({ prompt: 'Chamfer: type the distance on the first line', label: 'D1', quantity: 'length' });
-      if (a === undefined || a < 0) return;
-      if (mode === 'distances') {
-        const b = yield* value({ prompt: 'Chamfer: type the distance on the second line', label: 'D2', quantity: 'length' });
-        if (b === undefined || b < 0) return;
-        d1 = a;
-        d2 = b;
-      } else {
-        const g = yield* value({ prompt: 'Chamfer: type the angle from the first line', label: '∠', quantity: 'angle' });
-        if (g === undefined || g <= 0 || g >= 180) return;
-        d1 = a;
-        deg = g;
+      for (;;) {
+        const b =
+          mode === 'distances'
+            ? yield* value({ prompt: 'Chamfer: type the distance along the second line, then press Enter', label: 'D2', quantity: 'length' })
+            : yield* value({ prompt: 'Chamfer: type the angle from the first line, then press Enter', label: '∠', quantity: 'angle' });
+        if (b === undefined) return;
+        if (mode === 'distances' && b >= 0) {
+          d1 = a;
+          d2 = b;
+          return;
+        }
+        if (mode === 'angle' && b > 0 && b < 180) {
+          d1 = a;
+          deg = b;
+          return;
+        }
+        ctx.message(mode === 'distances' ? 'The distance cannot be negative.' : 'The angle must be between 0° and 180°.');
       }
+    },
+    options: modeOptions,
+    option(key) {
+      if (key === 'distances' || key === 'angle') mode = key;
     },
     make: (c1, p1, c2, p2) => chamferLines(c1, p1, c2, p2, spec()),
     fails: 'No chamfer of that size fits there.',

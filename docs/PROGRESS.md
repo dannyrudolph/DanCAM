@@ -136,9 +136,12 @@ points along an edge, then its new angle).
    the first line's picked end; radius 0 = sharp corner) and `chamferLines`
    (straight curves; distances or distance + angle from the first line).
    `commands/cornerTools`: pick two objects (second previews), one undo
-   step, sticky; Radius… / Sizes… (typed values), Distances / Distance,
-   Angle, Trim / No trim, all remembered for the session. Defaults R 0,
-   chamfer 0 × 0 (AutoCAD's). The joint takes the objects' layer and style
+   step, sticky; Distances / Distance, Angle, Trim / No trim, all
+   remembered for the session. **Size first** (user, 2026-11-08): until a
+   size has been typed this session, the tool opens on the input box at
+   the cursor (Fillet R; Chamfer D1 with the method buttons, then D2 or
+   the angle); after that the prompt shows it ("Fillet R 0.02: …") and
+   "Change size (…)…" asks again. The joint takes the objects' layer and style
    when they share them, else the current ones.
 4. **Offset (O), Break (B), Join (J), Lengthen (Shift+L) (done).**
    Geometry: `offset` (sideways / concentric, exact for H/V lines;
