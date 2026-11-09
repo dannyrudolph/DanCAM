@@ -41,6 +41,7 @@ input {
 #app {
   display: grid;
   grid-template-rows: auto auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr); /* no bar can widen the page past the window */
   height: 100%;
 }
 
@@ -57,6 +58,16 @@ input {
 #options {
   background: var(--panel-2);
   min-height: 32px;
+}
+
+/* Edit block: the bar says which block is open, with Save block and Cancel. */
+#block-edit {
+  background: var(--panel-2);
+  border-bottom: 2px solid var(--accent);
+}
+
+#block-edit span {
+  margin-right: 8px;
 }
 
 .options-tool {
@@ -99,6 +110,7 @@ input {
 /* Drawing tools: their own row under the file and view buttons. */
 #toolbar {
   gap: 4px;
+  flex-wrap: wrap; /* a second row on narrow windows */
 }
 
 .units-button {
@@ -165,6 +177,18 @@ input {
   touch-action: none;
 }
 
+/* No tool: picking and selection boxes, so an arrow rather than crosshairs. */
+.toolbar-separator {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+#canvas.selecting {
+  cursor: default;
+}
+
 #canvas.pan-ready {
   cursor: grab;
 }
@@ -184,6 +208,107 @@ input {
 
 #properties {
   padding: 8px 10px;
+}
+
+#dimstyles {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dimstyle-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.dimstyle-row.editing {
+  background: var(--panel-2);
+}
+
+.dimstyle-row input[type='radio'] {
+  margin: 0;
+}
+
+.dimstyle-settings {
+  margin-top: 6px;
+}
+
+.dimstyle-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dimstyle-settings dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 6px 0 0;
+  align-items: center;
+}
+
+.dimstyle-settings dt {
+  color: var(--muted);
+}
+
+.dimstyle-settings dd {
+  margin: 0;
+  text-align: right;
+}
+
+.dimstyle-settings dd input[type='text'] {
+  width: 7em;
+  box-sizing: border-box;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.dimstyle-settings dd input[type='text']:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dimstyle-settings dd select {
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+#inquiry {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.inquiry-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.inquiry-clear {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inquiry-result h3 {
+  font-size: 12px;
+  margin: 8px 0 4px;
+  color: var(--muted);
 }
 
 #layers {
@@ -298,27 +423,62 @@ input {
   height: 16px;
 }
 
-#properties h2 {
+#properties h2,
+#inquiry h2 {
   font-size: 13px;
   margin: 0 0 8px;
 }
 
-#properties dl {
+#properties dl,
+#inquiry dl {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 3px 10px;
   margin: 0;
 }
 
-#properties dt {
+#properties dt,
+#inquiry dt {
   color: var(--muted);
 }
 
-#properties dd {
+#properties dd,
+#inquiry dd {
   margin: 0;
   text-align: right;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+#properties dd.editable {
+  cursor: text;
+  border-radius: 3px;
+}
+
+#properties dd.editable:hover {
+  background: #1d3a57;
+}
+
+#properties dd input {
+  width: 100%;
+  box-sizing: border-box;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  background: #0d1117;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+#properties dd select {
+  max-width: 100%;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 2px;
 }
 
 #status {
@@ -371,6 +531,20 @@ input {
   background: #1d3a57;
 }
 
+.status-scale-input {
+  width: 5em;
+  padding: 1px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+}
+
+.status-scale-input.invalid {
+  border-color: #d9534f;
+}
+
 .status-right select {
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -417,6 +591,10 @@ input {
   color: var(--muted);
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
+}
+
+.input-field input.input-text {
+  width: 18em;
 }
 
 .input-field:focus-within {
@@ -475,6 +653,25 @@ input {
   background: #1d3a57;
 }
 
+.context-menu button.checkable::before {
+  content: '';
+  display: inline-block;
+  width: 1.4em;
+}
+
+.context-menu button.checked::before {
+  content: '✓';
+}
+
+.context-menu .menu-heading {
+  max-width: 300px;
+  margin: 0;
+  padding: 5px 10px 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
 .context-menu button:disabled {
   opacity: 0.4;
 }
@@ -482,4 +679,71 @@ input {
 .option-button.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+#blocks,
+#library {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto; /* preview, name, count, buttons */
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.block-row .layer-name-input {
+  min-width: 0;
+}
+
+.layers-header .header-actions,
+.block-actions {
+  display: flex;
+}
+
+.block-row:hover {
+  background: var(--panel-2);
+}
+
+.block-preview {
+  grid-row: span 2;
+  display: flex;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.block-preview svg {
+  width: 100%;
+  height: 100%;
+}
+
+.block-preview svg * {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+.block-description {
+  grid-column: 2 / span 3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.blocks-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }

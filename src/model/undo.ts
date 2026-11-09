@@ -1,3 +1,7 @@
+import { dimensionFollowUp } from './associate';
+import { type Vec2, vecNearlyEqual } from '../geometry/vec';
+import type { BlockDef } from './block';
+import type { DimStyle } from './dimStyle';
 import type { Drawing, Layer, Units } from './drawing';
 import type { Entity } from './entity';
 
@@ -9,7 +13,15 @@ export type Change =
   /** The drawing's unit label (converting also scales every entity, in the same transaction). */
   | { readonly op: 'units'; readonly before: Units; readonly after: Units }
   /** Adds (no `before`), removes (no `after`) or edits one layer, matched by name. */
-  | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer };
+  | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer }
+  /** Adds (no `before`), removes (no `after`) or edits one dimension style, matched by name. */
+  | { readonly op: 'dimStyle'; readonly before?: DimStyle; readonly after?: DimStyle }
+  /** Adds (no `before`), removes (no `after`) or redefines one block, matched by name. */
+  | { readonly op: 'block'; readonly before?: BlockDef; readonly after?: BlockDef }
+  /** The sheet (print) scale dimensions are sized for. */
+  | { readonly op: 'sheetScale'; readonly before: number; readonly after: number }
+  /** The ordinate origin (its ordinates follow in the same transaction, see `associate`). */
+  | { readonly op: 'dimOrigin'; readonly before: Vec2; readonly after: Vec2 };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -26,9 +38,15 @@ function invert(c: Change): Change {
     case 'modify':
       return { op: 'modify', before: c.after, after: c.before };
     case 'units':
-      return { op: 'units', before: c.after, after: c.before };
+    case 'sheetScale':
+    case 'dimOrigin':
+      return { ...c, before: c.after, after: c.before } as Change;
     case 'layer':
       return { op: 'layer', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
+    case 'dimStyle':
+      return { op: 'dimStyle', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
+    case 'block':
+      return { op: 'block', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
   }
 }
 
@@ -37,6 +55,7 @@ function apply(d: Drawing, c: Change): void {
   switch (c.op) {
     case 'add':
       if (d.entities.has(c.entity.id)) throw new Error(`add: ${c.entity.id} already exists`);
+      checkBlockDefined(d, c.entity);
       d.entities.set(c.entity.id, c.entity);
       return;
     case 'remove':
@@ -46,16 +65,63 @@ function apply(d: Drawing, c: Change): void {
     case 'modify':
       if (c.before.id !== c.after.id) throw new Error('modify: before and after ids differ');
       if (!d.entities.has(c.before.id)) throw new Error(`modify: ${c.before.id} not found`);
+      checkBlockDefined(d, c.after);
       d.entities.set(c.after.id, c.after);
       return;
     case 'units':
       if (d.units !== c.before) throw new Error(`units: drawing is ${d.units}, expected ${c.before}`);
       d.units = c.after;
       return;
+    case 'sheetScale':
+      if (d.sheetScale !== c.before) throw new Error(`sheetScale: drawing is ${d.sheetScale}, expected ${c.before}`);
+      d.sheetScale = c.after;
+      return;
+    case 'dimOrigin':
+      if (!vecNearlyEqual(d.dimOrigin, c.before)) throw new Error('dimOrigin: drawing origin is not the expected one');
+      d.dimOrigin = c.after;
+      return;
     case 'layer':
       applyLayer(d, c.before, c.after);
       return;
+    case 'dimStyle':
+      applyDimStyle(d, c.before, c.after);
+      return;
+    case 'block':
+      applyBlock(d, c.before, c.after);
+      return;
   }
+}
+
+function checkBlockDefined(d: Drawing, e: Entity): void {
+  if (e.kind === 'insert' && !d.blocks.has(e.block)) throw new Error(`insert ${e.id}: block ${e.block} is not defined`);
+}
+
+function applyBlock(d: Drawing, before: BlockDef | undefined, after: BlockDef | undefined): void {
+  if (before && after && before.name !== after.name) throw new Error('block: a change keeps the name; rename is add + modify + remove');
+  const name = (before ?? after)?.name;
+  if (name === undefined) throw new Error('block: change has neither before nor after');
+  if (before ? !d.blocks.has(name) : d.blocks.has(name)) {
+    throw new Error(before ? `block: ${name} not found` : `block: ${name} already exists`);
+  }
+  if (after) {
+    d.blocks.set(name, after);
+    return;
+  }
+  for (const e of d.entities.values()) {
+    if (e.kind === 'insert' && e.block === name) throw new Error(`block: ${name} still has instances`);
+  }
+  d.blocks.delete(name);
+}
+
+function applyDimStyle(d: Drawing, before: DimStyle | undefined, after: DimStyle | undefined): void {
+  if (before && after && before.name !== after.name) throw new Error('dimStyle: a change keeps the name');
+  const name = (before ?? after)?.name;
+  if (name === undefined) throw new Error('dimStyle: change has neither before nor after');
+  if (before ? !d.dimStyles.has(name) : d.dimStyles.has(name)) {
+    throw new Error(before ? `dimStyle: ${name} not found` : `dimStyle: ${name} already exists`);
+  }
+  if (after) d.dimStyles.set(name, after);
+  else d.dimStyles.delete(name);
 }
 
 function applyLayer(d: Drawing, before: Layer | undefined, after: Layer | undefined): void {
@@ -72,6 +138,9 @@ function applyLayer(d: Drawing, before: Layer | undefined, after: Layer | undefi
   for (const e of d.entities.values()) {
     if (e.layer === name) throw new Error(`layer: ${name} still has entities`);
   }
+  for (const b of d.blocks.values()) {
+    if (b.entities.some((e) => e.layer === name)) throw new Error(`layer: block ${b.name} has entities on ${name}`);
+  }
   d.layers.delete(name);
 }
 
@@ -87,10 +156,17 @@ export class UndoStack {
 
   constructor(private readonly drawing: Drawing) {}
 
+  /**
+   * Applies `tx`, then measures again the dimensions on the geometry it
+   * changed (deleting those whose geometry is gone); those changes join the
+   * transaction, so undo restores both.
+   */
   commit(tx: Transaction): void {
     if (tx.changes.length === 0) return;
     for (const c of tx.changes) apply(this.drawing, c);
-    this.done.push(tx);
+    const follow = dimensionFollowUp(this.drawing, tx.changes);
+    for (const c of follow) apply(this.drawing, c);
+    this.done.push(follow.length === 0 ? tx : { label: tx.label, changes: [...tx.changes, ...follow] });
     this.undone.length = 0;
   }
 

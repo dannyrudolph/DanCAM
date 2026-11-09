@@ -3,7 +3,7 @@ import type { Vec2 } from '../geometry/vec';
 /**
  * Drafting line styles: a linetype (dash pattern) plus a line weight.
  * Patterns and weights are in screen pixels, so dashes stay readable at every
- * zoom; Phase 6 maps them to sheet units for printing.
+ * zoom; Phase 7 (Output) maps them to sheet units for printing.
  */
 export type LineStyleName = 'visible' | 'hidden' | 'center' | 'tangent';
 

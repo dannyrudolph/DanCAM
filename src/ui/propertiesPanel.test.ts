@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDrawing } from '../model/drawing';
 import type { Entity } from '../model/entity';
-import { rowsFor } from './propertiesPanel';
+import { rowsFor } from '../model/properties';
+import { selectionSummary } from './propertiesPanel';
 
 /** Rows as label → value, skipping Layer and Style. */
 function values(e: Entity): Record<string, number | string> {
@@ -32,5 +33,49 @@ describe('properties rows', () => {
   it('lists an xline by base point and direction angle', () => {
     const v = values({ kind: 'xline', id: 'e1', layer: '0', base: { x: 1, y: 2 }, dir: { x: 0, y: -1 } });
     expect(v).toMatchObject({ 'Base X': 1, 'Base Y': 2, Angle: 270 });
+  });
+});
+
+describe('selectionSummary', () => {
+  it('counts a multiple selection by kind', () => {
+    const l = (id: string): Entity => ({ kind: 'line', id, layer: '0', start: { x: 0, y: 0 }, end: { x: 1, y: 0 } });
+    const c: Entity = { kind: 'circle', id: 'c', layer: '0', center: { x: 0, y: 0 }, radius: 1 };
+    expect(selectionSummary([l('a'), c, l('b')])).toEqual([
+      { label: 'Line', value: '2' },
+      { label: 'Circle', value: '1' },
+    ]);
+  });
+});
+
+describe('properties rows for a dimension', () => {
+  it('a radius shows R text, the radius and its center; an angular one degrees and its vertex', () => {
+    expect(values({ kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: { x: 1, y: 2 }, radius: 0.015, at: { x: 0, y: 1 } })).toMatchObject({
+      Type: 'Radius',
+      Text: 'R.015',
+      Measured: 0.015,
+      'Center X': 1,
+      'Center Y': 2,
+    });
+    const angular = rowsFor(createDrawing('in'), { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'angular', vertex: { x: 3, y: 4 }, p1: { x: 4, y: 4 }, p2: { x: 3, y: 5 }, dir1: { x: 1, y: 0 }, dir2: { x: 0, y: 1 }, at: { x: 5, y: 5 } });
+    expect(angular.find((r) => r.label === 'Measured')).toEqual({ label: 'Measured', value: 90, unit: '°' });
+    expect(angular.find((r) => r.label === 'Text')?.value).toBe('90°');
+    expect(angular.find((r) => r.label === 'Vertex X')?.value).toBe(3);
+  });
+
+  it('shows its style, type, print text, unrounded measured value, and the precision and tolerance in effect, and no line style', () => {
+    const v = values({ kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 } });
+    expect(v).toEqual({
+      Layer: '0',
+      'Dim style': 'INCH-3PL',
+      Type: 'Aligned',
+      Text: '.500',
+      Measured: 0.5,
+      Precision: '3',
+      Tolerance: 'None',
+      'Point 1 X': 0,
+      'Point 1 Y': 0,
+      'Point 2 X': 0.3,
+      'Point 2 Y': 0.4,
+    });
   });
 });

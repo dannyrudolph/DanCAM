@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { distanceToSegment } from '../geometry/distance';
 import { createDrawing } from './drawing';
+import { dimensionLayout } from './dimLayout';
+import type { DimensionEntity } from './entity';
 import { pickEntity } from './pick';
 
 describe('distanceToSegment', () => {
@@ -75,5 +77,35 @@ describe('pickEntity on curves and xlines', () => {
 
   it('picks an xline far from its base point', () => {
     expect(pickEntity(drawing(), { x: -1000, y: 10.01 }, 0.05)).toBe('x');
+  });
+
+  it('picks a ray ahead of its base but not behind it', () => {
+    const d = drawing();
+    d.entities.set('r', { kind: 'ray', id: 'r', layer: '0', base: { x: 0, y: 20 }, dir: { x: 1, y: 0 } });
+    expect(pickEntity(d, { x: 500, y: 20.01 }, 0.05)).toBe('r');
+    expect(pickEntity(d, { x: -500, y: 20.01 }, 0.05)).toBeUndefined();
+  });
+});
+
+const dim = (id: string, p1: { x: number; y: number }, p2: { x: number; y: number }, at: { x: number; y: number }): DimensionEntity => ({
+  kind: 'dimension',
+  id,
+  layer: '0',
+  dimStyle: 'INCH-3PL',
+  type: 'linear',
+  dir: { x: 1, y: 0 },
+  p1,
+  p2,
+  at,
+});
+
+describe('pickEntity on a dimension', () => {
+  it('picks it by clicking its text, where none of its lines pass', () => {
+    const d = createDrawing('in');
+    const e = dim('d1', { x: 0, y: 0 }, { x: 2, y: 0 }, { x: 1, y: 1 });
+    d.entities.set('d1', e);
+    const box = dimensionLayout(d, e).textBox;
+    expect(pickEntity(d, { x: 1, y: (box.minY + box.maxY) / 2 }, 0.001)).toBe('d1');
+    expect(pickEntity(d, { x: 1, y: 0.5 }, 0.01)).toBeUndefined();
   });
 });

@@ -1,7 +1,7 @@
 import type { Circle } from './circle';
 import { circleCircle, lineCircle, lineLine } from './intersect';
 import { TOL } from './tolerance';
-import { type Vec2, distance } from './vec';
+import { type Vec2, cross, distance, dot, sub } from './vec';
 
 /**
  * Something a circle can be tangent to: an infinite line through `a` and `b`,
@@ -43,15 +43,28 @@ function offsets(l: NormalLine, r: number): [Vec2, Vec2][] {
   return [r, -r].map((k) => [{ x: l.nx * (l.c + k), y: l.ny * (l.c + k) }, dir]);
 }
 
+/** The foot of the perpendicular from `p` to the line through `a` along the unit vector `d`. */
+function foot(p: Vec2, a: Vec2, d: Vec2): Vec2 {
+  const t = dot(sub(p, a), d);
+  return { x: a.x + d.x * t, y: a.y + d.y * t };
+}
+
 /** Radii a center can sit at from a circle of radius R, for tangency with radius r. */
 function ringRadii(R: number, r: number): number[] {
   return [R + r, Math.abs(R - r)];
 }
 
-/** Every circle of radius `r` tangent to both targets (Tangent-Tangent-Radius). */
-export function tangentTangentRadius(t1: TangentTarget, t2: TangentTarget, r: number): Circle[] {
+/**
+ * Every circle of radius `r` tangent to both targets (Tangent-Tangent-Radius).
+ *
+ * Two parallel lines exactly `2r` apart are touched by a whole row of circles
+ * centered on the midline; `hint` picks the one centered nearest it (the
+ * caller passes the midpoint of the picks). Without a hint that case gives
+ * nothing.
+ */
+export function tangentTangentRadius(t1: TangentTarget, t2: TangentTarget, r: number, hint?: Vec2): Circle[] {
   if (r <= TOL) return [];
-  if (t1.kind === 'circle' && t2.kind === 'line') return tangentTangentRadius(t2, t1, r);
+  if (t1.kind === 'circle' && t2.kind === 'line') return tangentTangentRadius(t2, t1, r, hint);
   const centers: Vec2[] = [];
   if (t1.kind === 'line' && t2.kind === 'line') {
     const l1 = normalForm(t1.a, t1.b);
@@ -61,6 +74,7 @@ export function tangentTangentRadius(t1: TangentTarget, t2: TangentTarget, r: nu
       for (const [p2, d2] of offsets(l2, r)) {
         const c = lineLine(p1, d1, p2, d2);
         if (c) centers.push(c);
+        else if (hint && Math.abs(cross(sub(p2, p1), d1)) <= TOL) centers.push(foot(hint, p1, d1));
       }
     }
   } else if (t1.kind === 'line' && t2.kind === 'circle') {

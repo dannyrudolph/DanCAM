@@ -64,3 +64,16 @@ export function clipLine(p: Vec2, d: Vec2, box: BBox): [Vec2, Vec2] | undefined 
     { x: p.x + t1 * d.x, y: p.y + t1 * d.y },
   ];
 }
+
+/**
+ * Clips the ray from `p` along `d` to `box`: the infinite line's visible
+ * segment, cut to start no earlier than `p`.
+ */
+export function clipRay(p: Vec2, d: Vec2, box: BBox): [Vec2, Vec2] | undefined {
+  const seg = clipLine(p, d, box);
+  if (!seg) return undefined;
+  const t = (q: Vec2): number => (q.x - p.x) * d.x + (q.y - p.y) * d.y;
+  const [a, b] = seg; // ordered along d
+  if (t(b) < 0) return undefined;
+  return t(a) < 0 ? [p, b] : [a, b];
+}

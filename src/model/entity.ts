@@ -1,7 +1,12 @@
+import type { DimAnchors } from './anchor';
 import { arcBBox } from '../geometry/arc';
 import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
 import { circleBBox } from '../geometry/circle';
+import type { Curve } from '../geometry/curve';
+import { normDeg } from '../geometry/angle';
+import { type Transform, transformArc, transformDir, transformLength, transformPoint } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
+import { type Tolerance, scaleTolerance } from './dimFormat';
 import type { LineStyleName } from './lineStyle';
 
 /** Stable id, unique within a drawing and never reused. */
@@ -50,18 +55,162 @@ export type XlineEntity = EntityBase & {
   readonly dir: Vec2;
 };
 
-export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity;
+/** Ray: starts at `base`, infinite along `dir`, a unit vector (the geometry `Ray`). */
+export type RayEntity = EntityBase & {
+  readonly kind: 'ray';
+  readonly base: Vec2;
+  readonly dir: Vec2;
+};
+
+/**
+ * A dimension: a readout of the points it measures, never an input (CAD-1).
+ * `at` places it: a point on the dimension line or arc, or where the text
+ * goes for radius and diameter. `anchors` ties what it measures to the
+ * geometry, so it follows a change (`model/associate`); without them it
+ * measures fixed points. The line style is ignored: dimensions
+ * draw thin. By `type`:
+ * - `linear`: the distance from `p1` to `p2` along `dir` (a unit vector:
+ *   (1, 0) horizontal, (0, 1) vertical, other angles after a rotate).
+ * - `aligned`: the true distance from `p1` to `p2`.
+ * - `radius`, `diameter`: of the circle at `center` with `radius`.
+ * - `angular`: the angle at `vertex` between the arms along the unit
+ *   vectors `dir1` and `dir2`, on the side where `at` is (so it can read
+ *   the reflex angle). `p1` and `p2` are where each arm's extension line
+ *   starts (the end of the measured geometry; the vertex when there is none).
+ * - `symmetric`: a diameter on a half view: Ø twice the distance from `p1`
+ *   to the axis through `axisBase` along the unit vector `axisDir`.
+ *   `axisBase` is `p1`'s foot on the axis when placed. The dimension line
+ *   is square to the axis where `at` is along it (spec, "Symmetric
+ *   diameter"); its style draws one side (Half) or both (Full).
+ * - `ordinate`: `p1`'s distance from `origin` along X (`axis` 'x', a
+ *   vertical leader; Z in lathe mode) or Y ('y', a horizontal leader; X in
+ *   lathe mode). The leader runs from `p1` toward `at`, jogging when `at`
+ *   is off its line, and the text sits just past `at`.
+ * - `centerMark`: annotation, not a measurement: a cross at `center` of a
+ *   circle or arc of `radius`, its arms running just past the curve.
+ * - `centerline`: annotation: a center line from `p1` to `p2` (midway
+ *   between two lines), drawn dash-dot a little past both ends.
+ * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
+ *   (the landing), a short horizontal shoulder, then `text` as typed.
+ *
+ * Overrides of the style for this one dimension (none apply to a leader):
+ * `precision` (decimal places of the value and its tolerance; of the angle
+ * for angular), `tolerance` (lengths only), and `textOverride`, which
+ * replaces the text, `<>` standing for the measured value.
+ */
+export type DimensionEntity = EntityBase & {
+  readonly kind: 'dimension';
+  readonly dimStyle: string;
+  readonly at: Vec2;
+  readonly anchors?: DimAnchors;
+  readonly precision?: number;
+  readonly tolerance?: Tolerance;
+  readonly textOverride?: string;
+  /** Linear and aligned: where the text was dragged to; it sits on the dimension line there. Absent: placed by fit. */
+  readonly textAt?: Vec2;
+} & (
+    | { readonly type: 'linear'; readonly p1: Vec2; readonly p2: Vec2; readonly dir: Vec2 }
+    | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
+    | { readonly type: 'radius' | 'diameter'; readonly center: Vec2; readonly radius: number }
+    | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
+    | { readonly type: 'symmetric'; readonly p1: Vec2; readonly axisBase: Vec2; readonly axisDir: Vec2 }
+    | { readonly type: 'ordinate'; readonly p1: Vec2; readonly origin: Vec2; readonly axis: 'x' | 'y' }
+    | { readonly type: 'centerMark'; readonly center: Vec2; readonly radius: number }
+    | { readonly type: 'centerline'; readonly p1: Vec2; readonly p2: Vec2 }
+    | { readonly type: 'leader'; readonly tip: Vec2; readonly text: string }
+  );
+
+/** A dimension's defining points: what it measures, and `at`. */
+export function dimensionPoints(e: DimensionEntity): Vec2[] {
+  return [...measuredPoints(e), ...(e.textAt ? [e.textAt] : [])];
+}
+
+function measuredPoints(e: DimensionEntity): Vec2[] {
+  switch (e.type) {
+    case 'linear':
+    case 'aligned':
+      return [e.p1, e.p2, e.at];
+    case 'radius':
+    case 'diameter':
+      return [e.center, e.at];
+    case 'angular':
+      return [e.vertex, e.p1, e.p2, e.at];
+    case 'symmetric':
+      return [e.p1, e.axisBase, e.at];
+    case 'ordinate':
+      return [e.p1, e.at];
+    case 'centerMark':
+      return [e.center];
+    case 'centerline':
+      return [e.p1, e.p2];
+    case 'leader':
+      return [e.tip, e.at];
+  }
+}
+
+/** The dimension with each defining point passed through `f`; directions and radius unchanged. */
+export function mapDimensionPoints(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity {
+  const m = mapMeasured(e, f);
+  return e.textAt ? { ...m, textAt: f(e.textAt) } : m;
+}
+
+function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity {
+  const at = f(e.at);
+  switch (e.type) {
+    case 'linear':
+    case 'aligned':
+      return { ...e, at, p1: f(e.p1), p2: f(e.p2) };
+    case 'radius':
+    case 'diameter':
+      return { ...e, at, center: f(e.center) };
+    case 'angular':
+      return { ...e, at, vertex: f(e.vertex), p1: f(e.p1), p2: f(e.p2) };
+    case 'symmetric':
+      return { ...e, at, p1: f(e.p1), axisBase: f(e.axisBase) };
+    case 'ordinate':
+      return { ...e, at, p1: f(e.p1), origin: f(e.origin) };
+    case 'centerMark':
+      return { ...e, at, center: f(e.center) };
+    case 'centerline':
+      return { ...e, at, p1: f(e.p1), p2: f(e.p2) };
+    case 'leader':
+      return { ...e, at, tip: f(e.tip) };
+  }
+}
+
+/**
+ * An instance of a block (spec, "Blocks"): the definition named `block`,
+ * whose geometry is stored about its base point at the origin, placed with
+ * its base point at `at`. Mirrored first (about the block's own X axis),
+ * then scaled by `scale` (uniform, more than zero), then rotated by
+ * `rotationDeg` ([0, 360)). Its geometry is worked out from the drawing's
+ * block table (`model/block`); on layer 0 it takes the instance's layer.
+ */
+export type InsertEntity = EntityBase & {
+  readonly kind: 'insert';
+  readonly block: string;
+  readonly at: Vec2;
+  readonly rotationDeg: number;
+  readonly scale: number;
+  readonly mirrored: boolean;
+};
+
+export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity | DimensionEntity | InsertEntity;
 
 /** The layer and style a tool gives each new entity. */
 export type EntityProps = { readonly layer: string; readonly style?: LineStyleName };
 
 /**
- * Bounds used by Zoom Extents. Xlines are infinite, so they contribute
- * nothing, as in AutoCAD.
+ * Bounds of the geometry. Xlines and rays are infinite, so they contribute
+ * nothing, as in AutoCAD. A dimension gives the bounds of its defining
+ * points; its drawn extent (text, arrows) needs its style, in `dimLayout`.
+ * An insert gives its insertion point; its drawn extent needs its block,
+ * in `block.insertBBox`.
  */
 export function entityBBox(e: Entity): BBox {
   switch (e.kind) {
     case 'point':
+    case 'insert':
       return fromPoints([e.at]);
     case 'line':
       return fromPoints([e.start, e.end]);
@@ -70,7 +219,66 @@ export function entityBBox(e: Entity): BBox {
     case 'arc':
       return arcBBox(e);
     case 'xline':
+    case 'ray':
       return EMPTY_BBOX;
+    case 'dimension':
+      return fromPoints(dimensionPoints(e));
+  }
+}
+
+/** The entity moved, rotated, mirrored or scaled; same id, layer and style. */
+export function transformEntity(e: Entity, t: Transform): Entity {
+  const p = (v: Vec2): Vec2 => transformPoint(t, v);
+  switch (e.kind) {
+    case 'point':
+      return { ...e, at: p(e.at) };
+    case 'line':
+      return { ...e, start: p(e.start), end: p(e.end) };
+    case 'circle':
+      return { ...e, center: p(e.center), radius: transformLength(t, e.radius) };
+    case 'arc':
+      return { ...e, ...transformArc(t, e) };
+    case 'xline':
+    case 'ray':
+      return { ...e, base: p(e.base), dir: transformDir(t, e.dir) };
+    case 'insert':
+      return transformInsert(e, t);
+    case 'dimension': {
+      const m = mapDimensionPoints(e, p);
+      switch (m.type) {
+        case 'linear':
+          return { ...m, dir: transformDir(t, m.dir) };
+        case 'radius':
+        case 'diameter':
+        case 'centerMark':
+          return { ...m, radius: transformLength(t, m.radius) };
+        case 'angular':
+          return { ...m, dir1: transformDir(t, m.dir1), dir2: transformDir(t, m.dir2) };
+        case 'symmetric':
+          return { ...m, axisDir: transformDir(t, m.axisDir) };
+        default:
+          return m;
+      }
+    }
+  }
+}
+
+/**
+ * An instance under a move, rotate, mirror or scale. A mirror about a line
+ * at m° flips the instance and turns it to 2m − its rotation, since
+ * reflecting about m equals rotating by 2m after reflecting about X.
+ */
+function transformInsert(e: InsertEntity, t: Transform): InsertEntity {
+  const at = transformPoint(t, e.at);
+  switch (t.kind) {
+    case 'translate':
+      return { ...e, at };
+    case 'rotate':
+      return { ...e, at, rotationDeg: normDeg(e.rotationDeg + t.deg) };
+    case 'scale':
+      return { ...e, at, scale: e.scale * t.factor };
+    case 'mirror':
+      return { ...e, at, rotationDeg: normDeg(2 * t.deg - e.rotationDeg), mirrored: !e.mirrored };
   }
 }
 
@@ -78,12 +286,14 @@ export function entityBBox(e: Entity): BBox {
  * The entity with every length passed through `f` (a scale about the origin):
  * positions and radii change; angles and xline directions don't. Used to
  * convert units, where `f` divides by 25.4 exactly rather than multiplying by
- * a rounded reciprocal.
+ * a rounded reciprocal. An insert's position moves; its scale doesn't,
+ * since its block's geometry is converted with the drawing.
  */
 export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
   const p = (v: Vec2): Vec2 => ({ x: f(v.x), y: f(v.y) });
   switch (e.kind) {
     case 'point':
+    case 'insert':
       return { ...e, at: p(e.at) };
     case 'line':
       return { ...e, start: p(e.start), end: p(e.end) };
@@ -92,6 +302,52 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
     case 'arc':
       return { ...e, center: p(e.center), radius: f(e.radius) };
     case 'xline':
+    case 'ray':
       return { ...e, base: p(e.base) };
+    case 'dimension': {
+      const m = mapDimensionPoints(e, p);
+      const tol = m.tolerance ? { ...m, tolerance: scaleTolerance(m.tolerance, f) } : m;
+      return tol.type === 'radius' || tol.type === 'diameter' || tol.type === 'centerMark' ? { ...tol, radius: f(tol.radius) } : tol;
+    }
   }
 }
+
+/** The entity as a curve with its real extent, or undefined for a point, a dimension or an insert. */
+export function entityCurve(e: Entity): Curve | undefined {
+  switch (e.kind) {
+    case 'point':
+    case 'dimension':
+    case 'insert':
+      return undefined;
+    case 'line':
+      return { kind: 'segment', a: e.start, b: e.end };
+    case 'ray':
+    case 'xline':
+      return { kind: e.kind, base: e.base, dir: e.dir };
+    case 'circle':
+      return { kind: 'circle', center: e.center, radius: e.radius };
+    case 'arc':
+      return { kind: 'arc', center: e.center, radius: e.radius, startDeg: e.startDeg, endDeg: e.endDeg };
+  }
+}
+
+/**
+ * `e` reshaped to the curve `c`, keeping its id, layer and style. The kind
+ * follows the curve: a trimmed xline becomes a ray, a trimmed circle an arc.
+ */
+export function entityFromCurve(e: Pick<Entity, 'id' | 'layer' | 'style'>, c: Curve): Entity {
+  const base = { id: e.id, layer: e.layer, ...(e.style ? { style: e.style } : {}) };
+  switch (c.kind) {
+    case 'segment':
+      return { ...base, kind: 'line', start: c.a, end: c.b };
+    case 'ray':
+    case 'xline':
+      return { ...base, kind: c.kind, base: c.base, dir: c.dir };
+    case 'circle':
+      return { ...base, kind: 'circle', center: c.center, radius: c.radius };
+    case 'arc':
+      return { ...base, kind: 'arc', center: c.center, radius: c.radius, startDeg: c.startDeg, endDeg: c.endDeg };
+  }
+}
+
+/** `score` ranks it; `dist` (true distance to the cursor) breaks ties. */

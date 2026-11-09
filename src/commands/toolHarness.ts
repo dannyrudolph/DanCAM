@@ -2,7 +2,7 @@ import type { Vec2 } from '../geometry/vec';
 import { createDrawing } from '../model/drawing';
 import type { Entity, EntityId, LineEntity } from '../model/entity';
 import { UndoStack } from '../model/undo';
-import { type ToolContext, ToolRunner } from './tool';
+import { type Report, type ToolContext, ToolRunner } from './tool';
 
 /**
  * Test harness: runs tools against a fresh drawing without the UI, feeding
@@ -12,17 +12,27 @@ export function setup(style?: 'hidden') {
   const drawing = createDrawing('in');
   const undo = new UndoStack(drawing);
   const messages: string[] = [];
+  const reports: Report[] = [];
+  /** What the app has selected when a tool starts; tests set it directly. */
+  let selected: string[] = [];
+  const select = (...ids: string[]): void => {
+    selected = ids;
+  };
   const ctx: ToolContext = {
     drawing,
     undo,
     newProps: () => (style ? { layer: '0', style } : { layer: '0' }),
     message: (m) => messages.push(m),
+    selection: () => selected,
+    report: (r) => reports.push(r),
     continuation: undefined,
   };
   const runner = new ToolRunner(ctx);
   const click = (x: number, y: number): void => runner.send({ kind: 'point', at: { x, y } });
   const value = (v: number, at: Vec2 = { x: 0, y: 0 }): void => runner.send({ kind: 'value', value: v, at });
-  const pick = (id: EntityId, x: number, y: number): void => runner.send({ kind: 'entity', id, at: { x, y } });
+  const pick = (id: EntityId, x: number, y: number, shift = false): void => runner.send({ kind: 'entity', id, at: { x, y }, shift });
+  const text = (t: string): void => runner.send({ kind: 'text', text: t });
+  const finish = (): void => runner.send({ kind: 'finish' });
   const option = (key: string): void => runner.send({ kind: 'option', key });
   const add = (e: Entity): void => void drawing.entities.set(e.id, e);
   const entities = (): Entity[] => [...drawing.entities.values()];
@@ -31,12 +41,25 @@ export function setup(style?: 'hidden') {
     entities()
       .filter((e): e is LineEntity => e.kind === 'line')
       .map((l) => [l.start.x, l.start.y, l.end.x, l.end.y]);
-  /** The waiting step's preview for a cursor point (point steps) or value (value steps). */
-  const preview = (p: Vec2, v?: number): readonly Entity[] => {
+  let previewTarget: EntityId | undefined;
+  let previewShift = false;
+  /** Sets the entity an `entity` step's preview hovers over (the harness has no picking). */
+  const hover = (id: EntityId, shift = false): void => {
+    previewTarget = id;
+    previewShift = shift;
+  };
+  /** The waiting step's preview for a cursor point (point steps), value (value steps), typed text (text steps) or hovered entity. */
+  const preview = (p: Vec2, v?: number, typed?: string): readonly Entity[] => {
     const req = runner.request;
     if (req?.kind === 'point') return req.preview?.(p) ?? [];
     if (req?.kind === 'value') return req.preview?.(v ?? req.fromCursor?.(p) ?? 0, p) ?? [];
+    if (req?.kind === 'text') return req.preview?.(typed ?? '') ?? [];
+    if (req?.kind === 'entity') {
+      const hit = entities().find((e) => req.accepts(e) && e.id === previewTarget);
+      return hit ? (req.preview?.(hit.id, p, previewShift) ?? []) : [];
+    }
     return [];
   };
-  return { drawing, undo, messages, ctx, runner, click, value, pick, option, add, entities, last, lines, preview };
+  const selectionDone = (...ids: string[]): void => runner.send({ kind: 'selection', ids });
+  return { drawing, undo, messages, reports, ctx, runner, click, value, text, pick, finish, option, add, entities, last, lines, preview, hover, select, selectionDone };
 }

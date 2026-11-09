@@ -19,7 +19,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
   Panning: middle-drag, Space + left-drag, or the Pan button (H).
   Playwright browser tests, also run in CI.
 
-## Phase 1b (plan approved 2026-11-08): all five steps done; awaiting the user's review
+## Phase 1b (plan approved 2026-11-08): done, reviewed by the user 2026-11-08
 
 1. **Geometry kernel.** `geometry/`: `angle`, `circle` (2P, 3P), `arc` (3P,
    S-C-E, S-E-R, S-C-Angle, tangent-from-direction), `xline`, `intersect`,
@@ -44,20 +44,567 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
    System Access API with fallbacks; convert/relabel from the status bar
    units (undoable `units` record); unsaved-changes marker and prompts.
 
-Next: Phase 2 (snaps, selection, grips, editing). Don't start it until the
-user says so (CAD-7).
+## Phase 2 (plan approved 2026-11-08): done 2026-11-08, awaiting the user's review
+
+1. **Geometry and rays (done).** Bounded curves (segment, ray, xline, circle, arc):
+   intersections that respect ends, nearest, perpendicular feet, tangent
+   points from a point; move/rotate/mirror/scale transforms (exact at 90°,
+   mirror swaps arc ends); Ray entity and tool (Shift+X); TTR between
+   parallel lines. `geometry/curve`, `geometry/transform`, `geometry/ray`,
+   `commands/rayTool`. Rays need no file migration: the kind is new, so
+   older files read unchanged (schemaVersion stays 1).
+2. **Object snaps (done).** `snap/snap.findSnap`: End, Mid, Cen, Quad, Int,
+   Perp, Tan, Nea, Node within a 10px aperture; nearest-to-cursor ranking,
+   Nearest last, ties by kind order (End before Int). Cen/Perp/Tan count
+   whenever their object is under the cursor and rank as if at the aperture
+   edge. Perp/Tan need a base point. Snaps feed point and value steps, beat
+   Ortho/polar, lose to locked values (`resolvePoint`'s `snap`). Markers with
+   a tooltip label; OSNAP button + F3 (on by default: End, Mid, Cen, Quad,
+   Int, Node), a menu of kinds; right-click "Snap once..." for the next point
+   (no snap found: nothing placed; Esc drops it). Settings not persisted.
+   **Deferred Tan/Perp for a line's first point** (brought forward from the
+   deferred list at the user's request, 2026-11-08): with no base point, the
+   Line tool's first point can be a deferred Tangent (circle/arc) or
+   Perpendicular (any curve); the start slides as the end moves and is fixed
+   on placement. Tangent to tangent uses `geometry/curve.commonTangents`;
+   other pairings ask for a point. Deferred snaps rank like Center. Line tool
+   only; Circle/Arc/Xline/Ray don't take deferred picks.
+3. **Selection (done).** `model/selection.selectInBox` (window: entity bbox
+   inside, never xlines/rays; crossing: `geometry/curve.curveTouchesBox`);
+   `entityCurve` now lives in `model/entity`. App keeps a `Set` of ids: a
+   click adds, Shift-click removes, a plain click on empty space clears, Esc
+   clears; drags with no tool waiting draw the box (left-to-right window,
+   solid blue; right-to-left crossing, dashed green; Shift-drag removes).
+   Hidden or deleted objects drop out. Panel shows "N objects" with counts by
+   kind for more than one. Not undoable.
+4. **Grips and properties editing (done).** `model/grips` (gripsFor,
+   applyGrip): line ends stretch, line mid / centers / point / xline-ray base
+   move, circle quadrants set radius, arc ends slide along the circle, arc
+   mid makes the arc through the dropped point keeping both ends.
+   `commands/gripTool` is a one-shot tool (`ToolDef.repeat: false`), so grip
+   drags get snaps, Ortho/polar and input boxes from the grip; one `modify`;
+   no-change and degenerate drops commit nothing. Press on a grip and drag,
+   or press-release to make it hot and click to drop; Shift-press never
+   grabs. Grips show on every selected object with no tool active.
+   `model/propertyEdit.propertySetter`: click a value in the panel to type
+   (Enter/blur applies, Esc cancels, unchanged text stores nothing); Length
+   keeps start+angle, Angle keeps start+length, arc Included angle / Arc
+   length keep the start. Layer and Style dropdowns, also for multi-select
+   ("(varies)"). Also added: Select arrow button (no tool), arrow cursor.
+5. **Edit tools (done).** `commands/editTools`: Erase (E, Delete/Backspace
+   with a selection), Move (M), Copy (Shift+C, a copy per point until Enter),
+   Rotate (R, angle typed or from the cursor), Mirror (I, Keep/Erase
+   originals option, remembered), Scale (S, `factor` quantity: plain number,
+   or cursor distance). Selection first (`ToolContext.selection()`), else a
+   `selection` request (clicks and boxes as usual, Enter hands it over).
+   Edit tools are one-shot (`repeat: false`) and the selection is kept after.
+   `model/entity.transformEntity`. Toolbar: separator, then edit tools.
+6. **Inquiry (done).** `commands/inquiryTools`: Dist (D), ID, List (pick
+   one object; same rows as the panel, now in `model/properties`), Angle
+   (vertex + two arms: included and CCW). Sticky. `ToolContext.report` →
+   `ui/inquiryPanel` (Results, newest first, 10 kept, Clear; hover for full
+   precision). Toolbar: third group. Done-when e2e: line–arc and arc–arc
+   Int, point-to-arc Tan and arc-to-arc tangent line, each checked with ID
+   to 1e-12.
+
+Also in Phase 2, at the user's request: Rotate's Reference option (two
+points along an edge, then its new angle).
+
+## Phase 3 (plan approved 2026-11-08): done, reviewed by the user 2026-11-08
+
+1. **Trim/extend kernel (done).** `geometry/trim.trimCurve` (removed piece +
+   kept pieces; new ends are the cut points; cuts within TOL of an end or of
+   each other dropped; circle needs two cuts → arc; xline → ray(s), ray →
+   line) and `geometry/extend.extendCurve` (segment end nearer the pick, ray
+   base, arc end along its circle; an end already on a boundary goes on to
+   the next). Unit and property tests.
+2. **Trim (T) and Extend (Shift+T) tools (done).** `commands/trimTools`:
+   edges from the selection, a selection step, or Enter alone = every
+   visible object (re-read at each pick; never the picked object itself);
+   then picks until Enter, each its own undo step; Shift-pick does the other
+   mode. A split keeps the id on the first piece, the other gets a new id,
+   same layer and style (`model/entity.entityFromCurve`). Hover previews the
+   removed piece or the extended object (Shift held previews the other mode;
+   previews allocate no ids). `EntityRequest.preview`, entity input `shift`,
+   `SelectionRequest.canFinish` (Enter with nothing selected = finish).
+   Toolbar: fourth group (Modify).
+3. **Fillet (F) and Chamfer (Shift+F) (done).** `geometry/corner`:
+   `filletCurves` (lines, rays, xlines, arcs, circles; the center is on the
+   side of each curve where the other pick is, then nearest the picks;
+   straight curves keep the part running away from the arc, arcs the part
+   with the pick, circles stay whole; parallel lines get a half-circle at
+   the first line's picked end; radius 0 = sharp corner) and `chamferLines`
+   (straight curves; distances or distance + angle from the first line).
+   `commands/cornerTools`: pick two objects (second previews), one undo
+   step, sticky; Distances / Distance, Angle, Trim / No trim, all
+   remembered for the session. **Size first** (user, 2026-11-08): until a
+   size has been typed this session, the tool opens on the input box at
+   the cursor (Fillet R; Chamfer D1 with the method buttons, then D2 or
+   the angle); after that the prompt shows it ("Fillet R 0.02: …") and
+   "Change size (…)…" asks again. The joint takes the objects' layer and style
+   when they share them, else the current ones.
+4. **Offset (O), Break (B), Join (J), Lengthen (Shift+L) (done).**
+   Geometry: `offset` (sideways / concentric, exact for H/V lines;
+   `offsetThrough`), `breakCurve` (`breakAt`, `breakBetween` via
+   `trimCurve`; circle CCW from the first point), `join` (collinear
+   segments across gaps; arcs on one circle CCW from the first, a circle
+   when closed), `lengthen` (delta / total / percent at the end nearer the
+   pick). Tools: `commands/offsetTool` (Distance… or Through point,
+   object after object until Enter, each its own step; remembered),
+   `commands/lengthTools` (Break: Two points / At point, sticky; Join:
+   selection first, merges every joinable pair, the smaller gap for arcs,
+   one step; Lengthen: Delta / Total / Percent, value asked on change and
+   remembered, picks until Enter). `editTools.objects` is now exported.
+   Also: `intersect.lineLine` takes x from a vertical line and y from a
+   horizontal one exactly (separate commit).
+5. **Array (Shift+A) and Stretch (Shift+S) (done).** `geometry/array`
+   (`rectangularArray`, `polarArray`: full 360° spaces evenly, a partial
+   fill ends on the last item, negative is clockwise, unrotated copies
+   keep the objects' bbox center on the circle) and `geometry/stretch`
+   (line ends, ray/xline base, circle center, points inside move; an arc
+   with both ends inside moves, with one end keeps its sagitta).
+   `commands/arrayTool`: selection first; Rectangular (rows, columns,
+   ΔY, ΔX; spacing skipped for a single row/column) or Polar (center,
+   count, fill angle with Rotate items / Don't rotate); typed values, the
+   last previews; one step. `commands/stretchTool`: the crossing window is
+   two picked corners (previewed as a dashed box; snaps work), then base
+   and second point; visible objects only; one step. No selection-first
+   for Stretch (it needs the window itself). `editTools.point` / `value`
+   exported and reused. `ui/shortcuts.test` guards unique tool keys.
+6. **Done-when e2e (done).** Six xlines (centerline, Ø.250, Ø.375, front
+   face, shoulder, back face) trimmed with Trim / Enter = all into a shaft
+   step, then a .010 x 45° chamfer and an R.020 fillet; every vertex
+   checked in the properties panel at full precision to 1e-12. Also: the
+   toolbar wraps to a second row on narrow windows (at 1024px the extra
+   buttons had pushed the page wider than the window).
+
+## Phase 4 (plan approved 2026-11-08): done 2026-11-09, awaiting the user's review
+
+1. **Formatting kernel (done).** `model/dimFormat`: `roundDecimal` rounds
+   the 15-significant-digit decimal of the stored value, halves away from
+   zero, no "-0" (so .1245 → .125 at 3 places); `formatDecimal` with zero
+   rules (`INCH_ZEROS`, `MM_ZEROS`); `formatDimension` → `DimText` (main,
+   inline ± or stacked deviation/limits, alt in brackets), prefix/suffix,
+   `<>` override; with a tolerance the value and tolerance keep trailing
+   zeros; a zero deviation is "+.000"/"-.000" when the style keeps
+   trailing zeros, a bare "0" when it drops them (mm); limits leave `main`
+   empty; angles in decimal ° or D°M'S (`formatDms`, carries), no dual
+   units on angles. `flatText` for one-line display.
+2. **Model, layout and rendering (done).** `DimensionEntity` (kind
+   `dimension`): `p1`, `p2` measured, `at` on the dimension line,
+   `dimStyle`, optional `refs` (Phase 5); `type: 'linear'` with a unit
+   `dir` (a rotate turns it, so a rotated linear dim keeps measuring
+   along its axis) or `'aligned'`. `model/dimStyle` (`DimStyle`: sheet
+   sizes in drawing units, precision, zeros, tolerance, angle format,
+   dual, prefix/suffix; defaults INCH-3PL .12 text/arrows, MM-2PL 3 mm).
+   `Drawing.dimStyles` + `currentDimStyle` (saved, not undoable);
+   `dimStyle` undo record; Convert units scales styles too. File v2
+   (migration 1 → 2 adds the unit's default style; strict reader for
+   styles and dimensions). `model/textMetrics` (Helvetica widths, cap
+   height .718 em) keeps layout DOM-free. `model/dimLayout`: extension
+   lines (offset, extend), ASME upright text breaking the line, 3:1 filled
+   arrows, best fit (inside / arrows outside / text outside past p2 /
+   both outside), stacked tolerances 2.5 text heights, alt units after.
+   Pick counts the text as solid; window/crossing and Zoom Extents use
+   the drawn extent; snaps ignore dimensions; Stretch moves p1/p2/at one
+   by one; no grips yet; line style ignored (no Style row). Properties:
+   Dim style, Type, Text, Measured, points. Four demo dimensions, one per
+   fit case.
+3. **Linear (Shift+D) and Aligned (G) tools (done).** `commands/dimTools`:
+   Two points (snaps; the second has the first as base) or Pick a line
+   (its ends; `refs` = the line), then the dimension line's position,
+   previewed live; one undo step each; sticky. Linear: Auto H/V
+   (`linearDirFor`: beside the points' span → vertical, above/below →
+   horizontal, off a corner → the larger overshoot), or Horizontal /
+   Vertical forced; method and orientation remembered for the session.
+   Same two points refused; Enter at placement drops it. Toolbar: a
+   Dimensions group before Inquiry. Shortcuts chosen by Claude, not yet
+   confirmed by the user.
+4. **Radius (Shift+R), Diameter (Shift+O), Angular (Shift+G) (done).**
+   Entity: `p1`/`p2` moved into the types that use them; radius and
+   diameter store `center` + `radius` exactly (copied from the arc or
+   circle, never rebuilt from a point); angular stores `vertex`, unit arm
+   directions `dir1`/`dir2`, and `p1`/`p2` where each extension line
+   starts. `dimensionPoints` / `mapDimensionPoints` drive bbox, transform
+   and Stretch. Layout: radial text outside the circle on a leader aimed
+   at the center, arrow on the circle, horizontal shoulder (left or right
+   by side); inside on the radius / full diameter line, broken by the
+   text. Angular: `angularSector` = the side of the arms where `at` is
+   (reflex on the far side); arc through `at` broken by upright text, the
+   same four fit cases, extension lines past each arm's geometry; text
+   from `angleFormat` (anglePrecision, decimal or D°M'S; no tolerance or
+   dual). Prefixes R and Ø. Tools: Radius/Diameter pick an arc or circle,
+   then the text point; Angular methods Two lines (quadrant by cursor,
+   `angleBetweenLines`; parallel refused), Arc, Vertex + 2 points; all
+   previewed, sticky, refs kept. Toolbar icons; demo end view has Ø, R and
+   120° dims. Arc-derived angles carry a few ULPs (120.00000000000003)
+   from cos/sin → atan2; below any display precision. Shortcuts chosen by
+   Claude, not yet confirmed.
+5. **Leader / note, Shift+N (done).** A dimension of `type: 'leader'`
+   (so it shares the dimension style, layout, pick, selection, Stretch,
+   transforms and file code): `tip` (the arrow), `at` (the landing),
+   `text` exactly as typed. No measured value (`measuredValue` and the
+   layout's `value` are undefined; no Measured row). Layout: arrow at the
+   tip along the leader, horizontal shoulder one arrow long pointing away
+   from the tip (right when vertical), upright text past it, centered on
+   the shoulder; a mirror keeps the text readable. Tool: arrow point
+   (snaps), landing (refused on the tip), then a new `text` request: a
+   "Note" box at the landing takes the focus, so letters are text, not
+   shortcuts; the preview follows the typing; Enter adds it (empty text
+   refused), a click on the canvas refocuses the box, Esc leaves with
+   nothing added. `expandSymbols`: %%d °, %%c Ø, %%p ± (either case). One
+   line only. No file migration (a new type; schemaVersion stays 2). Demo:
+   a ".005 X 45°" note at the right-hand corner. Not yet: editing a
+   leader's text afterwards (with the text overrides in step 6),
+   multi-line notes, more than one leader segment. Shortcut chosen by
+   Claude, not yet confirmed.
+6. Dimension Styles panel; per-dimension overrides; Sheet scale (done,
+   awaiting the user's review). Three commits:
+   a. **Overrides (done).** Optional `precision`, `tolerance`,
+      `textOverride` on any dimension but a leader (`model/dimOverride`).
+      Precision sets the value's and the tolerance's places (the angle's
+      for angular); tolerance lengths only; text with `<>` for the value
+      and %%d/%%c/%%p; empty or a bare `<>` removes it. Properties panel:
+      Dim style, Precision ("By style (3)", 0–8) and Tolerance ("By
+      style", None, ±, Deviation, Limits) dropdowns; Tol ± / Tol upper /
+      Tol lower editable (editing one makes the tolerance the dimension's
+      own; upper never below lower); Text click-to-edit (a leader's note
+      too; it can't be emptied). Each edit one undo step. Files: optional
+      fields, validated, schemaVersion stays 2. Convert units scales an
+      override tolerance.
+   b. **Sheet scale (done).** `Drawing.sheetScale` (10 = 10:1, 0.5 =
+      1:2; default 1) divides a style's sheet sizes (text height, arrows,
+      offsets, gap; not tolerances) when a dimension is laid out
+      (`model/sheetScale.atSheetScale`), so a 10:1 detail prints .12"
+      text. Undoable (`sheetScale` change), saved (optional in the file;
+      absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
+      20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
+      cancels). Print/PDF uses it in Phase 7 (Output).
+   c. **Dimension Styles panel (done).** `model/dimStyles` (like
+      `layers`): New copies the style being edited as NAME-2, -3…; edit
+      (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
+      lower; undefined removes dual/prefix/suffix); rename moves its
+      dimensions (one step, current follows); delete refused when used,
+      current or last; `ensureCurrentDimStyle` after undo. Sidebar panel
+      under Layers: current radio, name (click: edit its settings;
+      double-click: rename), dimension count, delete; collapsible
+      Settings: sizes (exact, value parser), precision, leading/trailing
+      zeros, tolerance kind and values, tol precision, angle format and
+      precision, dual units (other unit's defaults) and precision,
+      prefix/suffix (spaces kept). Each change one undo step.
+      `toleranceOfKind` is shared with the per-dimension override.
+7. **Dimension grips (done).** `model/dimGrips`; `gripsFor` and
+   `applyGrip` take the drawing for dimensions. Linear/aligned: `p1`, `p2`
+   (move a measured point; snaps apply; drops `refs`; not onto the other
+   point), `line1`/`line2` at the dimension line's ends (move the line),
+   `text` (new optional `textAt`: the text sits on the line where it
+   projects, the line running out to it; dropped within half a text height
+   of the middle it centers again; the line moves with it). Line and text
+   drags snap the line's clearance from the nearer measured point to ASME
+   spacing (.375" then every .25"; 10 then 6 mm; divided by the sheet
+   scale) within half a text height; no snap when the line runs between
+   the points. Radius/diameter: `text`. Angular: `arc` at the arc's
+   middle (radius and side). Leader: `tip`, `text` (landing). Each drag is
+   one undo step. `textAt` moves, stretches and saves with the dimension
+   (optional in the file).
+8. **Done-when (done).** `ui/referenceDrawing` (`/?reference`): a turned
+   pin (.500 long, Ø.125/Ø.188, .010 × 45° chamfer) and its end view at
+   10:1, built with the tools (clicks, picks, typed note) plus overrides,
+   a dual-units style (INCH-DUAL) and the sheet scale through the undo
+   stack. Nine dimensions, every type: .500 [12.7], .200 REF, .0940
+   ±.0005, .014, 45°, Ø.188 +.000/-.001, R.030, 120°, .010 X 45°. Checked
+   in `referenceDrawing.test.ts` (exact texts, .012 text = .12 printed,
+   no text over another or over the part, no dimension line, arc or arrow
+   across another's text, file round-trip) and in the browser (each text
+   clicked and read from the properties panel). Placing them found that
+   an angular dimension with its arrows outside a short arc reaches back
+   across nearby text; the reference places that one where the arrows fit.
+
+Associativity stays Phase 5; dimensions store their measured points (and
+a reference to the geometry, unused until Phase 5).
+
+Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
+user will give feedback on a working version; done-when uses our own
+reference drawing); ASME unidirectional text; leader text typed in a box
+at the cursor is fine (CAD-9 exception for notes); plain sans font for
+now, stroke font question at Phase 7 (Output).
+
+Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
+or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
+become rays or lines); shortcuts as listed above.
+
+Decisions (user, 2026-11-08): shortcuts as above plus F3 for snaps (Stretch
+needs a key other than S); arc grips as in step 4; sidebar results panel;
+deferred: extension/tracking snaps, multi-object grip edits (Perp/Tan for a
+line's first point was brought forward into step 2).
 
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
-deferred (ray to Phase 2, autosave to Phase 6).
+deferred (ray to Phase 2, autosave to Phase 7, Output).
+
+## Phase 5 (plan approved 2026-11-09): in progress
+
+1. Lathe mode and diameter entry: a per-drawing Lathe toggle (saved)
+   labels the axes Z (horizontal) and X (vertical) and supplies a
+   centerline at Y = 0; Diameter shows and takes X as Ø (stored values
+   unchanged; halving is exact) in the input boxes, status readout,
+   properties panel and inquiry results. **(done)** `model/latheView`
+   (`AxisView`, `viewLabel`/`viewRow`: X→Z, Y→X or Ø with factor 2);
+   `Drawing.lathe`, `diameterMode` (saved, optional in the file, not
+   undoable); status bar Lathe and Ø toggles (Ø off without lathe), readout
+   "Z … X/Ø …"; boxes Z/X/Ø/ΔZ/ΔØ, mode button L∠/ΔZX/ZX, a typed diameter
+   locks the radius; properties and inquiry rows renamed and doubled, a
+   typed Ø sets the radius; the renderer draws the axis at Y = 0 as a
+   center-style xline (not an entity, so not snappable yet).
+2. Associativity: snaps report what they hit (entity + feature);
+   dimensions anchor each measured point (replaces `refs`; file v2 → v3);
+   a geometry change re-measures its dimensions inside the same
+   transaction, so one undo restores both. **(done)** `model/anchor`
+   (`Anchor`: entity + start/end/mid/center/node/quad/int; `DimAnchors`
+   p1/p2/vertex points, `curve`, `lines`); snaps carry `on`, the app sends
+   it as the point's `anchor` when the point is on the snap; the tools
+   anchor snapped points, Pick a line (start/end), radius/diameter/arc
+   angle (`curve`), two-line angle (`lines`). `model/associate`:
+   `UndoStack.commit` appends `dimensionFollowUp` to the transaction:
+   geometry changed → re-measure (a uniform move carries `at`/`textAt`);
+   geometry deleted, wrong kind, parallel or zero-length → delete the
+   dimension; a feature gone → that point unanchored; a dimension changed
+   itself → mismatched anchors dropped. Copy and Array remap anchors onto
+   the copies (`withNewIds`). File v3: `anchors` (checked to name
+   geometry); v2 `refs` converted on open where the points still match.
+   Leaders aren't anchored yet; Nearest, Perpendicular and Tangent snaps
+   don't anchor.
+3. Symmetric diameter (Shift+M): the lathe centerline (or a picked one),
+   then features one after another; Ø + twice the distance; Half (default)
+   or Full per style. In lathe mode a linear dimension across the
+   centerline gets Ø automatically. **(done)** Dimension type `symmetric`
+   (`p1`, `axisBase` = its foot, `axisDir`; `at` sets where the line
+   crosses the axis); value 2 × distance, always Ø. Style
+   `symmetric?: 'half' | 'full'` (absent = Half; Styles panel
+   "Symmetric Ø"). Half: one extension line and arrow at the feature, line
+   an arrow length past the axis, text halfway or past the axis when it
+   doesn't fit; Full: the linear layout to the mirrored point. Tool
+   Shift+M: lathe axis (or Pick centerline; outside lathe mode always
+   picked, anchored as `anchors.axis`), then feature + placement pairs
+   until Enter, each one undo step. Re-measures with its feature and
+   centerline; moved together, the line goes along. Grips p1, line1,
+   text. `readsDiameter`: lathe + Ø on, a vertical linear dimension across
+   Y = 0 gets Ø. Picking an edge (instead of a point) isn't offered.
+4. Baseline (Shift+B) and Continue (Shift+K) from a linear dimension.
+   **(done)** `commands/chainDimTools`: pick a linear or aligned
+   dimension (the extension line nearer the pick is the start, keeping its
+   anchor), then points until Enter, each a linear dimension along the
+   picked one's direction, own undo step, snapped points anchored.
+   Baseline: from the start, each line `lineSpacing` (.25" / 6 mm at the
+   sheet scale) further out; Continue: from the last end, same line. The
+   user wasn't sure these are needed (2026-11-09); kept, finished.
+   Also: Enter now finishes Symmetric diameter, as its prompt says.
+5. Ordinate (Shift+Z): DIMORIGIN with a marker; Z or X by drag or forced;
+   X as Ø in lathe mode; common baseline; auto-jog; Align Ordinates.
+   Split (user, 2026-11-09): 5a the tool, origin and Ø; 5b the common
+   baseline, auto-jog and Align Ordinates.
+   **5a (done)** `Drawing.dimOrigin` ((0, 0) default, saved, `dimOrigin`
+   undo record, scaled by Convert units); marker (circle and cross) once
+   set or used. Dimension type `ordinate` (`p1`, `origin` copied, `axis`
+   x|y, `at` = leader end); value |Δ| from the origin; leader from the
+   feature (extension offset) square to the axis, jogging in its last two
+   arrow lengths when `at` is off its line, text past the end. Tool
+   Shift+Z (`commands/ordinateTool`): feature + text pairs until Enter;
+   Auto / Z / X (X / Y outside lathe) kept for the session; Set origin
+   (its ordinates follow in the same undo step via `associate`). With
+   lathe + Ø, X ordinates read Ø twice. A snapped feature is anchored; the
+   text keeps level with it along the measured axis. Grips p1, text. The
+   origin itself isn't anchored to geometry.
+   **5b (done)** `model/ordinateLayout`: `onCommonBaseline` (leader end
+   level with the nearest same-axis, same-direction ordinate's within two
+   text heights), `clearOfNeighbors` (text moved along the baseline to the
+   nearest place a text gap clear of the others; the leader jogs),
+   `placeOrdinate` = both, used when placing and when dragging the text
+   grip. Align ordinates (toolbar only, no shortcut): selection, then a
+   level; each axis's set on it, packed in feature order a gap apart and
+   shifted to sit on their features on average; one undo step.
+6. Center marks (Shift+E) and centerlines: associative annotations.
+   **(done)** Dimension types `centerMark` (center, radius; `anchors.curve`)
+   and `centerline` (p1, p2 midway between two lines; `anchors.lines`):
+   no value or text, no precision/tolerance/text rows, no grips. Mark: a
+   cross of half-arrow arms, an offset gap, then lines an extension past
+   the curve; centerline: dash-dot (`DimLayout.centerDash`), an extension
+   past each end. `centerlineBetween` pairs the second line's ends with
+   the first's. Tool Shift+E (`commands/centerMarkTool`): Circle or arc
+   (a second mark on one refused) or Two lines; sticky; one undo step
+   each. They follow their geometry and are deleted with it.
+7. Done-when: a real lathe part, with the user's feedback along the way.
+   **(built; awaiting the user's feedback)** `?lathe` loads
+   `ui/latheReference`: a turned pin, upper half on the axis, at 10:1,
+   Lathe and Ø on, built through the real tools with snapped (anchored)
+   points: .010 × 45° chamfer, Ø.125 nose, Ø.188 body, Ø.156 neck, Ø.030
+   cross hole at Z .400, end view. Symmetric Ø.125 and Ø.188, an X
+   ordinate Ø.156, Z ordinates .000/.250/.400/.600/.750 on one baseline,
+   a centerline through the hole, a center mark on the end view, two
+   leaders. Tests (`latheReference.test.ts`): texts, one baseline, no
+   overlaps or crossings, stretching the back .05 makes .650/.800 while
+   the diameters stay (one undo restores), file round trip; e2e "Phase 5
+   done-when" clicks each text. The hole ordinate (.400) is typed, so it
+   doesn't follow the hole.
+
+Decisions (user, 2026-11-09): no reference part needed yet (feedback as
+we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
+defaults to Half; a dimension is deleted when the geometry it measures is
+deleted; shortcuts as above.
+
+## Phase 6: Blocks (plan approved 2026-11-09): in progress
+
+Decisions (user, 2026-11-09): blocks come before output (Output is now
+Phase 7). Main use: a cutting tool sketch (a whole sub-part) moved and
+copied against a profile. The library is shared by all drawings. A text
+field (description) is saved with each block. No nesting for now.
+Spec: "Blocks".
+
+1. Model: `blocks` table on the drawing (name, base, entities, units,
+   description) and an `insert` entity (block, at, rotation, scale,
+   mirrored, layer); geometry transformed for render, bounds, hit test;
+   undo records for definitions; file v4 (v3 opens as before).
+   **(done)** `model/block`: `BlockDef` {name, description, entities:
+   lines/circles/arcs/points about the base at the origin, in drawing
+   units, ids unique within the block}; `instanceTransforms` (mirror about
+   own X, scale, rotate, move; identity steps skipped), `instanceEntities`
+   (layer-0 parts take the instance's layer), `insertBBox`, `insertsOf`,
+   `scaleBlock`. `InsertEntity` {block, at, rotationDeg, scale, mirrored};
+   `transformEntity` moves/rotates/scales it, a mirror at m° flips it and
+   turns it to 2m − rotation. `Drawing.blocks`; undo `block` op (refuses an
+   insert of an undefined block, removing a block with instances, removing
+   a layer a block uses); Convert units converts definitions (instances
+   keep their scale). Extents, pick, window/crossing select, grip
+   (insertion point), properties rows, Stretch (moves it when its
+   insertion point is in the window); the renderer draws parts in their
+   layers' colors. Layer rename carries block geometry; delete refused
+   while a block uses the layer. Snaps skip instances until step 4; anchors
+   never name an instance. The base point isn't a field: the origin is the
+   base. A units field is left to the library (step 6), since a drawing's
+   blocks are always in its units. Rendering is checked in
+   the browser from step 2, when inserts can be made.
+2. Create block (K) and Insert (Shift+I) with a Blocks panel in the
+   sidebar (name, preview, description); unit scaling on insert.
+   Split (user, 2026-11-09): 2a Create block and the panel; 2b Insert.
+   **2a (done)** `commands/blockTools.createBlockTool` (K, toolbar group
+   "Blocks", one-shot like the edit tools): selection first or a
+   selection step; only lines, circles, arcs and points go in (others are
+   left out, with a message); base point, then name (text box at the base;
+   blank or a name used in any case refused, asked again), then
+   description (Enter for none). Options Convert to block (default) / Keep
+   objects / Delete objects, kept for the session. `block.createBlock`:
+   one undo step "Create block X": definition about the base (ids b1…),
+   sources removed unless kept, an instance at the base on the current
+   layer when converted. `ui/blocksPanel` (section `#blocks`): name,
+   instance count, description, SVG preview (`blockPreviewSvg`); "None
+   yet" hint when empty. Browser test checks the instance is drawn (canvas
+   pixels; fails if inserts aren't drawn) and its properties.
+   Unit scaling on insert moves to step 6, where blocks come from a library
+   in another unit; a drawing's own blocks are always in its units.
+   **2b (done)** `createInsertTool` (Shift+I, sticky, one undo step per
+   copy): the block last chosen (Blocks panel row click, or its button in
+   the options bar), else the first by name; click the base point (preview
+   at the cursor), then pick or type the rotation (Enter keeps the last).
+   Options Mirror (toggle) and Scale (typed, more than zero); block,
+   rotation, mirror and scale kept for the session. On the current layer
+   and style. Browser test: panel click → Insert, a copy turned 90°, a
+   mirrored copy, both drawn (canvas pixels) and shown in properties.
+3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
+   Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
+   Z/X, rotation, scale, mirrored), List; Explode (Shift+U).
+   **(done)** The edit tools needed no change (step 1's `transformEntity`
+   and `withNewIds` already handle instances); tests pin Move, Copy,
+   Rotate, Mirror (a left-hand copy: flipped, 180 − rotation), Scale,
+   Erase and polar Array (items turned a step each). Properties: X/Y
+   (Z/X in lathe mode), Rotation (angle, normalised) and Scale (new
+   `factor` quantity, plain number, more than zero) are editable; Mirrored
+   is a Yes/No dropdown (`withMirrored`: flipped about its own X axis
+   through the insertion point); Block and Description read-only. List
+   reports the same rows. `explodeTool` (Shift+U, one-shot):
+   `block.explodeInserts` replaces each selected instance by its parts as
+   drawn (layer-0 parts on its layer and style), new ids, one undo step;
+   other objects left alone.
+4. Snaps and associativity inside instances: snaps on instance geometry,
+   anchors that name instance + inner entity, Trim/Extend boundaries.
+   **(done)** Geometry ids reach into instances as paths `insertId/partId`
+   (`block.partRef`, `refEntityId`, `resolveGeometry`: the part as drawn,
+   carrying the path as its id). `drawnGeometry` (plain geometry + parts,
+   visible layers) feeds `findSnap`, so every snap works on instance parts
+   and reports the path in `on`; the app passes it as the point's anchor
+   unchanged. `anchor.ts` and `associate.ts` resolve every anchor through
+   `resolveGeometry`; `dependsOn` matches a path by its instance; a
+   `block` change re-measures dimensions on that block's instances (step
+   5's Edit block relies on it). Copy remaps paths onto the copy
+   (`remapAnchors`). Erase or Explode of the instance deletes its
+   dimensions (spec). The file check accepts paths that resolve. Trim and
+   Extend take instance parts as edges; instances are never trimmed.
+   Browser test: a linear dimension snapped from the tool to a part face
+   reads 3.000, then 2.500 after the tool's X is edited to .5.
+   Not yet: tools that pick a whole object (Radius, Diameter, Center mark,
+   two-line Angle, Symmetric's centerline) can't pick a part inside an
+   instance; point-snapped dimensions can.
+5. Edit block (Save/Cancel, updates every instance in one undo step),
+   Rename, Purge.
+   **(done)** `model/blockEdit`: `blockEditDrawing` opens the block by
+   itself (base at the origin; the drawing's layers, styles, units and
+   settings; no blocks; new ids past its `e<n>` ids); `saveBlockEdit`
+   keeps only lines/circles/arcs/points (counts the rest as left out),
+   refuses an empty block, keeps part ids (so dimensions on kept parts stay
+   anchored and re-measure; those on deleted parts go), carries layers
+   made or changed while editing, one undo step "Edit block X", none when
+   nothing changed. `renameBlock` (instances follow; a change of case is
+   fine; clashes and blanks refused), `deleteBlock` (refused while used),
+   `purgeBlocks` (every unused one, one step). App: the Blocks panel's
+   pencil opens Edit block: its own drawing, undo stack and view, a base
+   point marker, a bar "Editing block X" with Save block / Cancel. Save
+   that can't (empty) stays open with the message. While editing, New,
+   Open, Save, Units and Sheet scale are refused ("Save or cancel the
+   block X first."); Lathe mode applies to both. Panel: double-click the
+   name to rename (Enter or leaving applies, Esc cancels), trash deletes,
+   Purge in the header. Browser tests: edit with two instances, erase the
+   nose, Save (both change, one undo brings it back), Ctrl+S refused while
+   editing; Cancel; rename; delete and purge refused while used, then
+   purge.
+6. Library: IndexedDB store, Save to library, insert from the library
+   (copied in), Update from library, Export/Import library file; name
+   clashes asked about, never overwritten silently.
+   **(done)** `model/library` (pure): `LibraryBlock` = definition + units
+   + the layers its geometry is on (not 0); `libraryEntry`, `inUnits`
+   (converts in↔mm), `sameBlock` (description and geometry within TOL),
+   `libraryStatus` (none/same/differs), `freeName` ("Tool 2"), `copyIn`
+   (one undo step, adds missing layers; existing layers keep the
+   drawing's colours), `updateFromLibrary` (one step, dimensions on
+   instances re-measure), `planImport`/`importEntries` (new, already
+   there, clashes: replace, keep both renamed, or skip). Names match
+   without case. `io/nativeFile`: `.cad2d-blocks.json` (`serializeLibrary`,
+   `parseLibrary`, checked like a drawing's blocks). `io/libraryStore`:
+   `IndexedDbLibrary` (db "dancam", store "blocks", keyed by lower-case
+   name); checked in the browser tests, no fake-IndexedDB package.
+   `ui/libraryPanel` ("Block library" under Blocks): rows with preview,
+   units, description, delete (asks; drawings keep their copies). Row
+   click copies in (or uses the drawing's when the same; asks when
+   different: use the drawing's / update it / copy in as "X 2") and
+   starts Insert. Blocks panel rows: Save to library (asks before
+   replacing a different one, or saves as "X 2"), and Update from library
+   when the library's differs. Export downloads
+   "DanCAM blocks.cad2d-blocks.json"; Import reads one (asks once about
+   clashes). Questions use the context menu with a new heading line.
+   Copy in and the first Insert are two undo steps.
+   Browser tests: save to library, reload, new mm drawing, insert (edge
+   explodes to 25.4); clash questions, Update from library and its undo,
+   Export, Import into a second browser context (and again: nothing new),
+   delete from the library.
+7. Done-when: a tool sketch saved to the library from one drawing, used in
+   another against a lathe profile (spec, roadmap Phase 6).
+
+Tests per step: model and transform unit tests, tool tests with the
+harness, file round trip and v3 migration, library store tests (fake
+IndexedDB in memory, no new package), and e2e for each tool and the
+done-when.
 
 ## Open questions
 
-- TTR between two parallel lines finds nothing: the kernel treats the
-  coincident offset lines as having no intersection, where AutoCAD places the
-  circle nearest the picks. Fix in `tangentTangentRadius` when it matters.
-
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).
-- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 6.
+- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 7 (Output).

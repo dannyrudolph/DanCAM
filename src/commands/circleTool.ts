@@ -31,6 +31,7 @@ export function tangentTarget(e: Entity): TangentTarget | undefined {
     case 'line':
       return { kind: 'line', a: e.start, b: e.end };
     case 'xline':
+    case 'ray':
       return { kind: 'line', a: e.base, b: add(e.base, e.dir) };
     case 'circle':
     case 'arc':
@@ -119,7 +120,9 @@ export function createCircleTool(): ToolDef {
         case 'ttr': {
           const picks = yield* pickTargets(ctx, choice, 2);
           if (!picks) return;
-          const solve = (r: number) => nearestToPicks(tangentTangentRadius(picks.targets[0]!, picks.targets[1]!, r), picks.targets, picks.at);
+          const [a0, a1] = [picks.at[0]!, picks.at[1]!];
+          const hint = { x: (a0.x + a1.x) / 2, y: (a0.y + a1.y) / 2 };
+          const solve = (r: number) => nearestToPicks(tangentTangentRadius(picks.targets[0]!, picks.targets[1]!, r, hint), picks.targets, picks.at);
           for (;;) {
             const r = yield* choice.value({
               prompt: 'Circle: type the radius',

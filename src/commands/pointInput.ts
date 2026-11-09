@@ -51,17 +51,24 @@ export function track(base: Vec2, cursor: Vec2, t: Tracking): Vec2 {
   return cursor;
 }
 
+const NO_TRACKING: Tracking = { ortho: false, polar: false, polarIncrementDeg: 15 };
+
 /**
  * The point a click or Enter places: the cursor, constrained by Ortho or polar
- * tracking, then overridden by whichever values are locked.
+ * tracking, then overridden by whichever values are locked. An object snap
+ * point, when there is one, replaces the cursor and beats tracking; locked
+ * values still win over it.
  */
 export function resolvePoint(
   cursor: Vec2,
   base: Vec2 | undefined,
   mode: EntryMode,
   locks: Locks,
-  t: Tracking,
+  tracking: Tracking,
+  snap?: Vec2,
 ): Vec2 {
+  if (snap) cursor = snap;
+  const t = snap ? NO_TRACKING : tracking;
   if (!base || mode === 'absolute') {
     return { x: locks.x ?? cursor.x, y: locks.y ?? cursor.y };
   }

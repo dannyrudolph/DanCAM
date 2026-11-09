@@ -50,7 +50,18 @@ export type CanvasHandlers = {
   zoomExtents(): void;
   cursor(screen: Vec2 | undefined): void;
   /** Left click (press and release without dragging). */
-  click(screen: Vec2): void;
+  click(screen: Vec2, shift: boolean): void;
+  /**
+   * A left press, before anything else: true when it grabbed something (a
+   * grip) that the drag now moves. Releasing after a drag calls `dragEnd`;
+   * releasing in place calls nothing, leaving the grabbed thing for a click.
+   */
+  pressStartsDrag(screen: Vec2, shift: boolean): boolean;
+  dragEnd(screen: Vec2): void;
+  /** True when a left drag should draw a selection box (no tool waiting for input). */
+  leftDragSelects(): boolean;
+  /** A selection box being dragged from `from` to `to`; `done` on release. */
+  box(from: Vec2, to: Vec2, done: boolean, shift: boolean): void;
   /** Right click, in page coordinates for placing a menu. */
   contextMenu(pageX: number, pageY: number): void;
   /** True when a left drag should pan (Space held, or the Pan button is on). */
@@ -73,6 +84,10 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
   let pan: { at: Vec2; button: number } | undefined;
   let lastMiddleDown = 0;
   let leftDown: Vec2 | undefined;
+  /** Where a selection-box drag started, canvas-local, once it has moved past the click slop. */
+  let boxFrom: Vec2 | undefined;
+  /** A press that grabbed a grip: where it started, in client pixels. */
+  let grabbed: Vec2 | undefined;
 
   const local = (e: MouseEvent): Vec2 => {
     const r = canvas.getBoundingClientRect();
@@ -109,6 +124,12 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
         startPan(e);
         return;
       }
+      boxFrom = undefined;
+      if (h.pressStartsDrag(local(e), e.shiftKey)) {
+        grabbed = { x: e.clientX, y: e.clientY };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
       leftDown = { x: e.clientX, y: e.clientY };
       return;
     }
@@ -126,6 +147,15 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
 
   canvas.addEventListener('pointermove', (e) => {
     h.cursor(local(e));
+    if (leftDown && !pan) {
+      const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
+      if (!boxFrom && moved > CLICK_SLOP_PX && h.leftDragSelects()) {
+        const r = canvas.getBoundingClientRect();
+        boxFrom = { x: leftDown.x - r.left, y: leftDown.y - r.top };
+        canvas.setPointerCapture(e.pointerId); // keep the box going outside the canvas
+      }
+      if (boxFrom) h.box(boxFrom, local(e), false, e.shiftKey);
+    }
     if (!pan) return;
     h.pan(e.clientX - pan.at.x, e.clientY - pan.at.y);
     pan.at = { x: e.clientX, y: e.clientY };
@@ -136,10 +166,22 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
       endPan(e);
       return;
     }
+    if (grabbed && e.button === 0) {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      const moved = Math.hypot(e.clientX - grabbed.x, e.clientY - grabbed.y);
+      grabbed = undefined;
+      if (moved > CLICK_SLOP_PX) h.dragEnd(local(e));
+      return;
+    }
     if (e.button !== 0 || !leftDown) return;
     const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
     leftDown = undefined;
-    if (moved <= CLICK_SLOP_PX) h.click(local(e));
+    if (boxFrom) {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      const from = boxFrom;
+      boxFrom = undefined;
+      h.box(from, local(e), true, e.shiftKey);
+    } else if (moved <= CLICK_SLOP_PX) h.click(local(e), e.shiftKey);
   });
   canvas.addEventListener('pointercancel', endPan);
   canvas.addEventListener('pointerleave', () => {

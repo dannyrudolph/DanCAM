@@ -142,6 +142,11 @@ export function parseLength(text: string, units: Units): ParseResult {
   return parse(text, units, true);
 }
 
+/** A plain number such as a scale factor: the same arithmetic, no units. */
+export function parseFactor(text: string): ParseResult {
+  return parse(text, 'in', false);
+}
+
 /** An angle in degrees, with the same arithmetic and an optional ° sign. */
 export function parseAngle(text: string): ParseResult {
   return parse(text, 'in', false);

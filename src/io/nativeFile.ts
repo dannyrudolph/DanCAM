@@ -1,7 +1,12 @@
 import { nearlyEqual } from '../geometry/tolerance';
 import type { Vec2 } from '../geometry/vec';
+import type { Tolerance, ZeroRules } from '../model/dimFormat';
+import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
-import type { Entity } from '../model/entity';
+import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
+import { type BlockDef, isBlockGeometry, resolveGeometry } from '../model/block';
+import type { LibraryBlock } from '../model/library';
+import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 
@@ -12,27 +17,49 @@ import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
  */
 export const FILE_EXTENSION = '.cad2d.json';
 export const FORMAT = 'DanCAM drawing';
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 4;
 
-type FileV1 = {
+/**
+ * Version 2 added dimension styles (and dimension entities, which need
+ * them); version 3 anchors dimensions to geometry (`anchors` in place of
+ * the unused `refs`); version 4 adds blocks (`blocks` and `insert` entities).
+ */
+type FileV4 = {
   format: typeof FORMAT;
-  schemaVersion: 1;
+  schemaVersion: 4;
   units: Units;
   nextId: number;
   /** Optional: files from before layers had a current layer open on "0". */
   currentLayer?: string;
+  currentDimStyle: string;
+  /** Optional: files from before it existed print at 1:1. */
+  sheetScale?: number;
+  /** Optional: absent is (0, 0). */
+  dimOrigin?: Vec2;
+  /** Optional: absent is off. */
+  lathe?: boolean;
+  diameterMode?: boolean;
   layers: Layer[];
+  dimStyles: DimStyle[];
+  blocks: BlockDef[];
   entities: Entity[];
 };
 
 export function serializeDrawing(d: Drawing): string {
-  const file: FileV1 = {
+  const file: FileV4 = {
     format: FORMAT,
     schemaVersion: SCHEMA_VERSION,
     units: d.units,
     nextId: d.nextId,
     currentLayer: d.currentLayer,
+    currentDimStyle: d.currentDimStyle,
+    sheetScale: d.sheetScale,
+    dimOrigin: d.dimOrigin,
+    lathe: d.lathe,
+    diameterMode: d.diameterMode,
     layers: [...d.layers.values()],
+    dimStyles: [...d.dimStyles.values()],
+    blocks: [...d.blocks.values()],
     entities: [...d.entities.values()],
   };
   return `${JSON.stringify(file, null, 2)}\n`;
@@ -43,11 +70,25 @@ export type ParseResult = { readonly ok: true; readonly drawing: Drawing } | { r
 /** Thrown inside the parser; turned into a ParseResult error at the top. */
 class FileError extends Error {}
 
+/** Set by the 2 → 3 migration: dimensions may carry `refs` to turn into anchors. */
+const REFS_FROM_V2 = '__refsFromV2';
+
 /**
  * Upgrades from version n to n + 1, run in order until the file is current,
- * so old drawings always open. None yet: version 1 is the first.
+ * so old drawings always open.
  */
-const MIGRATIONS: Readonly<Record<number, (file: Record<string, unknown>) => Record<string, unknown>>> = {};
+const MIGRATIONS: Readonly<Record<number, (file: Record<string, unknown>) => Record<string, unknown>>> = {
+  // 1 → 2: the drawing gets its unit's default dimension style. (Bad units are reported by the reader.)
+  1: (file) => {
+    const style = defaultDimStyle(file.units === 'mm' ? 'mm' : 'in');
+    return { ...file, schemaVersion: 2, dimStyles: [style], currentDimStyle: style.name };
+  },
+  // 2 → 3: dimensions' `refs` become anchors, worked out once the geometry is read.
+  2: (file) => ({ ...file, schemaVersion: 3, [REFS_FROM_V2]: true }),
+  // 3 → 4: no blocks yet.
+  3: (file) => ({ ...file, schemaVersion: 4, blocks: [] }),
+};
+
 
 /** Reads a `.cad2d.json` file, checking every field, or explains why it can't. */
 export function parseDrawing(text: string): ParseResult {
@@ -70,14 +111,68 @@ export function parseDrawing(text: string): ParseResult {
       file = migrate(file);
       version += 1;
     }
-    return { ok: true, drawing: readV1(file) };
+    return { ok: true, drawing: readCurrent(file) };
   } catch (err) {
     if (err instanceof FileError) return { ok: false, error: err.message };
     throw err;
   }
 }
 
-function readV1(file: Record<string, unknown>): Drawing {
+/**
+ * The block library file, `.cad2d-blocks.json` (spec, "Blocks", Library):
+ * for backup and for moving the library to another machine. Each block
+ * carries its units and the layers its geometry is on.
+ */
+export const LIBRARY_EXTENSION = '.cad2d-blocks.json';
+export const LIBRARY_FORMAT = 'DanCAM block library';
+export const LIBRARY_VERSION = 1;
+
+export function serializeLibrary(blocks: readonly LibraryBlock[]): string {
+  return `${JSON.stringify({ format: LIBRARY_FORMAT, schemaVersion: LIBRARY_VERSION, blocks }, null, 2)}\n`;
+}
+
+export type LibraryParse = { readonly ok: true; readonly blocks: LibraryBlock[] } | { readonly ok: false; readonly error: string };
+
+/** Reads a block library file, checking every field (as a drawing's blocks are checked), or explains why it can't. */
+export function parseLibrary(text: string): LibraryParse {
+  try {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      throw new FileError('This file is not valid JSON.');
+    }
+    const file = obj(raw, 'file');
+    if (file.format !== LIBRARY_FORMAT) throw new FileError('This is not a DanCAM block library.');
+    const version = num(file.schemaVersion, 'schemaVersion');
+    if (version > LIBRARY_VERSION) {
+      throw new FileError(`This library was saved by a newer DanCAM (file version ${version}); update DanCAM to open it.`);
+    }
+    const names = new Set<string>();
+    const blocks = arr(file.blocks, 'blocks').map((v, i) => {
+      const at = `blocks[${i}]`;
+      const o = obj(v, at);
+      if (o.units !== 'in' && o.units !== 'mm') throw new FileError(`${at}.units must be "in" or "mm".`);
+      const units: Units = o.units;
+      const d = createDrawing(units); // holds the layers, to check the geometry against
+      const layers = arr(o.layers, `${at}.layers`).map((l, j) => {
+        const layer = readLayer(l, `${at}.layers[${j}]`);
+        d.layers.set(layer.name, layer);
+        return layer;
+      });
+      const def = readBlock(d, o, at);
+      if (names.has(def.name.toLowerCase())) throw new FileError(`${at}: block "${def.name}" appears twice.`);
+      names.add(def.name.toLowerCase());
+      return { ...def, units, layers };
+    });
+    return { ok: true, blocks };
+  } catch (err) {
+    if (err instanceof FileError) return { ok: false, error: err.message };
+    throw err;
+  }
+}
+
+function readCurrent(file: Record<string, unknown>): Drawing {
   const units = file.units;
   if (units !== 'in' && units !== 'mm') throw new FileError('units must be "in" or "mm".');
   const d = createDrawing(units);
@@ -85,27 +180,69 @@ function readV1(file: Record<string, unknown>): Drawing {
 
   arr(file.layers, 'layers').forEach((v, i) => {
     const at = `layers[${i}]`;
-    const o = obj(v, at);
-    const layer: Layer = {
-      name: str(o.name, `${at}.name`),
-      color: str(o.color, `${at}.color`),
-      visible: bool(o.visible, `${at}.visible`),
-      style: style(o.style, `${at}.style`),
-    };
+    const layer = readLayer(v, at);
     if (d.layers.has(layer.name)) throw new FileError(`${at}: layer "${layer.name}" appears twice.`);
     d.layers.set(layer.name, layer);
   });
   if (d.layers.size === 0) throw new FileError('The drawing has no layers.');
 
+  d.dimStyles.clear();
+  arr(file.dimStyles, 'dimStyles').forEach((v, i) => {
+    const s = readDimStyle(obj(v, `dimStyles[${i}]`), `dimStyles[${i}]`);
+    if (d.dimStyles.has(s.name)) throw new FileError(`dimStyles[${i}]: style "${s.name}" appears twice.`);
+    d.dimStyles.set(s.name, s);
+  });
+  if (d.dimStyles.size === 0) throw new FileError('The drawing has no dimension styles.');
+  const dimStyle = str(file.currentDimStyle, 'currentDimStyle');
+  if (!d.dimStyles.has(dimStyle)) throw new FileError(`currentDimStyle: style "${dimStyle}" is not defined.`);
+  d.currentDimStyle = dimStyle;
+  if (file.sheetScale !== undefined) {
+    const scale = num(file.sheetScale, 'sheetScale');
+    if (!(scale > 0)) throw new FileError('sheetScale must be more than zero.');
+    d.sheetScale = scale;
+  }
+  if (file.dimOrigin !== undefined) d.dimOrigin = vec(file.dimOrigin, 'dimOrigin');
+  if (file.lathe !== undefined) d.lathe = bool(file.lathe, 'lathe');
+  if (file.diameterMode !== undefined) d.diameterMode = bool(file.diameterMode, 'diameterMode');
+
+  arr(file.blocks, 'blocks').forEach((v, i) => {
+    const b = readBlock(d, obj(v, `blocks[${i}]`), `blocks[${i}]`);
+    if (d.blocks.has(b.name)) throw new FileError(`blocks[${i}]: block "${b.name}" appears twice.`);
+    d.blocks.set(b.name, b);
+  });
+
   let maxId = 0;
+  const refs = new Map<EntityId, EntityId[]>();
   arr(file.entities, 'entities').forEach((v, i) => {
-    const e = readEntity(obj(v, `entities[${i}]`), `entities[${i}]`);
+    const o = obj(v, `entities[${i}]`);
+    const e = readEntity(o, `entities[${i}]`);
+    if (file[REFS_FROM_V2] === true && o.refs !== undefined) {
+      refs.set(e.id, arr(o.refs, `entities[${i}].refs`).map((r, j) => str(r, `entities[${i}].refs[${j}]`)));
+    }
     if (d.entities.has(e.id)) throw new FileError(`entities[${i}]: id "${e.id}" appears twice.`);
     if (!d.layers.has(e.layer)) throw new FileError(`entities[${i}]: layer "${e.layer}" is not defined.`);
+    if (e.kind === 'dimension' && !d.dimStyles.has(e.dimStyle)) {
+      throw new FileError(`entities[${i}]: dimension style "${e.dimStyle}" is not defined.`);
+    }
+    if (e.kind === 'insert' && !d.blocks.has(e.block)) throw new FileError(`entities[${i}]: block "${e.block}" is not defined.`);
     d.entities.set(e.id, e);
     const n = /^e(\d+)$/.exec(e.id);
     if (n) maxId = Math.max(maxId, Number(n[1]));
   });
+
+  for (const [id, e] of d.entities) {
+    if (e.kind !== 'dimension') continue;
+    const named = refs.get(id);
+    if (named) {
+      const anchors = anchorsFromRefs(d, e, named);
+      if (anchors) d.entities.set(id, { ...e, anchors });
+    }
+    for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'] as const) {
+      for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
+        if (!resolveGeometry(d, a)) throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
+      }
+    }
+  }
 
   if (file.currentLayer === undefined) {
     ensureCurrentLayer(d);
@@ -143,13 +280,205 @@ function readEntity(o: Record<string, unknown>, at: string): Entity {
         startDeg: degrees(o.startDeg, `${at}.startDeg`),
         endDeg: degrees(o.endDeg, `${at}.endDeg`),
       };
-    case 'xline': {
-      const dir = vec(o.dir, `${at}.dir`);
-      if (!nearlyEqual(Math.hypot(dir.x, dir.y), 1)) throw new FileError(`${at}.dir must be a unit vector.`);
-      return { kind: 'xline', ...base, base: vec(o.base, `${at}.base`), dir };
+    case 'xline':
+    case 'ray':
+      return { kind: o.kind, ...base, base: vec(o.base, `${at}.base`), dir: unitVec(o.dir, `${at}.dir`) };
+    case 'dimension':
+      return readDimension(o, base, at);
+    case 'insert': {
+      const scale = num(o.scale, `${at}.scale`);
+      if (!(scale > 0)) throw new FileError(`${at}.scale must be more than zero.`);
+      return {
+        kind: 'insert',
+        ...base,
+        block: str(o.block, `${at}.block`),
+        at: vec(o.at, `${at}.at`),
+        rotationDeg: degrees(o.rotationDeg, `${at}.rotationDeg`),
+        scale,
+        mirrored: bool(o.mirrored, `${at}.mirrored`),
+      };
     }
     default:
       throw new FileError(`${at}: unknown kind ${JSON.stringify(o.kind)}.`);
+  }
+}
+
+function readLayer(v: unknown, at: string): Layer {
+  const o = obj(v, at);
+  return {
+    name: str(o.name, `${at}.name`),
+    color: str(o.color, `${at}.color`),
+    visible: bool(o.visible, `${at}.visible`),
+    style: style(o.style, `${at}.style`),
+  };
+}
+
+/** A block definition: lines, circles, arcs and points on defined layers, ids unique within it. */
+function readBlock(d: Drawing, o: Record<string, unknown>, at: string): BlockDef {
+  const name = str(o.name, `${at}.name`);
+  if (name.trim() === '') throw new FileError(`${at}.name must not be blank.`);
+  const ids = new Set<EntityId>();
+  const entities = arr(o.entities, `${at}.entities`).map((v, i) => {
+    const where = `${at}.entities[${i}]`;
+    const e = readEntity(obj(v, where), where);
+    if (!isBlockGeometry(e)) throw new FileError(`${where}: a block holds only lines, circles, arcs and points.`);
+    if (ids.has(e.id)) throw new FileError(`${where}: id "${e.id}" appears twice in the block.`);
+    if (!d.layers.has(e.layer)) throw new FileError(`${where}: layer "${e.layer}" is not defined.`);
+    ids.add(e.id);
+    return e;
+  });
+  return { name, description: str(o.description, `${at}.description`), entities };
+}
+
+function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'layer' | 'style'>, at: string): DimensionEntity {
+  const common = {
+    kind: 'dimension' as const,
+    ...base,
+    dimStyle: str(o.dimStyle, `${at}.dimStyle`),
+    at: vec(o.at, `${at}.at`),
+    ...(o.anchors === undefined ? {} : { anchors: dimAnchors(o.anchors, `${at}.anchors`) }),
+    ...(o.precision === undefined ? {} : { precision: places(o.precision, `${at}.precision`) }),
+    ...(o.tolerance === undefined ? {} : { tolerance: tolerance(o.tolerance, `${at}.tolerance`) }),
+    ...(o.textOverride === undefined ? {} : { textOverride: str(o.textOverride, `${at}.textOverride`) }),
+    ...(o.textAt === undefined ? {} : { textAt: vec(o.textAt, `${at}.textAt`) }),
+  };
+  const ends = (): { p1: Vec2; p2: Vec2 } => ({ p1: vec(o.p1, `${at}.p1`), p2: vec(o.p2, `${at}.p2`) });
+  switch (o.type) {
+    case 'linear':
+      return { ...common, type: 'linear', ...ends(), dir: unitVec(o.dir, `${at}.dir`) };
+    case 'aligned':
+      return { ...common, type: 'aligned', ...ends() };
+    case 'radius':
+    case 'diameter':
+      return { ...common, type: o.type, center: vec(o.center, `${at}.center`), radius: radius(o.radius, `${at}.radius`) };
+    case 'angular':
+      return {
+        ...common,
+        type: 'angular',
+        vertex: vec(o.vertex, `${at}.vertex`),
+        ...ends(),
+        dir1: unitVec(o.dir1, `${at}.dir1`),
+        dir2: unitVec(o.dir2, `${at}.dir2`),
+      };
+    case 'symmetric':
+      return { ...common, type: 'symmetric', p1: vec(o.p1, `${at}.p1`), axisBase: vec(o.axisBase, `${at}.axisBase`), axisDir: unitVec(o.axisDir, `${at}.axisDir`) };
+    case 'ordinate':
+      if (o.axis !== 'x' && o.axis !== 'y') throw new FileError(`${at}.axis must be "x" or "y".`);
+      return { ...common, type: 'ordinate', p1: vec(o.p1, `${at}.p1`), origin: vec(o.origin, `${at}.origin`), axis: o.axis };
+    case 'centerMark':
+      return { ...common, type: 'centerMark', center: vec(o.center, `${at}.center`), radius: radius(o.radius, `${at}.radius`) };
+    case 'centerline':
+      return { ...common, type: 'centerline', ...ends() };
+    case 'leader':
+      return { ...common, type: 'leader', tip: vec(o.tip, `${at}.tip`), text: str(o.text, `${at}.text`) };
+    default:
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric, ordinate, centerMark, centerline or leader.`);
+  }
+}
+
+/** A whole number of decimal places, 0 to 8. */
+function anchor(v: unknown, at: string): Anchor {
+  const o = obj(v, at);
+  const id = str(o.id, `${at}.id`);
+  switch (o.feature) {
+    case 'start':
+    case 'end':
+    case 'mid':
+    case 'center':
+    case 'node':
+      return { id, feature: o.feature };
+    case 'quad': {
+      const deg = num(o.deg, `${at}.deg`);
+      if (![0, 90, 180, 270].includes(deg)) throw new FileError(`${at}.deg must be 0, 90, 180 or 270.`);
+      return { id, feature: 'quad', deg };
+    }
+    case 'int':
+      return { id, feature: 'int', other: str(o.other, `${at}.other`) };
+    default:
+      throw new FileError(`${at}: unknown feature ${JSON.stringify(o.feature)}.`);
+  }
+}
+
+function symmetricStyle(v: unknown, at: string): 'half' | 'full' {
+  if (v !== 'half' && v !== 'full') throw new FileError(`${at} must be "half" or "full".`);
+  return v;
+}
+
+function dimAnchors(v: unknown, at: string): DimAnchors {
+  const o = obj(v, at);
+  const lines = o.lines === undefined ? undefined : arr(o.lines, `${at}.lines`).map((x, i) => str(x, `${at}.lines[${i}]`));
+  if (lines && lines.length !== 2) throw new FileError(`${at}.lines must name two lines.`);
+  return {
+    ...(o.p1 !== undefined && { p1: anchor(o.p1, `${at}.p1`) }),
+    ...(o.p2 !== undefined && { p2: anchor(o.p2, `${at}.p2`) }),
+    ...(o.vertex !== undefined && { vertex: anchor(o.vertex, `${at}.vertex`) }),
+    ...(o.curve !== undefined && { curve: str(o.curve, `${at}.curve`) }),
+    ...(o.axis !== undefined && { axis: str(o.axis, `${at}.axis`) }),
+    ...(lines && { lines: [lines[0]!, lines[1]!] as const }),
+  };
+}
+
+function places(v: unknown, at: string): number {
+  const n = num(v, at);
+  if (!Number.isInteger(n) || n < 0 || n > 8) throw new FileError(`${at} must be a whole number from 0 to 8.`);
+  return n;
+}
+
+function readDimStyle(o: Record<string, unknown>, at: string): DimStyle {
+  const size = (key: string, positive: boolean): number => {
+    const v = num(o[key], `${at}.${key}`);
+    if (positive ? !(v > 0) : v < 0) throw new FileError(`${at}.${key} must be ${positive ? 'more than zero' : 'zero or more'}.`);
+    return v;
+  };
+  const places = (key: string): number => {
+    const v = num(o[key], `${at}.${key}`);
+    if (!Number.isInteger(v) || v < 0 || v > 8) throw new FileError(`${at}.${key} must be a whole number from 0 to 8.`);
+    return v;
+  };
+  const zeros = (v: unknown, where: string): ZeroRules => {
+    const z = obj(v, where);
+    return { leading: bool(z.leading, `${where}.leading`), trailing: bool(z.trailing, `${where}.trailing`) };
+  };
+  if (o.angleFormat !== 'decimal' && o.angleFormat !== 'dms') throw new FileError(`${at}.angleFormat must be "decimal" or "dms".`);
+  let dual: DimStyle['dual'];
+  if (o.dual !== undefined) {
+    const u = obj(o.dual, `${at}.dual`);
+    const precision = num(u.precision, `${at}.dual.precision`);
+    if (!Number.isInteger(precision) || precision < 0 || precision > 8) throw new FileError(`${at}.dual.precision must be a whole number from 0 to 8.`);
+    dual = { precision, zeros: zeros(u.zeros, `${at}.dual.zeros`) };
+  }
+  return {
+    name: str(o.name, `${at}.name`),
+    textHeight: size('textHeight', true),
+    arrowSize: size('arrowSize', false),
+    extOffset: size('extOffset', false),
+    extExtend: size('extExtend', false),
+    textGap: size('textGap', false),
+    precision: places('precision'),
+    zeros: zeros(o.zeros, `${at}.zeros`),
+    tolerance: tolerance(o.tolerance, `${at}.tolerance`),
+    tolPrecision: places('tolPrecision'),
+    angleFormat: o.angleFormat,
+    anglePrecision: places('anglePrecision'),
+    ...(dual && { dual }),
+    ...(o.prefix === undefined ? {} : { prefix: str(o.prefix, `${at}.prefix`) }),
+    ...(o.suffix === undefined ? {} : { suffix: str(o.suffix, `${at}.suffix`) }),
+    ...(o.symmetric === undefined ? {} : { symmetric: symmetricStyle(o.symmetric, `${at}.symmetric`) }),
+  };
+}
+
+function tolerance(v: unknown, at: string): Tolerance {
+  const t = obj(v, at);
+  switch (t.kind) {
+    case 'none':
+      return { kind: 'none' };
+    case 'symmetric':
+      return { kind: 'symmetric', value: num(t.value, `${at}.value`) };
+    case 'deviation':
+    case 'limits':
+      return { kind: t.kind, upper: num(t.upper, `${at}.upper`), lower: num(t.lower, `${at}.lower`) };
+    default:
+      throw new FileError(`${at}.kind must be none, symmetric, deviation or limits.`);
   }
 }
 
@@ -181,6 +510,12 @@ function num(v: unknown, at: string): number {
 function vec(v: unknown, at: string): Vec2 {
   const o = obj(v, at);
   return { x: num(o.x, `${at}.x`), y: num(o.y, `${at}.y`) };
+}
+
+function unitVec(v: unknown, at: string): Vec2 {
+  const dir = vec(v, at);
+  if (!nearlyEqual(Math.hypot(dir.x, dir.y), 1)) throw new FileError(`${at} must be a unit vector.`);
+  return dir;
 }
 
 function radius(v: unknown, at: string): number {

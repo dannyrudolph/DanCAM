@@ -8,7 +8,7 @@ import type { LineStyleName } from '../model/lineStyle';
  * turned profile on its centerline, with a 0.0005" step on the largest diameter
  * for checking deep zoom, a hidden bore and a tangent edge to show the line
  * styles, plus an end view to the left with circles, a bolt-circle arc and
- * a vertical construction line. Loaded as initial state, like opening a file, so it is not on the
+ * a vertical construction line, and a few dimensions and a leader. Loaded as initial state, like opening a file, so it is not on the
  * undo stack.
  */
 export function loadDemo(d: Drawing): void {
@@ -54,6 +54,34 @@ export function loadDemo(d: Drawing): void {
 
   const pointId = newEntityId(d);
   d.entities.set(pointId, { kind: 'point', id: pointId, layer: '0', at: { x: 1, y: 0.2505 } });
+
+  // Dimensions, one of each fit: overall length (text and arrows inside), first step (arrows outside),
+  // right face (both outside, too short for either), and an aligned one along the first shoulder's diagonal.
+  const dimStyle = d.currentDimStyle;
+  const h = { x: 1, y: 0 };
+  const vert = { x: 0, y: 1 };
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'linear', dir: h, p1: { x: 0, y: 0.125 }, p2: { x: 2, y: 0.1875 }, at: { x: 1, y: 0.65 } });
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'linear', dir: h, p1: { x: 0, y: 0.125 }, p2: { x: 0.5, y: 0.25 }, at: { x: 0.25, y: 0.45 } });
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'linear', dir: vert, p1: { x: 2, y: 0 }, p2: { x: 2, y: 0.1875 }, at: { x: 2.3, y: 0.1 } });
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'aligned', p1: { x: 0.5, y: 0.25 }, p2: { x: 1.5, y: 0.1875 }, at: { x: 1, y: -0.35 } });
+  // End view: the outside diameter on a leader, the bore's radius, and the bolt arc's included angle.
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'diameter', center: endView, radius: 0.2505, at: { x: -1, y: -0.4 } });
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'radius', center: endView, radius: 0.0625, at: { x: -0.35, y: -0.43 } });
+  const [c30, s30] = [Math.cos(Math.PI / 6), 0.5];
+  add({
+    kind: 'dimension',
+    layer: '0',
+    dimStyle,
+    type: 'angular',
+    vertex: endView,
+    p1: { x: -0.6 + 0.15 * c30, y: 0.075 },
+    p2: { x: -0.6 - 0.15 * c30, y: 0.075 },
+    dir1: { x: c30, y: s30 },
+    dir2: { x: -c30, y: s30 },
+    at: { x: -0.6, y: 0.6 },
+  });
+  // A note on a leader at the right-hand corner.
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'leader', tip: { x: 2, y: 0.1875 }, at: { x: 2.35, y: 0.45 }, text: '.005 X 45°' });
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

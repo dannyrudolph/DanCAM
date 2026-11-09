@@ -2,12 +2,17 @@ import { degToRad } from '../geometry/angle';
 import { arcSweepDeg } from '../geometry/arc';
 import { arcScreenPieces } from '../geometry/arcPolyline';
 import type { BBox } from '../geometry/bbox';
-import { clipLine, clipSegment } from '../geometry/clip';
+import { clipLine, clipRay, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
+import { type DimLayout, dimensionLayout } from '../model/dimLayout';
+import { instanceEntities } from '../model/block';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
-import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
+import type { BoxMode } from '../model/selection';
+import { LINE_STYLES, type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
+import { CAP_HEIGHT_EM, TEXT_FONT } from '../model/textMetrics';
+import { SNAP_LABEL, type Snap, type SnapKind } from '../snap/snap';
 import { type Viewport, worldToScreen } from './viewport';
 
 /** Paper-style drawing area: black lines on white, no grid. */
@@ -18,6 +23,20 @@ const COLORS = {
   selected: '#0969da',
   preview: '#d4760a',
   cursor: '#d4760a',
+  snap: '#1a7f37',
+  tooltipText: '#ffffff',
+  grip: '#0969da',
+  /** Lathe mode's centerline at Y = 0: part of the view, not the drawing. */
+  latheAxis: '#8c959f',
+  /** Lathe mode's Z0 X0 center mark, fainter than the centerline. */
+  latheOrigin: '#b8bec6',
+  origin: '#0969da',
+  hotGrip: '#d1242f',
+  gripEdge: '#ffffff',
+  windowEdge: '#0969da',
+  windowFill: 'rgba(9, 105, 218, 0.08)',
+  crossingEdge: '#1a7f37',
+  crossingFill: 'rgba(26, 127, 55, 0.08)',
 } as const;
 
 /** Half-size of the point marker in CSS pixels. */
@@ -28,13 +47,31 @@ const SELECTED_EXTRA_PX = 1;
 const ARC_ERROR_PX = 0.25;
 /** Half-size of the marker where the next point will land. */
 const CURSOR_MARK_PX = 4;
+/** Half-size of a grip square, CSS pixels. */
+export const GRIP_PX = 4;
+/** Half-size of an object snap marker, CSS pixels. */
+const SNAP_MARK_PX = 6;
+/** Dimension, extension and leader lines, CSS pixels: thin, like the Hidden and Center styles. */
+const DIM_LINE_PX = 1;
+/** Dimension text smaller than this font size is not drawn, CSS pixels. */
+const MIN_TEXT_PX = 2;
 
 /** Things drawn over the drawing: tool preview, selection and the next-point marker. */
 export type Overlay = {
   readonly preview: readonly Entity[];
-  readonly selected: EntityId | undefined;
+  readonly selected: ReadonlySet<EntityId>;
+  /** Grips of the selected entities, world coordinates. */
+  readonly grips: readonly Vec2[];
+  /** The grip being dragged, drawn hot. */
+  readonly hotGrip: Vec2 | undefined;
+  /** A selection box being dragged, in screen pixels. */
+  readonly selectBox: { readonly from: Vec2; readonly to: Vec2; readonly mode: BoxMode } | undefined;
   /** Where a click or Enter would place the point now (after locks and tracking). */
   readonly nextPoint: Vec2 | undefined;
+  /** The object snap the cursor is on; drawn instead of the next-point marker. */
+  readonly snap: Snap | undefined;
+  /** Edit block: the block's base point (the origin), marked like the ordinate origin. */
+  readonly basePoint?: Vec2;
 };
 
 /**
@@ -51,26 +88,47 @@ export function render(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, v.widthPx, v.heightPx);
-  drawEntities(ctx, v, drawing, overlay.selected);
-  for (const e of overlay.preview) {
-    drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
+  if (drawing.lathe) {
+    const axis: Entity = { kind: 'xline', id: 'lathe-axis', layer: '', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } };
+    drawEntity(ctx, v, drawing, axis, LINE_STYLES.center, COLORS.latheAxis, 0);
+    drawCenterMark(ctx, worldToScreen(v, { x: 0, y: 0 }), COLORS.latheOrigin);
   }
-  if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
+  drawEntities(ctx, v, drawing, overlay.selected);
+  if (showsOrigin(drawing)) drawOriginMark(ctx, worldToScreen(v, drawing.dimOrigin));
+  if (overlay.basePoint) drawOriginMark(ctx, worldToScreen(v, overlay.basePoint));
+  for (const e of overlay.preview) {
+    drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);
+  }
+  for (const g of overlay.grips) drawGrip(ctx, worldToScreen(v, g), COLORS.grip);
+  if (overlay.hotGrip) drawGrip(ctx, worldToScreen(v, overlay.hotGrip), COLORS.hotGrip);
+  if (overlay.selectBox) drawSelectBox(ctx, overlay.selectBox);
+  if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind, overlay.snap.deferred !== undefined);
+  else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
 }
 
-function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: EntityId | undefined): void {
+function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: ReadonlySet<EntityId>): void {
   for (const e of drawing.entities.values()) {
     const layer = drawing.layers.get(e.layer);
     if (layer && !layer.visible) continue;
-    const isSelected = e.id === selected;
+    const isSelected = selected.has(e.id);
+    if (e.kind === 'insert' && !isSelected) {
+      // Each part in its own layer's color (layer 0 parts are already on the instance's layer).
+      for (const part of instanceEntities(drawing, e)) {
+        const partLayer = drawing.layers.get(part.layer);
+        if (partLayer && !partLayer.visible) continue;
+        drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), partLayer?.color ?? COLORS.fallbackLine, 0);
+      }
+      continue;
+    }
     const color = isSelected ? COLORS.selected : (layer?.color ?? COLORS.fallbackLine);
-    drawEntity(ctx, v, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
+    drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
 }
 
 function drawEntity(
   ctx: CanvasRenderingContext2D,
   v: Viewport,
+  drawing: Drawing,
   e: Entity,
   style: LineStyle,
   color: string,
@@ -119,10 +177,11 @@ function drawEntity(
       ctx.setLineDash([]);
       return;
     }
-    case 'xline': {
+    case 'xline':
+    case 'ray': {
       const base = worldToScreen(v, e.base);
       const dir = { x: e.dir.x, y: -e.dir.y }; // screen Y points down
-      const seg = clipLine(base, dir, screenClipBox(v));
+      const seg = (e.kind === 'ray' ? clipRay : clipLine)(base, dir, screenClipBox(v));
       if (!seg) return;
       // Dashes are anchored at the base point, so they stay put while panning.
       const fromBase = (seg[0].x - base.x) * dir.x + (seg[0].y - base.y) * dir.y;
@@ -139,7 +198,98 @@ function drawEntity(
       ctx.lineWidth = 1 + extraWidth;
       drawPointMark(ctx, worldToScreen(v, e.at));
       return;
+    case 'dimension':
+      drawDimension(ctx, v, dimensionLayout(drawing, e), color, extraWidth);
+      return;
+    case 'insert':
+      // Selected or a preview: every part in the one color.
+      for (const part of instanceEntities(drawing, e)) drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), color, extraWidth);
+      return;
   }
+}
+
+/** Thin continuous lines, filled arrows and upright text, whatever the line style. */
+function drawDimension(ctx: CanvasRenderingContext2D, v: Viewport, l: DimLayout, color: string, extraWidth: number): void {
+  const clip = screenClipBox(v);
+  ctx.lineWidth = DIM_LINE_PX + extraWidth;
+  ctx.lineCap = 'butt';
+  ctx.setLineDash(l.centerDash ? LINE_STYLES.center.dash : []);
+  ctx.beginPath();
+  for (const [a, b] of l.lines) {
+    const seg = clipSegment(worldToScreen(v, a), worldToScreen(v, b), clip);
+    if (!seg) continue;
+    ctx.moveTo(seg[0].x, seg[0].y);
+    ctx.lineTo(seg[1].x, seg[1].y);
+  }
+  ctx.stroke();
+  for (const arc of l.arcs) {
+    const pieces = arcScreenPieces(worldToScreen(v, arc.center), arc.radius * v.scale, degToRad(arc.startDeg), degToRad(arcSweepDeg(arc)), clip, ARC_ERROR_PX);
+    for (const piece of pieces) {
+      ctx.beginPath();
+      const [first, ...rest] = piece.points;
+      ctx.moveTo(first!.x, first!.y);
+      for (const p of rest) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = color;
+  for (const t of l.arrows) {
+    const [p, q, r] = t.map((w) => worldToScreen(v, w)) as [Vec2, Vec2, Vec2];
+    const off = (k: 'x' | 'y', min: number, max: number): boolean => Math.max(p[k], q[k], r[k]) < min || Math.min(p[k], q[k], r[k]) > max;
+    if (off('x', clip.minX, clip.maxX) || off('y', clip.minY, clip.maxY)) continue;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(q.x, q.y);
+    ctx.lineTo(r.x, r.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  for (const run of l.runs) {
+    const px = (run.height / CAP_HEIGHT_EM) * v.scale;
+    if (px < MIN_TEXT_PX) continue; // too small to read; canvas would draw a smudge
+    const at = worldToScreen(v, run.at);
+    ctx.font = `${px}px ${TEXT_FONT}`;
+    ctx.fillText(run.text, at.x, at.y);
+  }
+}
+
+/** The ordinate origin is marked once it has been set or an ordinate uses it. */
+function showsOrigin(d: Drawing): boolean {
+  if (d.dimOrigin.x !== 0 || d.dimOrigin.y !== 0) return true;
+  for (const e of d.entities.values()) if (e.kind === 'dimension' && e.type === 'ordinate') return true;
+  return false;
+}
+
+/** A circle with a cross through it, the datum symbol, a fixed size on screen. */
+function drawOriginMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
+  const r = 6;
+  ctx.strokeStyle = COLORS.origin;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+  ctx.moveTo(s.x - 2 * r, s.y);
+  ctx.lineTo(s.x + 2 * r, s.y);
+  ctx.moveTo(s.x, s.y - 2 * r);
+  ctx.lineTo(s.x, s.y + 2 * r);
+  ctx.stroke();
+}
+
+/** A drafting center mark, a fixed size on screen: a small cross at the center and longer arms past a gap. */
+function drawCenterMark(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + 5 * dx, s.y + 5 * dy);
+    ctx.moveTo(s.x + 8 * dx, s.y + 8 * dy);
+    ctx.lineTo(s.x + 16 * dx, s.y + 16 * dy);
+  }
+  ctx.stroke();
 }
 
 function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
@@ -147,6 +297,110 @@ function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.strokeRect(s.x - CURSOR_MARK_PX, s.y - CURSOR_MARK_PX, CURSOR_MARK_PX * 2, CURSOR_MARK_PX * 2);
+}
+
+function drawGrip(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  const x = Math.round(s.x) - GRIP_PX;
+  const y = Math.round(s.y) - GRIP_PX;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, GRIP_PX * 2, GRIP_PX * 2);
+  ctx.strokeStyle = COLORS.gripEdge;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(x - 0.5, y - 0.5, GRIP_PX * 2 + 1, GRIP_PX * 2 + 1);
+}
+
+/** Window: solid blue edge. Crossing: dashed green edge. Both lightly filled. */
+function drawSelectBox(ctx: CanvasRenderingContext2D, b: NonNullable<Overlay['selectBox']>): void {
+  const x = Math.min(b.from.x, b.to.x);
+  const y = Math.min(b.from.y, b.to.y);
+  const w = Math.abs(b.to.x - b.from.x);
+  const h = Math.abs(b.to.y - b.from.y);
+  const crossing = b.mode === 'crossing';
+  ctx.fillStyle = crossing ? COLORS.crossingFill : COLORS.windowFill;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = crossing ? COLORS.crossingEdge : COLORS.windowEdge;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(crossing ? [6, 4] : []);
+  ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  ctx.setLineDash([]);
+}
+
+/** The snap's glyph (AutoCAD's shapes) at `s`, with its name in a tooltip above right, clear of the input boxes. */
+function drawSnapMark(ctx: CanvasRenderingContext2D, s: Vec2, kind: SnapKind, deferred: boolean): void {
+  const r = SNAP_MARK_PX;
+  ctx.strokeStyle = COLORS.snap;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  switch (kind) {
+    case 'end':
+      ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+      break;
+    case 'mid':
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.closePath();
+      break;
+    case 'cen':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      break;
+    case 'quad':
+      ctx.moveTo(s.x, s.y - r);
+      ctx.lineTo(s.x + r, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      ctx.lineTo(s.x - r, s.y);
+      ctx.closePath();
+      break;
+    case 'int':
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.moveTo(s.x + r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      break;
+    case 'perp':
+      // ⊥ with the corner square
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.moveTo(s.x - r, s.y);
+      ctx.lineTo(s.x, s.y);
+      ctx.lineTo(s.x, s.y + r);
+      break;
+    case 'tan':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y - r);
+      break;
+    case 'nea':
+      // hourglass
+      ctx.moveTo(s.x - r, s.y - r);
+      ctx.lineTo(s.x + r, s.y - r);
+      ctx.lineTo(s.x - r, s.y + r);
+      ctx.lineTo(s.x + r, s.y + r);
+      ctx.closePath();
+      break;
+    case 'node':
+      ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+      ctx.moveTo(s.x - r * 0.7, s.y - r * 0.7);
+      ctx.lineTo(s.x + r * 0.7, s.y + r * 0.7);
+      ctx.moveTo(s.x + r * 0.7, s.y - r * 0.7);
+      ctx.lineTo(s.x - r * 0.7, s.y + r * 0.7);
+      break;
+  }
+  ctx.stroke();
+
+  const label = deferred ? `Deferred ${SNAP_LABEL[kind]}` : SNAP_LABEL[kind];
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(label).width + 10;
+  const x = s.x + r + 8;
+  const y = s.y - r - 8 - 18;
+  ctx.fillStyle = COLORS.snap;
+  ctx.fillRect(x, y, w, 18);
+  ctx.fillStyle = COLORS.tooltipText;
+  ctx.fillText(label, x + 5, y + 9);
 }
 
 /** The canvas rectangle plus a margin wider than any line cap, in CSS pixels. */
