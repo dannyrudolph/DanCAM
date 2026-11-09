@@ -416,6 +416,14 @@ deferred (ray to Phase 2, autosave to Phase 6).
    lathe + Ø, X ordinates read Ø twice. A snapped feature is anchored; the
    text keeps level with it along the measured axis. Grips p1, text. The
    origin itself isn't anchored to geometry.
+   **5b (done)** `model/ordinateLayout`: `onCommonBaseline` (leader end
+   level with the nearest same-axis, same-direction ordinate's within two
+   text heights), `clearOfNeighbors` (text moved along the baseline to the
+   nearest place a text gap clear of the others; the leader jogs),
+   `placeOrdinate` = both, used when placing and when dragging the text
+   grip. Align ordinates (toolbar only, no shortcut): selection, then a
+   level; each axis's set on it, packed in feature order a gap apart and
+   shifted to sit on their features on average; one undo step.
 6. Center marks (Shift+E) and centerlines: associative annotations.
 7. Done-when: a real lathe part, with the user's feedback along the way.
 

@@ -1454,6 +1454,48 @@ test('Ordinate in lathe mode: Z by a vertical leader, X as Ø by a sideways one;
   await expect(prop(page, 'Text')).toHaveText('Ø.250');
 });
 
+test('Align ordinates puts the selected ordinates\' leader ends on one level', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '-1', '-1');
+  await typeValues(page, '2', '2'); // two points set the extents
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -1, maxX: 2, minY: -1, maxY: 2 });
+  const click = async (x: number, y: number) => {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  };
+
+  await page.keyboard.press('Shift+Z');
+  await click(1, 0); // the line's end
+  await click(1, 0.6);
+  await click(0.5, 0); // its midpoint
+  await click(0.5, 1.2); // too far above the first to snap to its baseline
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('5');
+
+  const from = at(1.3, 1.5);
+  const to = at(0.3, 0.4); // right to left: crossing, catching both leaders but not the line
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 5 });
+  await page.mouse.up();
+  await page.getByTestId('tool-dimAlignOrdinates').click();
+  await expect(page.locator('#status .status-prompt')).toHaveText('Align ordinates: pick the level the leaders end at');
+  await click(1.6, 0.9);
+  await page.keyboard.press('Escape');
+
+  await click(0.5, 1.32); // where the higher one's text was
+  await expect(page.locator('#properties h2')).toHaveText('Drawing');
+  await click(0.5, 1.02); // just above the new level: its text now
+  await expect(prop(page, 'Text')).toHaveText('.500');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

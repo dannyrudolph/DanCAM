@@ -6,6 +6,7 @@ import { dimStyleOf } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
 import { withoutAnchors } from './anchor';
+import { placeOrdinate } from './ordinateLayout';
 import type { Grip } from './grips';
 
 /**
@@ -21,7 +22,8 @@ import type { Grip } from './grips';
  * - symmetric: `p1` moves the feature point; `line1`, where the dimension
  *   line meets its extension line, moves the line along the axis; `text`
  *   moves the text along the line.
- * - ordinate: `p1` moves the feature point, `text` the leader's end.
+ * - ordinate: `p1` moves the feature point, `text` the leader's end (onto
+ *   a common baseline, clear of the others: `ordinateLayout`).
  * - leader: `tip` moves the arrow point, `text` the landing.
  */
 
@@ -142,7 +144,7 @@ export function applyDimensionGrip(d: Drawing, e: DimensionEntity, key: string, 
     }
     case 'ordinate':
       if (key === 'p1') return { ...withoutAnchors(e, ['p1']), p1: to } as typeof e;
-      if (key === 'text') return { ...e, at: to };
+      if (key === 'text') return placeOrdinate(d, { ...e, at: to });
       return undefined;
     case 'leader':
       if (key === 'tip') return vecNearlyEqual(to, e.at) ? undefined : { ...e, tip: to };

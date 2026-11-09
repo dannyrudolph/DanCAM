@@ -2,6 +2,8 @@ import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
 import type { DimensionEntity, EntityId } from '../model/entity';
 import { axisNames, axisView } from '../model/latheView';
+import { alignOrdinates, placeOrdinate } from '../model/ordinateLayout';
+import { objects } from './editTools';
 import type { ToolDef, ToolGen, ToolOption } from './tool';
 import { PREVIEW_ID, addEntity } from './toolSteps';
 
@@ -67,7 +69,8 @@ export function createOrdinateDimTool(): ToolDef {
         if (input.kind !== 'point') continue;
         const p1 = input.at;
         const anchor: Anchor | undefined = input.anchor;
-        const make = (id: EntityId, at: Vec2): DimensionEntity => ({
+        // On a common baseline with the others, clear of their texts (spec, "Ordinate").
+        const make = (id: EntityId, at: Vec2): DimensionEntity => placeOrdinate(d, {
           kind: 'dimension',
           id,
           layer,
@@ -105,3 +108,39 @@ export function createOrdinateDimTool(): ToolDef {
     },
   };
 }
+
+type Ordinate = Extract<DimensionEntity, { type: 'ordinate' }>;
+
+/**
+ * Align ordinates (spec, "Ordinate"): the selected ordinates (selection
+ * first, or select then Enter), then the level their leaders end at; each
+ * set lines up on it, texts packed a gap apart near their features, as one
+ * undo step. Other objects in the selection are left alone.
+ */
+export const alignOrdinatesTool: ToolDef = {
+  id: 'dimAlignOrdinates',
+  label: 'Align ordinates',
+  shortcut: '',
+  repeat: false,
+  *run(ctx): ToolGen {
+    const es = yield* objects(ctx, 'Align ordinates');
+    if (!es) return;
+    const os = es.filter((e): e is Ordinate => e.kind === 'dimension' && e.type === 'ordinate');
+    if (os.length === 0) {
+      ctx.message('No ordinate dimensions are selected.');
+      return;
+    }
+    for (;;) {
+      const input = yield {
+        kind: 'point',
+        prompt: 'Align ordinates: pick the level the leaders end at',
+        preview: (p) => [...alignOrdinates(ctx.drawing, os, p).values()].map((o) => ({ ...o, id: `${PREVIEW_ID}-${o.id}` })),
+      };
+      if (input.kind === 'finish') return;
+      if (input.kind !== 'point') continue;
+      const after = alignOrdinates(ctx.drawing, os, input.at);
+      ctx.undo.commit({ label: 'Align ordinates', changes: os.map((before) => ({ op: 'modify' as const, before, after: after.get(before.id)! })) });
+      return;
+    }
+  },
+};
