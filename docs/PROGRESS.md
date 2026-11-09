@@ -279,7 +279,7 @@ points along an edge, then its new angle).
       text. Undoable (`sheetScale` change), saved (optional in the file;
       absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
       20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
-      cancels). Print/PDF uses it in Phase 6.
+      cancels). Print/PDF uses it in Phase 7 (Output).
    c. **Dimension Styles panel (done).** `model/dimStyles` (like
       `layers`): New copies the style being edited as NAME-2, -3…; edit
       (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
@@ -327,7 +327,7 @@ Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
 user will give feedback on a working version; done-when uses our own
 reference drawing); ASME unidirectional text; leader text typed in a box
 at the cursor is fine (CAD-9 exception for notes); plain sans font for
-now, stroke font question at Phase 6.
+now, stroke font question at Phase 7 (Output).
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
@@ -341,7 +341,7 @@ line's first point was brought forward into step 2).
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
-deferred (ray to Phase 2, autosave to Phase 6).
+deferred (ray to Phase 2, autosave to Phase 7, Output).
 
 ## Phase 5 (plan approved 2026-11-09): in progress
 
@@ -453,8 +453,40 @@ we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
 defaults to Half; a dimension is deleted when the geometry it measures is
 deleted; shortcuts as above.
 
+## Phase 6: Blocks (plan proposed 2026-11-09, awaiting approval)
+
+Decisions (user, 2026-11-09): blocks come before output (Output is now
+Phase 7). Main use: a cutting tool sketch (a whole sub-part) moved and
+copied against a profile. The library is shared by all drawings. A text
+field (description) is saved with each block. No nesting for now.
+Spec: "Blocks".
+
+1. Model: `blocks` table on the drawing (name, base, entities, units,
+   description) and an `insert` entity (block, at, rotation, scale,
+   mirrored, layer); geometry transformed for render, bounds, hit test;
+   undo records for definitions; file v4 (v3 opens as before).
+2. Create block (K) and Insert (Shift+I) with a Blocks panel in the
+   sidebar (name, preview, description); unit scaling on insert.
+3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
+   Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
+   Z/X, rotation, scale, mirrored), List; Explode (Shift+U).
+4. Snaps and associativity inside instances: snaps on instance geometry,
+   anchors that name instance + inner entity, Trim/Extend boundaries.
+5. Edit block (Save/Cancel, updates every instance in one undo step),
+   Rename, Purge.
+6. Library: IndexedDB store, Save to library, insert from the library
+   (copied in), Update from library, Export/Import library file; name
+   clashes asked about, never overwritten silently.
+7. Done-when: a tool sketch saved to the library from one drawing, used in
+   another against a lathe profile (spec, roadmap Phase 6).
+
+Tests per step: model and transform unit tests, tool tests with the
+harness, file round trip and v3 migration, library store tests (fake
+IndexedDB in memory, no new package), and e2e for each tool and the
+done-when.
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).
-- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 6.
+- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 7 (Output).
