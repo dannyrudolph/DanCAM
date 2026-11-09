@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CircleEntity, LineEntity, PointEntity } from '../model/entity';
+import type { CircleEntity, DimensionEntity, LineEntity, PointEntity } from '../model/entity';
 import { setup } from './toolHarness';
 import { stretchTool } from './stretchTool';
 
@@ -33,6 +33,18 @@ describe('Stretch', () => {
     expect((t.drawing.entities.get('P') as PointEntity).at).toEqual(v(9, 9));
     t.undo.undo();
     expect(t.lines()[0]).toEqual([0, 1, 2, 1]);
+  });
+
+  it('moves a dimension\'s measured points one by one, so it reads the new length', () => {
+    const t = setup();
+    const d: DimensionEntity = { kind: 'dimension', id: 'D', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: v(1, 0), p1: v(0, 0), p2: v(2, 0), at: v(1, 0.5) };
+    t.add(d);
+    t.runner.start(stretchTool);
+    t.click(1.5, -0.1);
+    t.click(2.5, 0.1); // only p2 is inside
+    t.click(0, 0);
+    t.click(0.25, 0);
+    expect(t.drawing.entities.get('D')).toMatchObject({ p1: v(0, 0), p2: v(2.25, 0), at: v(1, 0.5) });
   });
 
   it('says so when the window touches nothing', () => {

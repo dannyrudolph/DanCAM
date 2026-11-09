@@ -190,9 +190,26 @@ points along an edge, then its new angle).
    trailing zeros, a bare "0" when it drops them (mm); limits leave `main`
    empty; angles in decimal ° or D°M'S (`formatDms`, carries), no dual
    units on angles. `flatText` for one-line display.
-2. Model, file v2 (migration), `model/dimLayout`, rendering (text,
-   arrows, extension lines, ASME horizontal text breaking the line, fit
-   rules), pick/select/transform, properties rows.
+2. **Model, layout and rendering (done).** `DimensionEntity` (kind
+   `dimension`): `p1`, `p2` measured, `at` on the dimension line,
+   `dimStyle`, optional `refs` (Phase 5); `type: 'linear'` with a unit
+   `dir` (a rotate turns it, so a rotated linear dim keeps measuring
+   along its axis) or `'aligned'`. `model/dimStyle` (`DimStyle`: sheet
+   sizes in drawing units, precision, zeros, tolerance, angle format,
+   dual, prefix/suffix; defaults INCH-3PL .12 text/arrows, MM-2PL 3 mm).
+   `Drawing.dimStyles` + `currentDimStyle` (saved, not undoable);
+   `dimStyle` undo record; Convert units scales styles too. File v2
+   (migration 1 → 2 adds the unit's default style; strict reader for
+   styles and dimensions). `model/textMetrics` (Helvetica widths, cap
+   height .718 em) keeps layout DOM-free. `model/dimLayout`: extension
+   lines (offset, extend), ASME upright text breaking the line, 3:1 filled
+   arrows, best fit (inside / arrows outside / text outside past p2 /
+   both outside), stacked tolerances 2.5 text heights, alt units after.
+   Pick counts the text as solid; window/crossing and Zoom Extents use
+   the drawn extent; snaps ignore dimensions; Stretch moves p1/p2/at one
+   by one; no grips yet; line style ignored (no Style row). Properties:
+   Dim style, Type, Text, Measured, points. Four demo dimensions, one per
+   fit case.
 3. Linear (H/V by drag or forced) and Aligned tools, placement preview.
 4. Radius, Diameter, Angular (two lines / arc / vertex + 2 points).
 5. Leader / note (text typed in a box at the cursor).

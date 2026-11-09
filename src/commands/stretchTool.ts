@@ -21,13 +21,16 @@ function windowLines(b: BBox, layer: string): Entity[] {
   return c.map((p, i) => ({ kind: 'line', id: PREVIEW_ID, layer, style: 'hidden', start: p, end: c[(i + 1) % 4]! }));
 }
 
-/** The entity stretched by `delta`, or undefined when nothing of it is inside the window. */
+/**
+ * The entity stretched by `delta`, or undefined when nothing of it is inside
+ * the window. A dimension's measured points and dimension-line point move
+ * one by one, as in AutoCAD.
+ */
 function stretched(e: Entity, box: BBox, delta: Vec2): Entity | undefined {
-  if (e.kind === 'point') {
-    const p = e.at;
-    const inside = p.x >= box.minX && p.x <= box.maxX && p.y >= box.minY && p.y <= box.maxY;
-    return inside ? { ...e, at: { x: p.x + delta.x, y: p.y + delta.y } } : undefined;
-  }
+  const inside = (p: Vec2): boolean => p.x >= box.minX && p.x <= box.maxX && p.y >= box.minY && p.y <= box.maxY;
+  const mv = (p: Vec2): Vec2 => (inside(p) ? { x: p.x + delta.x, y: p.y + delta.y } : p);
+  if (e.kind === 'point') return inside(e.at) ? { ...e, at: mv(e.at) } : undefined;
+  if (e.kind === 'dimension') return [e.p1, e.p2, e.at].some(inside) ? { ...e, p1: mv(e.p1), p2: mv(e.p2), at: mv(e.at) } : undefined;
   const c = entityCurve(e)!;
   const s = stretchCurve(c, box, delta);
   return s && entityFromCurve(e, s);
@@ -37,7 +40,7 @@ function stretched(e: Entity, box: BBox, delta: Vec2): Entity | undefined {
 function touched(d: Drawing, box: BBox): Entity[] {
   return [...d.entities.values()].filter((e) => {
     if (d.layers.get(e.layer)?.visible === false) return false;
-    if (e.kind === 'point') return stretched(e, box, { x: 0, y: 0 }) !== undefined;
+    if (e.kind === 'point' || e.kind === 'dimension') return stretched(e, box, { x: 0, y: 0 }) !== undefined;
     return curveTouchesBox(entityCurve(e)!, box);
   });
 }

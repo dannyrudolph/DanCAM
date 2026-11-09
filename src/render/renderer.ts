@@ -5,10 +5,12 @@ import type { BBox } from '../geometry/bbox';
 import { clipLine, clipRay, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
+import { type DimLayout, dimensionLayout } from '../model/dimLayout';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import type { BoxMode } from '../model/selection';
 import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
+import { CAP_HEIGHT_EM, TEXT_FONT } from '../model/textMetrics';
 import { SNAP_LABEL, type Snap, type SnapKind } from '../snap/snap';
 import { type Viewport, worldToScreen } from './viewport';
 
@@ -43,6 +45,10 @@ const CURSOR_MARK_PX = 4;
 export const GRIP_PX = 4;
 /** Half-size of an object snap marker, CSS pixels. */
 const SNAP_MARK_PX = 6;
+/** Dimension, extension and leader lines, CSS pixels: thin, like the Hidden and Center styles. */
+const DIM_LINE_PX = 1;
+/** Dimension text smaller than this font size is not drawn, CSS pixels. */
+const MIN_TEXT_PX = 2;
 
 /** Things drawn over the drawing: tool preview, selection and the next-point marker. */
 export type Overlay = {
@@ -76,7 +82,7 @@ export function render(
   ctx.fillRect(0, 0, v.widthPx, v.heightPx);
   drawEntities(ctx, v, drawing, overlay.selected);
   for (const e of overlay.preview) {
-    drawEntity(ctx, v, e, effectiveStyle(drawing, e), COLORS.preview, 0);
+    drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
   for (const g of overlay.grips) drawGrip(ctx, worldToScreen(v, g), COLORS.grip);
   if (overlay.hotGrip) drawGrip(ctx, worldToScreen(v, overlay.hotGrip), COLORS.hotGrip);
@@ -91,13 +97,14 @@ function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawi
     if (layer && !layer.visible) continue;
     const isSelected = selected.has(e.id);
     const color = isSelected ? COLORS.selected : (layer?.color ?? COLORS.fallbackLine);
-    drawEntity(ctx, v, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
+    drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
 }
 
 function drawEntity(
   ctx: CanvasRenderingContext2D,
   v: Viewport,
+  drawing: Drawing,
   e: Entity,
   style: LineStyle,
   color: string,
@@ -167,6 +174,46 @@ function drawEntity(
       ctx.lineWidth = 1 + extraWidth;
       drawPointMark(ctx, worldToScreen(v, e.at));
       return;
+    case 'dimension':
+      drawDimension(ctx, v, dimensionLayout(drawing, e), color, extraWidth);
+      return;
+  }
+}
+
+/** Thin continuous lines, filled arrows and upright text, whatever the line style. */
+function drawDimension(ctx: CanvasRenderingContext2D, v: Viewport, l: DimLayout, color: string, extraWidth: number): void {
+  const clip = screenClipBox(v);
+  ctx.lineWidth = DIM_LINE_PX + extraWidth;
+  ctx.lineCap = 'butt';
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const [a, b] of l.lines) {
+    const seg = clipSegment(worldToScreen(v, a), worldToScreen(v, b), clip);
+    if (!seg) continue;
+    ctx.moveTo(seg[0].x, seg[0].y);
+    ctx.lineTo(seg[1].x, seg[1].y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = color;
+  for (const t of l.arrows) {
+    const [p, q, r] = t.map((w) => worldToScreen(v, w)) as [Vec2, Vec2, Vec2];
+    const off = (k: 'x' | 'y', min: number, max: number): boolean => Math.max(p[k], q[k], r[k]) < min || Math.min(p[k], q[k], r[k]) > max;
+    if (off('x', clip.minX, clip.maxX) || off('y', clip.minY, clip.maxY)) continue;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(q.x, q.y);
+    ctx.lineTo(r.x, r.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  for (const run of l.runs) {
+    const px = (run.height / CAP_HEIGHT_EM) * v.scale;
+    if (px < MIN_TEXT_PX) continue; // too small to read; canvas would draw a smudge
+    const at = worldToScreen(v, run.at);
+    ctx.font = `${px}px ${TEXT_FONT}`;
+    ctx.fillText(run.text, at.x, at.y);
   }
 }
 

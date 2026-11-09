@@ -145,23 +145,21 @@ test('the demo drawing loads and renders without errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?demo');
-  await expect(prop(page, 'entity-count')).toHaveText('18');
+  await expect(prop(page, 'entity-count')).toHaveText('22');
   await page.mouse.move(400, 300);
   await page.mouse.wheel(0, -2000); // deep zoom
   await page.waitForTimeout(100);
   expect(errors).toEqual([]);
 });
 
-test('circles, arcs and xlines in the demo end view can be picked and show their values', async ({ page }) => {
+test('circles, arcs, xlines and dimensions in the demo can be picked and show their values', async ({ page }) => {
   await page.goto('/?demo');
   await page.getByTestId('zoom-extents').click();
   const box = await page.locator('#canvas').boundingBox();
   if (!box) throw new Error('canvas has no box');
-  // Demo extents (xlines excluded): X -0.8505 … 2.1, Y ±0.2505, with a 5% margin each side.
-  const extents = { minX: -0.8505, maxX: 2.1, minY: -0.2505, maxY: 0.2505 };
-  const scale = Math.min((box.width * 0.9) / (extents.maxX - extents.minX), (box.height * 0.9) / (extents.maxY - extents.minY));
-  const cx = (extents.minX + extents.maxX) / 2;
-  const toScreen = (x: number, y: number) => ({ x: box.x + box.width / 2 + (x - cx) * scale, y: box.y + box.height / 2 - y * scale });
+  // Demo extents (xlines excluded): X from the end view's left edge to the right-face dimension's
+  // text, Y from the aligned dimension's arrows to the overall-length extension lines.
+  const toScreen = await extentsMapper(page, { minX: -0.8505, maxX: 2.462618384401114, minY: -0.5037935372909058, maxY: 0.775 });
   const at = (deg: number, r: number) => toScreen(-0.6 + r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180));
 
   let p = at(45, 0.2505); // outside-diameter circle
@@ -179,6 +177,14 @@ test('circles, arcs and xlines in the demo end view can be picked and show their
   await page.mouse.click(p.x, box.y + 5); // the vertical xline, well beyond the drawing's extents
   await expect(page.locator('#properties h2')).toHaveText(/^Xline /);
   await expect(prop(page, 'Angle')).toHaveText('90.0000°');
+
+  p = toScreen(1, 0.65); // the overall-length dimension's text, where its line is broken
+  await page.keyboard.press('Escape');
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+  await expect(prop(page, 'Text')).toHaveText('2.000');
+  await expect(prop(page, 'Measured')).toHaveText('2.0000');
+  await expect(prop(page, 'Style')).toHaveCount(0); // dimensions draw thin whatever the line style
 });
 
 test('a focused box that has not been typed in keeps following the cursor', async ({ page }) => {

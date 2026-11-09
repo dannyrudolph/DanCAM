@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDrawing } from './drawing';
-import type { Entity } from './entity';
+import { dimensionLayout } from './dimLayout';
+import type { DimensionEntity, Entity } from './entity';
 import { boxModeFor, selectInBox } from './selection';
 
 function drawing() {
@@ -38,5 +39,30 @@ describe('boxModeFor', () => {
   it('left to right is a window, right to left a crossing', () => {
     expect(boxModeFor(10, 50)).toBe('window');
     expect(boxModeFor(50, 10)).toBe('crossing');
+  });
+});
+
+const dim = (id: string, p1: { x: number; y: number }, p2: { x: number; y: number }, at: { x: number; y: number }): DimensionEntity => ({
+  kind: 'dimension',
+  id,
+  layer: '0',
+  dimStyle: 'INCH-3PL',
+  type: 'linear',
+  dir: { x: 1, y: 0 },
+  p1,
+  p2,
+  at,
+});
+
+describe('selectInBox on a dimension', () => {
+  it('a window needs its text and arrows inside, not just its points; a crossing over the text alone takes it', () => {
+    const d = createDrawing('in');
+    // Short, so the text sits outside, past the second point.
+    const e = dim('d1', { x: 0, y: 0 }, { x: 0.1, y: 0 }, { x: 0.05, y: 0.5 });
+    d.entities.set('d1', e);
+    const text = dimensionLayout(d, e).textBox;
+    expect(selectInBox(d, { minX: -0.5, minY: -0.1, maxX: 0.3, maxY: 1 }, 'window')).toEqual([]);
+    expect(selectInBox(d, { minX: -0.5, minY: -0.1, maxX: text.maxX + 0.01, maxY: 1 }, 'window')).toEqual(['d1']);
+    expect(selectInBox(d, { minX: text.maxX - 0.01, minY: 0.45, maxX: text.maxX + 1, maxY: 0.55 }, 'crossing')).toEqual(['d1']);
   });
 });

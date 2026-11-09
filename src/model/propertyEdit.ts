@@ -129,8 +129,9 @@ export function withLayer(e: Entity, layer: string): Entity {
   return { ...e, layer };
 }
 
-/** `style` undefined means "by layer": the entity's own style is removed. */
+/** `style` undefined means "by layer": the entity's own style is removed. Dimensions always draw thin, so they keep theirs. */
 export function withStyle(e: Entity, style: LineStyleName | undefined): Entity {
+  if (e.kind === 'dimension') return e;
   const { style: _old, ...rest } = e;
   return style ? { ...rest, style } : rest;
 }

@@ -69,3 +69,10 @@ describe('withLayer and withStyle', () => {
     expect('style' in withStyle({ ...line, style: 'hidden' }, undefined)).toBe(false);
   });
 });
+
+describe('withStyle on a dimension', () => {
+  it('leaves it alone: dimensions always draw thin', () => {
+    const d: Entity = { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0, y: 1 } };
+    expect(withStyle(d, 'hidden')).toBe(d);
+  });
+});

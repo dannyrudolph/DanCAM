@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultDimStyle } from './dimStyle';
 import { createDrawing } from './drawing';
 import type { LineEntity } from './entity';
 import { UndoStack } from './undo';
@@ -149,5 +150,21 @@ describe('UndoStack layer changes', () => {
     const layer0 = drawing.layers.get('0')!;
     expect(() => undo.commit({ label: 'DEL', changes: [{ op: 'layer', before: layer0 }] })).toThrow('layer: 0 still has entities');
     expect(() => undo.commit({ label: 'ADD', changes: [{ op: 'layer', after: layer0 }] })).toThrow('layer: 0 already exists');
+  });
+});
+
+describe('UndoStack dimension style changes', () => {
+  it('adds, edits and removes a style, and undo puts each back', () => {
+    const d = createDrawing('in');
+    const undo = new UndoStack(d);
+    const four = { ...defaultDimStyle('in'), name: 'INCH-4PL', precision: 4 };
+    undo.commit({ label: 'Add style', changes: [{ op: 'dimStyle', after: four }] });
+    undo.commit({ label: 'Edit style', changes: [{ op: 'dimStyle', before: four, after: { ...four, textHeight: 0.1 } }] });
+    expect(d.dimStyles.get('INCH-4PL')?.textHeight).toBe(0.1);
+    undo.undo();
+    expect(d.dimStyles.get('INCH-4PL')).toEqual(four);
+    undo.undo();
+    expect(d.dimStyles.has('INCH-4PL')).toBe(false);
+    expect(() => undo.commit({ label: 'Add again', changes: [{ op: 'dimStyle', after: defaultDimStyle('in') }] })).toThrow('dimStyle: INCH-3PL already exists');
   });
 });

@@ -211,3 +211,12 @@ describe('findSnap deferred tangent and perpendicular', () => {
     expect(findSnap(d, { x: 1.01, y: 0.03 }, AP, only('quad', 'tan'), undefined, true)).toEqual({ kind: 'quad', at: { x: 1, y: 0 } });
   });
 });
+
+describe('findSnap and dimensions', () => {
+  it('never snaps to a dimension: it is annotation, not geometry', () => {
+    const d = createDrawing('in');
+    d.entities.set('d', { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: { x: 1, y: 0 }, p1: { x: 0, y: 0 }, p2: { x: 2, y: 0 }, at: { x: 1, y: 0.5 } });
+    expect(findSnap(d, { x: 0, y: 0.5 }, AP, ALL)).toBeUndefined(); // an arrow tip and the end of the dimension line
+    expect(findSnap(d, { x: 0, y: 0.02 }, AP, ALL)).toBeUndefined();
+  });
+});

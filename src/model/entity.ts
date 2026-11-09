@@ -59,14 +59,32 @@ export type RayEntity = EntityBase & {
   readonly dir: Vec2;
 };
 
-export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity;
+/**
+ * A dimension: a readout of the points it measures, never an input (CAD-1).
+ * `p1` and `p2` are the measured points; the dimension line passes through
+ * `at`. A linear dimension measures along `dir` (a unit vector: (1, 0)
+ * horizontal, (0, 1) vertical, other angles after a rotate); an aligned one
+ * along p1 → p2. `refs` names the measured geometry, unused until
+ * associativity (Phase 5). The line style is ignored: dimensions draw thin.
+ */
+export type DimensionEntity = EntityBase & {
+  readonly kind: 'dimension';
+  readonly dimStyle: string;
+  readonly p1: Vec2;
+  readonly p2: Vec2;
+  readonly at: Vec2;
+  readonly refs?: readonly EntityId[];
+} & ({ readonly type: 'linear'; readonly dir: Vec2 } | { readonly type: 'aligned' });
+
+export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity | DimensionEntity;
 
 /** The layer and style a tool gives each new entity. */
 export type EntityProps = { readonly layer: string; readonly style?: LineStyleName };
 
 /**
- * Bounds used by Zoom Extents. Xlines and rays are infinite, so they
- * contribute nothing, as in AutoCAD.
+ * Bounds of the geometry. Xlines and rays are infinite, so they contribute
+ * nothing, as in AutoCAD. A dimension gives the bounds of its defining
+ * points; its drawn extent (text, arrows) needs its style, in `dimLayout`.
  */
 export function entityBBox(e: Entity): BBox {
   switch (e.kind) {
@@ -81,6 +99,8 @@ export function entityBBox(e: Entity): BBox {
     case 'xline':
     case 'ray':
       return EMPTY_BBOX;
+    case 'dimension':
+      return fromPoints([e.p1, e.p2, e.at]);
   }
 }
 
@@ -99,6 +119,10 @@ export function transformEntity(e: Entity, t: Transform): Entity {
     case 'xline':
     case 'ray':
       return { ...e, base: p(e.base), dir: transformDir(t, e.dir) };
+    case 'dimension': {
+      const pts = { p1: p(e.p1), p2: p(e.p2), at: p(e.at) };
+      return e.type === 'linear' ? { ...e, ...pts, dir: transformDir(t, e.dir) } : { ...e, ...pts };
+    }
   }
 }
 
@@ -122,13 +146,16 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
     case 'xline':
     case 'ray':
       return { ...e, base: p(e.base) };
+    case 'dimension':
+      return { ...e, p1: p(e.p1), p2: p(e.p2), at: p(e.at) };
   }
 }
 
-/** The entity as a curve with its real extent, or undefined for a point. */
+/** The entity as a curve with its real extent, or undefined for a point or a dimension. */
 export function entityCurve(e: Entity): Curve | undefined {
   switch (e.kind) {
     case 'point':
+    case 'dimension':
       return undefined;
     case 'line':
       return { kind: 'segment', a: e.start, b: e.end };

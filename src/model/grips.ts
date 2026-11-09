@@ -40,6 +40,8 @@ export function gripsFor(e: Entity): Grip[] {
     case 'xline':
     case 'ray':
       return [{ key: 'move', at: e.base }];
+    case 'dimension':
+      return []; // dimension grips come in Phase 4 step 7
   }
 }
 
@@ -65,6 +67,8 @@ export function applyGrip(e: Entity, key: string, from: Vec2, to: Vec2): Entity 
       case 'xline':
       case 'ray':
         return { ...e, base: shift(e.base, d) };
+      case 'dimension':
+        return undefined;
     }
   }
   switch (e.kind) {

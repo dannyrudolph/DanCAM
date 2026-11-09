@@ -1,3 +1,4 @@
+import type { DimStyle } from './dimStyle';
 import type { Drawing, Layer, Units } from './drawing';
 import type { Entity } from './entity';
 
@@ -9,7 +10,9 @@ export type Change =
   /** The drawing's unit label (converting also scales every entity, in the same transaction). */
   | { readonly op: 'units'; readonly before: Units; readonly after: Units }
   /** Adds (no `before`), removes (no `after`) or edits one layer, matched by name. */
-  | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer };
+  | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer }
+  /** Adds (no `before`), removes (no `after`) or edits one dimension style, matched by name. */
+  | { readonly op: 'dimStyle'; readonly before?: DimStyle; readonly after?: DimStyle };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -29,6 +32,8 @@ function invert(c: Change): Change {
       return { op: 'units', before: c.after, after: c.before };
     case 'layer':
       return { op: 'layer', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
+    case 'dimStyle':
+      return { op: 'dimStyle', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
   }
 }
 
@@ -55,7 +60,21 @@ function apply(d: Drawing, c: Change): void {
     case 'layer':
       applyLayer(d, c.before, c.after);
       return;
+    case 'dimStyle':
+      applyDimStyle(d, c.before, c.after);
+      return;
   }
+}
+
+function applyDimStyle(d: Drawing, before: DimStyle | undefined, after: DimStyle | undefined): void {
+  if (before && after && before.name !== after.name) throw new Error('dimStyle: a change keeps the name');
+  const name = (before ?? after)?.name;
+  if (name === undefined) throw new Error('dimStyle: change has neither before nor after');
+  if (before ? !d.dimStyles.has(name) : d.dimStyles.has(name)) {
+    throw new Error(before ? `dimStyle: ${name} not found` : `dimStyle: ${name} already exists`);
+  }
+  if (after) d.dimStyles.set(name, after);
+  else d.dimStyles.delete(name);
 }
 
 function applyLayer(d: Drawing, before: Layer | undefined, after: Layer | undefined): void {

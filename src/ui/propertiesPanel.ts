@@ -62,7 +62,11 @@ export class PropertiesPanel {
     title.textContent = `${KIND_LABEL[e.kind]} ${e.id}`;
     this.addLayerAndStyle(d, table, selected);
     for (const r of rowsFor(d, e)) {
-      if (typeof r.value === 'string') continue; // Layer and Style, done above
+      if (r.label === 'Layer' || r.label === 'Style') continue; // dropdowns, done above
+      if (typeof r.value === 'string') {
+        this.addRow(table, r.label, r.value);
+        continue;
+      }
       const text = formatNumber(r.value, precision) + (r.unit ?? '');
       const dd = this.addRow(table, r.label, text);
       dd.title = String(r.value);
@@ -132,6 +136,7 @@ export class PropertiesPanel {
       (v) => v !== '' && commitAll('Change layer', (e) => withLayer(e, v)),
     );
     this.addRow(table, 'Layer', '', 'Layer').replaceChildren(layer);
+    if (selected.every((e) => e.kind === 'dimension')) return; // dimensions always draw thin: no line style
 
     const styleKey = (e: Entity): string => e.style ?? '';
     const styles = new Set(selected.map(styleKey));

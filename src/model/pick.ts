@@ -4,10 +4,12 @@ import { distanceToSegment } from '../geometry/distance';
 import { distanceToRay } from '../geometry/ray';
 import { distanceToXline } from '../geometry/xline';
 import type { Vec2 } from '../geometry/vec';
+import { dimensionLayout, distanceToLayout } from './dimLayout';
 import type { Drawing } from './drawing';
 import type { Entity, EntityId } from './entity';
 
-export function distanceToEntity(p: Vec2, e: Entity): number {
+/** Distance from `p` to what `e` draws; a dimension's text counts as solid. */
+export function distanceToEntity(d: Drawing, p: Vec2, e: Entity): number {
   switch (e.kind) {
     case 'point':
       return Math.hypot(p.x - e.at.x, p.y - e.at.y);
@@ -21,6 +23,8 @@ export function distanceToEntity(p: Vec2, e: Entity): number {
       return distanceToXline(p, e);
     case 'ray':
       return distanceToRay(p, e);
+    case 'dimension':
+      return distanceToLayout(p, dimensionLayout(d, e));
   }
 }
 
@@ -35,7 +39,7 @@ export function pickEntity(d: Drawing, p: Vec2, radius: number, accepts?: (e: En
   for (const e of d.entities.values()) {
     if (d.layers.get(e.layer)?.visible === false) continue;
     if (accepts && !accepts(e)) continue;
-    const dist = distanceToEntity(p, e);
+    const dist = distanceToEntity(d, p, e);
     if (dist <= bestDist) {
       best = e.id;
       bestDist = dist;

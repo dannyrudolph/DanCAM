@@ -72,8 +72,9 @@ export function findSnap(
 
   const hovered: Curve[] = [];
   for (const e of d.entities.values()) {
-    if (d.layers.get(e.layer)?.visible === false) continue;
-    const onIt = distanceToEntity(cursor, e) <= aperture;
+    // Dimensions are annotation, not geometry: nothing snaps to them.
+    if (d.layers.get(e.layer)?.visible === false || e.kind === 'dimension') continue;
+    const onIt = distanceToEntity(d, cursor, e) <= aperture;
     if (e.kind === 'point') {
       if (onIt) point('node', e.at);
       continue;

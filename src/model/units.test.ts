@@ -48,3 +48,16 @@ describe('units', () => {
     expect(relabelUnits(drawing(), 'in')).toBeUndefined();
   });
 });
+
+describe('units and dimension styles', () => {
+  it('Convert scales the styles\' sheet sizes and tolerances so text prints the same size; undo restores them', () => {
+    const d = createDrawing('in');
+    const style = { ...d.dimStyles.get('INCH-3PL')!, tolerance: { kind: 'symmetric' as const, value: 0.001 } };
+    d.dimStyles.set(style.name, style);
+    const undo = new UndoStack(d);
+    undo.commit(convertUnits(d, 'mm')!);
+    expect(d.dimStyles.get('INCH-3PL')).toMatchObject({ textHeight: 0.12 * 25.4, arrowSize: 0.12 * 25.4, extOffset: 1.5875, extExtend: 3.175, textGap: 1.5875, tolerance: { value: 0.0254 }, precision: 3 });
+    undo.undo();
+    expect(d.dimStyles.get('INCH-3PL')).toEqual(style);
+  });
+});

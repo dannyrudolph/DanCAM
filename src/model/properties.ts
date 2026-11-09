@@ -1,5 +1,7 @@
 import { angleDeg } from '../geometry/angle';
 import { arcEnd, arcLength, arcSweepDeg, arcStart } from '../geometry/arc';
+import { flatText } from './dimFormat';
+import { dimensionLayout } from './dimLayout';
 import { type Drawing, effectiveStyle } from './drawing';
 import type { Entity } from './entity';
 
@@ -8,6 +10,20 @@ export type Row = { label: string; value: number | string; unit?: string };
 
 /** The rows the properties panel shows for `e`, with values unrounded. */
 export function rowsFor(d: Drawing, e: Entity): Row[] {
+  if (e.kind === 'dimension') {
+    const l = dimensionLayout(d, e);
+    return [
+      { label: 'Layer', value: e.layer },
+      { label: 'Dim style', value: e.dimStyle },
+      { label: 'Type', value: e.type === 'linear' ? 'Linear' : 'Aligned' },
+      { label: 'Text', value: flatText(l.text) },
+      { label: 'Measured', value: l.value },
+      { label: 'Point 1 X', value: e.p1.x },
+      { label: 'Point 1 Y', value: e.p1.y },
+      { label: 'Point 2 X', value: e.p2.x },
+      { label: 'Point 2 Y', value: e.p2.y },
+    ];
+  }
   const style = effectiveStyle(d, e);
   const common: Row[] = [
     { label: 'Layer', value: e.layer },
@@ -76,5 +92,6 @@ export const KIND_LABEL: Record<Entity['kind'], string> = {
   arc: 'Arc',
   xline: 'Xline',
   ray: 'Ray',
+  dimension: 'Dimension',
 };
 

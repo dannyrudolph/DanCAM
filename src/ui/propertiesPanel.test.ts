@@ -46,3 +46,20 @@ describe('selectionSummary', () => {
     ]);
   });
 });
+
+describe('properties rows for a dimension', () => {
+  it('shows its style, type, print text and unrounded measured value, and no line style', () => {
+    const v = values({ kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 } });
+    expect(v).toEqual({
+      Layer: '0',
+      'Dim style': 'INCH-3PL',
+      Type: 'Aligned',
+      Text: '.500',
+      Measured: 0.5,
+      'Point 1 X': 0,
+      'Point 1 Y': 0,
+      'Point 2 X': 0.3,
+      'Point 2 Y': 0.4,
+    });
+  });
+});

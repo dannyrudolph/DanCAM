@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { createDrawing } from '../model/drawing';
+import { defaultDimStyle } from '../model/dimStyle';
 import type { Entity } from '../model/entity';
 import { loadDemo } from '../ui/demo';
 import { SCHEMA_VERSION, parseDrawing, serializeDrawing } from './nativeFile';
@@ -35,6 +36,9 @@ describe('native file', () => {
     expect(back.units).toBe('mm');
     expect([...back.layers.values()]).toEqual([...d.layers.values()]);
     expect([...back.entities.values()]).toEqual([...d.entities.values()]);
+    expect([...back.entities.values()].filter((e) => e.kind === 'dimension')).toHaveLength(4);
+    expect([...back.dimStyles.values()]).toEqual([...d.dimStyles.values()]);
+    expect(back.currentDimStyle).toBe('MM-2PL');
     expect(back.nextId).toBe(d.nextId);
   });
 
@@ -63,6 +67,42 @@ describe('native file', () => {
     const ray: Entity = { kind: 'ray', id: 'e1', layer: '0', base: { x: 0.1, y: -2 }, dir: { x: 0.6, y: 0.8 } };
     d.entities.set('e1', ray);
     expect(reopen(serializeDrawing(d)).entities.get('e1')).toEqual(ray);
+  });
+
+  it('opens a version 1 file with its unit\'s default dimension style', () => {
+    const inch = reopen(v1());
+    expect([...inch.dimStyles.values()]).toEqual([defaultDimStyle('in')]);
+    expect(inch.currentDimStyle).toBe('INCH-3PL');
+    expect(reopen(v1({ units: 'mm' })).currentDimStyle).toBe('MM-2PL');
+  });
+
+  it('round-trips an aligned dimension with geometry refs, and a style with tolerance, dual units and a suffix', () => {
+    const d = createDrawing('in');
+    const style = { ...defaultDimStyle('in'), name: 'TOL', tolerance: { kind: 'deviation' as const, upper: 0.002, lower: 0 }, dual: { precision: 2, zeros: { leading: true, trailing: false } }, suffix: ' TYP' };
+    d.dimStyles.set('TOL', style);
+    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'TOL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 }, refs: ['e7'] };
+    d.entities.set('e1', e);
+    const back = reopen(serializeDrawing(d));
+    expect(back.entities.get('e1')).toEqual(e);
+    expect(back.dimStyles.get('TOL')).toEqual(style);
+  });
+
+  it('refuses dimensions and styles it cannot trust', () => {
+    const v2 = (over: Record<string, unknown>) => {
+      const file = JSON.parse(serializeDrawing(createDrawing('in')));
+      return JSON.stringify({ ...file, ...over });
+    };
+    const dimension = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: { x: 1, y: 0 }, p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0, y: 1 } };
+    expect(reopen(v2({ entities: [dimension] })).entities.get('e1')).toEqual(dimension);
+    expect(errorOf(v2({ entities: [{ ...dimension, dimStyle: 'NOPE' }] }))).toBe('entities[0]: dimension style "NOPE" is not defined.');
+    expect(errorOf(v2({ entities: [{ ...dimension, dir: { x: 2, y: 0 } }] }))).toBe('entities[0].dir must be a unit vector.');
+    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be "linear" or "aligned".');
+    const style = defaultDimStyle('in');
+    expect(errorOf(v2({ dimStyles: [{ ...style, precision: 9 }] }))).toBe('dimStyles[0].precision must be a whole number from 0 to 8.');
+    expect(errorOf(v2({ dimStyles: [{ ...style, textHeight: 0 }] }))).toBe('dimStyles[0].textHeight must be more than zero.');
+    expect(errorOf(v2({ dimStyles: [{ ...style, tolerance: { kind: 'bonus' } }] }))).toBe('dimStyles[0].tolerance.kind must be none, symmetric, deviation or limits.');
+    expect(errorOf(v2({ dimStyles: [style, style] }))).toBe('dimStyles[1]: style "INCH-3PL" appears twice.');
+    expect(errorOf(v2({ currentDimStyle: 'X' }))).toBe('currentDimStyle: style "X" is not defined.');
   });
 
   it('writes readable, indented JSON with the format and version first', () => {
