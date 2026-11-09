@@ -62,7 +62,7 @@ describe('properties rows for a dimension', () => {
     expect(angular.find((r) => r.label === 'Vertex X')?.value).toBe(3);
   });
 
-  it('shows its style, type, print text and unrounded measured value, and no line style', () => {
+  it('shows its style, type, print text, unrounded measured value, and the precision and tolerance in effect, and no line style', () => {
     const v = values({ kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 } });
     expect(v).toEqual({
       Layer: '0',
@@ -70,6 +70,8 @@ describe('properties rows for a dimension', () => {
       Type: 'Aligned',
       Text: '.500',
       Measured: 0.5,
+      Precision: '3',
+      Tolerance: 'None',
       'Point 1 X': 0,
       'Point 1 Y': 0,
       'Point 2 X': 0.3,

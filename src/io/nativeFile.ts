@@ -187,6 +187,9 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     dimStyle: str(o.dimStyle, `${at}.dimStyle`),
     at: vec(o.at, `${at}.at`),
     ...(o.refs === undefined ? {} : { refs: arr(o.refs, `${at}.refs`).map((r, i) => str(r, `${at}.refs[${i}]`)) }),
+    ...(o.precision === undefined ? {} : { precision: places(o.precision, `${at}.precision`) }),
+    ...(o.tolerance === undefined ? {} : { tolerance: tolerance(o.tolerance, `${at}.tolerance`) }),
+    ...(o.textOverride === undefined ? {} : { textOverride: str(o.textOverride, `${at}.textOverride`) }),
   };
   const ends = (): { p1: Vec2; p2: Vec2 } => ({ p1: vec(o.p1, `${at}.p1`), p2: vec(o.p2, `${at}.p2`) });
   switch (o.type) {
@@ -211,6 +214,13 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     default:
       throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular or leader.`);
   }
+}
+
+/** A whole number of decimal places, 0 to 8. */
+function places(v: unknown, at: string): number {
+  const n = num(v, at);
+  if (!Number.isInteger(n) || n < 0 || n > 8) throw new FileError(`${at} must be a whole number from 0 to 8.`);
+  return n;
 }
 
 function readDimStyle(o: Record<string, unknown>, at: string): DimStyle {

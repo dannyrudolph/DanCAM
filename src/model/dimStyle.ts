@@ -1,4 +1,4 @@
-import { type DimFormat, INCH_ZEROS, MM_ZEROS, type Tolerance, type ZeroRules } from './dimFormat';
+import { type DimFormat, INCH_ZEROS, MM_ZEROS, type Tolerance, type ZeroRules, scaleTolerance } from './dimFormat';
 import type { Drawing, Units } from './drawing';
 
 /**
@@ -96,9 +96,7 @@ export function angleFormat(style: DimStyle): DimFormat {
 
 /** The style with every size and tolerance passed through `f`, for converting units. */
 export function scaleDimStyle(s: DimStyle, f: (length: number) => number): DimStyle {
-  const t = s.tolerance;
-  const tolerance: Tolerance =
-    t.kind === 'none' ? t : t.kind === 'symmetric' ? { kind: t.kind, value: f(t.value) } : { kind: t.kind, upper: f(t.upper), lower: f(t.lower) };
+  const tolerance = scaleTolerance(s.tolerance, f);
   return {
     ...s,
     textHeight: f(s.textHeight),

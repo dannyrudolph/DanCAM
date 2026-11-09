@@ -1,8 +1,10 @@
 import { parseAngle, parseLength } from '../commands/valueExpr';
 import type { Drawing, Units } from '../model/drawing';
-import type { Entity } from '../model/entity';
+import { editableText, toleranceSetter, withDimStyle, withPrecision, withText, withToleranceKind, type ToleranceKind } from '../model/dimOverride';
+import { dimStyleOf } from '../model/dimStyle';
+import type { DimensionEntity, Entity } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
-import { KIND_LABEL, type Row, rowsFor } from '../model/properties';
+import { KIND_LABEL, type Row, TOLERANCE_LABEL, rowsFor } from '../model/properties';
 import { type PropertySetter, propertySetter, withLayer, withStyle } from '../model/propertyEdit';
 import type { Transaction } from '../model/undo';
 import { formatNumber } from './statusBar';
@@ -31,6 +33,8 @@ export type PropertiesHost = {
  * arithmetic, unit suffixes); Enter or leaving the field applies it, Esc
  * cancels. Layer and Style are dropdowns, for one object or many. Hovering
  * a value shows it at full stored precision. Each edit is one undo step.
+ * A dimension also has its style, precision and tolerance as dropdowns
+ * ("By style" removes this dimension's override) and its text to edit.
  */
 export class PropertiesPanel {
   constructor(
@@ -63,6 +67,7 @@ export class PropertiesPanel {
     this.addLayerAndStyle(d, table, selected);
     for (const r of rowsFor(d, e)) {
       if (r.label === 'Layer' || r.label === 'Style') continue; // dropdowns, done above
+      if (e.kind === 'dimension' && this.addDimensionRow(d, table, e, r)) continue;
       if (typeof r.value === 'string') {
         this.addRow(table, r.label, r.value);
         continue;
@@ -70,7 +75,7 @@ export class PropertiesPanel {
       const text = formatNumber(r.value, precision) + (r.unit ?? '');
       const dd = this.addRow(table, r.label, text);
       dd.title = String(r.value);
-      const setter = propertySetter(e, r.label);
+      const setter = propertySetter(e, r.label) ?? (e.kind === 'dimension' ? toleranceSetter(d, e, r.label) : undefined);
       if (setter) this.makeEditable(dd, e, r.label, setter);
     }
     this.root.replaceChildren(title, table);
@@ -101,10 +106,91 @@ export class PropertiesPanel {
         }
         const after = setter.set(r.value);
         if (!after) {
-          this.host.message(`${label} can't be ${text}: the object would have no size.`);
+          this.host.message(`${label} can't be ${text}: ${setter.refusal ?? 'the object would have no size'}.`);
           return;
         }
         this.host.commit({ label: `Edit ${label}`, changes: [{ op: 'modify', before: e, after }] });
+      };
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          finish(true);
+        } else if (ev.key === 'Escape') {
+          ev.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener('blur', () => finish(true));
+      dd.replaceChildren(input);
+      input.focus();
+      input.select();
+    });
+  }
+
+  /** The rows a dimension edits its own way; false for an ordinary row. */
+  private addDimensionRow(d: Drawing, table: HTMLElement, e: DimensionEntity, r: Row): boolean {
+    const commit = (label: string, after: DimensionEntity): void => this.host.commit({ label, changes: [{ op: 'modify', before: e, after }] });
+    const style = dimStyleOf(d, e.dimStyle);
+    let control: HTMLElement;
+    switch (r.label) {
+      case 'Dim style':
+        control = this.select(
+          [...d.dimStyles.keys()].map((n) => [n, n]),
+          e.dimStyle,
+          (v) => commit('Change dimension style', withDimStyle(e, v)),
+        );
+        break;
+      case 'Precision': {
+        const own = e.type === 'angular' ? style.anglePrecision : style.precision;
+        control = this.select(
+          [['', `By style (${own})`], ...Array.from({ length: 9 }, (_, n) => [String(n), String(n)])],
+          e.precision === undefined ? '' : String(e.precision),
+          (v) => commit('Change precision', withPrecision(e, v === '' ? undefined : Number(v))),
+        );
+        break;
+      }
+      case 'Tolerance':
+        control = this.select(
+          [['', `By style (${TOLERANCE_LABEL[style.tolerance.kind]})`], ...(Object.keys(TOLERANCE_LABEL) as ToleranceKind[]).map((k) => [k, TOLERANCE_LABEL[k]])],
+          e.tolerance?.kind ?? '',
+          (v) => commit('Change tolerance', withToleranceKind(d, e, v === '' ? undefined : (v as ToleranceKind))),
+        );
+        break;
+      case 'Text': {
+        const dd = this.addRow(table, r.label, String(r.value));
+        dd.title = e.type === 'leader' ? 'Click to edit the note' : 'Click to replace the text; <> stands for the measured value, empty goes back to it';
+        this.makeTextEditable(dd, e, (typed) => {
+          const after = withText(e, typed);
+          if (after) commit(e.type === 'leader' ? 'Edit note' : 'Edit dimension text', after);
+          else this.host.message('A note needs some text.');
+        });
+        return true;
+      }
+      default:
+        return false;
+    }
+    this.addRow(table, r.label, '').replaceChildren(control);
+    return true;
+  }
+
+  /** Click to type over the text; Enter or blur applies, Esc cancels. Unchanged text changes nothing. */
+  private makeTextEditable(dd: HTMLElement, e: DimensionEntity, apply: (typed: string) => void): void {
+    dd.classList.add('editable');
+    dd.addEventListener('click', () => {
+      if (dd.querySelector('input')) return;
+      const shown = dd.textContent ?? '';
+      const start = editableText(e);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = start;
+      input.dataset.edit = 'Text';
+      input.spellcheck = false;
+      let done = false;
+      const finish = (ok: boolean): void => {
+        if (done) return;
+        done = true;
+        dd.textContent = shown;
+        if (ok && input.value !== start) apply(input.value);
       };
       input.addEventListener('keydown', (ev) => {
         if (ev.key === 'Enter') {

@@ -4,6 +4,7 @@ import { circleBBox } from '../geometry/circle';
 import type { Curve } from '../geometry/curve';
 import { type Transform, transformArc, transformDir, transformLength, transformPoint } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
+import { type Tolerance, scaleTolerance } from './dimFormat';
 import type { LineStyleName } from './lineStyle';
 
 /** Stable id, unique within a drawing and never reused. */
@@ -75,12 +76,20 @@ export type RayEntity = EntityBase & {
  *   starts (the end of the measured geometry; the vertex when there is none).
  * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
  *   (the landing), a short horizontal shoulder, then `text` as typed.
+ *
+ * Overrides of the style for this one dimension (none apply to a leader):
+ * `precision` (decimal places of the value and its tolerance; of the angle
+ * for angular), `tolerance` (lengths only), and `textOverride`, which
+ * replaces the text, `<>` standing for the measured value.
  */
 export type DimensionEntity = EntityBase & {
   readonly kind: 'dimension';
   readonly dimStyle: string;
   readonly at: Vec2;
   readonly refs?: readonly EntityId[];
+  readonly precision?: number;
+  readonly tolerance?: Tolerance;
+  readonly textOverride?: string;
 } & (
     | { readonly type: 'linear'; readonly p1: Vec2; readonly p2: Vec2; readonly dir: Vec2 }
     | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
@@ -204,7 +213,8 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
       return { ...e, base: p(e.base) };
     case 'dimension': {
       const m = mapDimensionPoints(e, p);
-      return m.type === 'radius' || m.type === 'diameter' ? { ...m, radius: f(m.radius) } : m;
+      const tol = m.tolerance ? { ...m, tolerance: scaleTolerance(m.tolerance, f) } : m;
+      return tol.type === 'radius' || tol.type === 'diameter' ? { ...tol, radius: f(tol.radius) } : tol;
     }
   }
 }

@@ -258,8 +258,22 @@ points along an edge, then its new angle).
    leader's text afterwards (with the text overrides in step 6),
    multi-line notes, more than one leader segment. Shortcut chosen by
    Claude, not yet confirmed.
-6. Dimension Styles panel; per-dimension precision / tolerance / text
-   overrides; Sheet scale setting (status bar) multiplying sheet sizes.
+6. Dimension Styles panel; per-dimension overrides; Sheet scale. Done
+   in three commits:
+   a. **Overrides (done).** Optional `precision`, `tolerance`,
+      `textOverride` on any dimension but a leader (`model/dimOverride`).
+      Precision sets the value's and the tolerance's places (the angle's
+      for angular); tolerance lengths only; text with `<>` for the value
+      and %%d/%%c/%%p; empty or a bare `<>` removes it. Properties panel:
+      Dim style, Precision ("By style (3)", 0–8) and Tolerance ("By
+      style", None, ±, Deviation, Limits) dropdowns; Tol ± / Tol upper /
+      Tol lower editable (editing one makes the tolerance the dimension's
+      own; upper never below lower); Text click-to-edit (a leader's note
+      too; it can't be emptied). Each edit one undo step. Files: optional
+      fields, validated, schemaVersion stays 2. Convert units scales an
+      override tolerance.
+   b. Sheet scale.
+   c. Dimension Styles panel.
 7. Dimension grips (line position, text, measured points).
 8. Done-when: a dimensioned reference drawing, checked text by text.
 

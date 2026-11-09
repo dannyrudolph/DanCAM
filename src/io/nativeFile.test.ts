@@ -97,6 +97,17 @@ describe('native file', () => {
     expect(errorOf(serializeDrawing(d))).toBe('entities[0].text must be text.');
   });
 
+  it('round-trips a dimension\'s precision, tolerance and text overrides, and refuses bad ones', () => {
+    const d = createDrawing('in');
+    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0, y: 1 }, precision: 4, tolerance: { kind: 'limits', upper: 0.0005, lower: -0.0005 }, textOverride: '<> TYP' };
+    d.entities.set(e.id, e);
+    expect([...reopen(serializeDrawing(d)).entities.values()]).toEqual([e]);
+    d.entities.set('e1', { ...e, precision: 9 });
+    expect(errorOf(serializeDrawing(d))).toBe('entities[0].precision must be a whole number from 0 to 8.');
+    d.entities.set('e1', { ...e, tolerance: { kind: 'bonus' } } as unknown as Entity);
+    expect(errorOf(serializeDrawing(d))).toBe('entities[0].tolerance.kind must be none, symmetric, deviation or limits.');
+  });
+
   it('round-trips radius, diameter and angular dimensions', () => {
     const d = createDrawing('in');
     const es: Entity[] = [

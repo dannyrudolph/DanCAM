@@ -185,6 +185,13 @@ export function flatText(t: DimText): string {
 
 const SYMBOL_CODES: Record<string, string> = { d: '°', c: 'Ø', p: '±' };
 
+/** The tolerance with its values passed through `f` (for converting units). */
+export function scaleTolerance(t: Tolerance, f: (length: number) => number): Tolerance {
+  if (t.kind === 'none') return t;
+  if (t.kind === 'symmetric') return { kind: t.kind, value: f(t.value) };
+  return { kind: t.kind, upper: f(t.upper), lower: f(t.lower) };
+}
+
 /**
  * Note text as typed, with AutoCAD's symbol codes replaced: %%d is °, %%c
  * is Ø, %%p is ±, in either case. Other text is kept as it is.

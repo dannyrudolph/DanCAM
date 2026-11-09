@@ -1085,6 +1085,43 @@ test.describe('dimensions', () => {
   });
 });
 
+test.describe('dimension overrides in the properties panel', () => {
+  test('precision, text and tolerance change one dimension, each as an undo step', async ({ page }) => {
+    await page.keyboard.press('Shift+D');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0'); // ΔX, ΔY from the first point
+    await typeValues(page, '0.5', '0.3'); // the dimension line's position
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.move(box.x + 3, box.y + 3);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3, { steps: 6 });
+    await page.mouse.up();
+    await expect(prop(page, 'Text')).toHaveText('1.000');
+
+    await prop(page, 'Precision').locator('select').selectOption('4');
+    await expect(prop(page, 'Text')).toHaveText('1.0000');
+
+    await prop(page, 'Text').click();
+    await page.locator('input[data-edit="Text"]').fill('2X <> TYP');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'Text')).toHaveText('2X 1.0000 TYP');
+
+    await prop(page, 'Tolerance').locator('select').selectOption('symmetric');
+    await prop(page, 'Tol ±').click();
+    await page.locator('input[data-edit="Tol ±"]').fill('.0005');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'Text')).toHaveText('2X 1.0000 TYP ±.0005');
+
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'Text')).toHaveText('2X 1.0000 TYP');
+    await prop(page, 'Precision').locator('select').selectOption('');
+    await expect(prop(page, 'Text')).toHaveText('2X 1.000 TYP');
+  });
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

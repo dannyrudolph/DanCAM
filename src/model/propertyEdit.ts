@@ -12,7 +12,12 @@ export type Quantity = 'length' | 'angle';
  * Sets one property from a typed value. Returns undefined when the value
  * would make the entity degenerate (zero length or radius, a full-turn arc).
  */
-export type PropertySetter = { readonly quantity: Quantity; set(value: number): Entity | undefined };
+export type PropertySetter = {
+  readonly quantity: Quantity;
+  set(value: number): Entity | undefined;
+  /** Why `set` refused, when it isn't that the object would have no size. */
+  readonly refusal?: string;
+};
 
 const RAD_PER_DEG = Math.PI / 180;
 

@@ -1,7 +1,8 @@
 import { angleDeg } from '../geometry/angle';
 import { arcEnd, arcLength, arcSweepDeg, arcStart } from '../geometry/arc';
-import { flatText } from './dimFormat';
+import { type Tolerance, flatText } from './dimFormat';
 import { dimensionLayout } from './dimLayout';
+import { effectivePrecision, effectiveTolerance, takesTolerance } from './dimOverride';
 import { type Drawing, effectiveStyle } from './drawing';
 import type { Entity } from './entity';
 
@@ -18,6 +19,8 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       { label: 'Type', value: DIM_TYPE_LABEL[e.type] },
       { label: 'Text', value: flatText(l.text) },
       ...(l.value === undefined ? [] : [{ label: 'Measured', value: l.value, ...(e.type === 'angular' && { unit: '°' }) }]),
+      ...(e.type === 'leader' ? [] : [{ label: 'Precision', value: String(effectivePrecision(d, e)) }]),
+      ...(takesTolerance(e) ? toleranceRows(d, e) : []),
     ];
     switch (e.type) {
       case 'radius':
@@ -96,6 +99,17 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
         { label: 'Angle', value: angleDeg(e.dir), unit: '°' },
       ];
   }
+}
+
+export const TOLERANCE_LABEL: Record<Tolerance['kind'], string> = { none: 'None', symmetric: '±', deviation: 'Deviation', limits: 'Limits' };
+
+/** The tolerance a dimension shows, and its values. Strings say whether it is the dimension's own. */
+function toleranceRows(d: Drawing, e: Extract<Entity, { kind: 'dimension' }>): Row[] {
+  const t = effectiveTolerance(d, e);
+  const rows: Row[] = [{ label: 'Tolerance', value: TOLERANCE_LABEL[t.kind] }];
+  if (t.kind === 'symmetric') rows.push({ label: 'Tol ±', value: t.value });
+  if (t.kind === 'deviation' || t.kind === 'limits') rows.push({ label: 'Tol upper', value: t.upper }, { label: 'Tol lower', value: t.lower });
+  return rows;
 }
 
 const DIM_TYPE_LABEL: Record<Extract<Entity, { kind: 'dimension' }>['type'], string> = {

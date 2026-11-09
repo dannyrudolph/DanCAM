@@ -151,9 +151,16 @@ function pieceTo(lines: Segment[]): (from: Vec2, to: Vec2) => void {
   };
 }
 
+/** The format for `e`: its style, with this dimension's overrides on top. */
 function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimStyle, altFactor: number): DimFormat {
-  if (e.type === 'angular') return angleFormat(style);
-  const f = lengthFormat(style, altFactor);
+  const text = e.textOverride === undefined ? {} : { override: e.textOverride };
+  if (e.type === 'angular') return { ...angleFormat(e.precision === undefined ? style : { ...style, anglePrecision: e.precision }), ...text };
+  const own: DimStyle = {
+    ...style,
+    ...(e.precision !== undefined && { precision: e.precision, tolPrecision: e.precision }),
+    ...(e.tolerance && { tolerance: e.tolerance }),
+  };
+  const f = { ...lengthFormat(own, altFactor), ...text };
   if (e.type === 'radius') return { ...f, prefix: `R${f.prefix ?? ''}` };
   if (e.type === 'diameter') return { ...f, prefix: `Ø${f.prefix ?? ''}` };
   return f;
