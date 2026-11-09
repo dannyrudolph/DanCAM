@@ -27,6 +27,9 @@ type FileV2 = {
   currentDimStyle: string;
   /** Optional: files from before it existed print at 1:1. */
   sheetScale?: number;
+  /** Optional: absent is off. */
+  lathe?: boolean;
+  diameterMode?: boolean;
   layers: Layer[];
   dimStyles: DimStyle[];
   entities: Entity[];
@@ -41,6 +44,8 @@ export function serializeDrawing(d: Drawing): string {
     currentLayer: d.currentLayer,
     currentDimStyle: d.currentDimStyle,
     sheetScale: d.sheetScale,
+    lathe: d.lathe,
+    diameterMode: d.diameterMode,
     layers: [...d.layers.values()],
     dimStyles: [...d.dimStyles.values()],
     entities: [...d.entities.values()],
@@ -128,6 +133,8 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     if (!(scale > 0)) throw new FileError('sheetScale must be more than zero.');
     d.sheetScale = scale;
   }
+  if (file.lathe !== undefined) d.lathe = bool(file.lathe, 'lathe');
+  if (file.diameterMode !== undefined) d.diameterMode = bool(file.diameterMode, 'diameterMode');
 
   let maxId = 0;
   arr(file.entities, 'entities').forEach((v, i) => {

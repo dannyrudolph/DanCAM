@@ -9,7 +9,7 @@ import { type DimLayout, dimensionLayout } from '../model/dimLayout';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import type { BoxMode } from '../model/selection';
-import { type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
+import { LINE_STYLES, type LineStyle, dashOffset, insetArc, insetSegment } from '../model/lineStyle';
 import { CAP_HEIGHT_EM, TEXT_FONT } from '../model/textMetrics';
 import { SNAP_LABEL, type Snap, type SnapKind } from '../snap/snap';
 import { type Viewport, worldToScreen } from './viewport';
@@ -25,6 +25,8 @@ const COLORS = {
   snap: '#1a7f37',
   tooltipText: '#ffffff',
   grip: '#0969da',
+  /** Lathe mode's centerline at Y = 0: part of the view, not the drawing. */
+  latheAxis: '#8c959f',
   hotGrip: '#d1242f',
   gripEdge: '#ffffff',
   windowEdge: '#0969da',
@@ -80,6 +82,10 @@ export function render(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, v.widthPx, v.heightPx);
+  if (drawing.lathe) {
+    const axis: Entity = { kind: 'xline', id: 'lathe-axis', layer: '', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } };
+    drawEntity(ctx, v, drawing, axis, LINE_STYLES.center, COLORS.latheAxis, 0);
+  }
   drawEntities(ctx, v, drawing, overlay.selected);
   for (const e of overlay.preview) {
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);

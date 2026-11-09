@@ -11,13 +11,26 @@ import type { Request } from '../commands/tool';
 import { type ParseResult, parseAngle, parseFactor, parseLength } from '../commands/valueExpr';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
+import { type AxisView, axisNames, radialFactor } from '../model/latheView';
 import { formatNumber } from './statusBar';
 
 /** A point's fields, the single box of a value request, or the text box of a text request. */
 type BoxKey = FieldKey | 'value' | 'text';
 
-const LABELS: Record<FieldKey, string> = { x: 'X', y: 'Y', dx: 'ΔX', dy: 'ΔY', length: 'L', angle: '∠' };
-const MODE_LABELS: Record<EntryMode, string> = { polar: 'L∠', delta: 'ΔXY', absolute: 'XY' };
+/** A box's name in this view: lathe mode names the axes Z and X (Ø with diameter on). */
+function fieldLabel(key: FieldKey, view: AxisView): string {
+  const n = axisNames(view);
+  const labels: Record<FieldKey, string> = { x: n.h, y: n.v, dx: `Δ${n.h}`, dy: `Δ${n.v}`, length: 'L', angle: '∠' };
+  return labels[key];
+}
+
+/** Vertical boxes show and take values times this (2 for diameters). */
+const factorFor = (key: BoxKey, view: AxisView): number => (key === 'y' || key === 'dy' ? radialFactor(view) : 1);
+/** The entry-mode button's text, with the axes named for the view (Ø shown as X: the mode, not the value). */
+function modeLabel(mode: EntryMode, view: AxisView): string {
+  const n = axisNames({ ...view, diameter: false });
+  return { polar: 'L∠', delta: `Δ${n.h}${n.v}`, absolute: `${n.h}${n.v}` }[mode];
+}
 const NEXT_MODE: Record<EntryMode, EntryMode> = { polar: 'delta', delta: 'absolute', absolute: 'polar' };
 
 /** Offset of the boxes from the cursor, CSS pixels. */
@@ -29,6 +42,8 @@ export type EnterAction = 'place' | 'finish' | 'none';
 export type InputBoxesHost = {
   units(): Units;
   precision(): number;
+  /** How the axes are named and whether vertical values are diameters. */
+  axisView(): AxisView;
   /** Called after any change that moves the resolved point (typing, locking, mode). */
   changed(): void;
   enter(action: EnterAction): void;
@@ -84,6 +99,17 @@ export class InputBoxes {
     this.rebuild();
   }
 
+  /** Renames the boxes after lathe mode or diameter display changes, keeping what is typed and locked. */
+  relabel(): void {
+    for (const f of this.fields) {
+      if (f.key === 'value' || f.key === 'text') continue;
+      const name = f.input.previousElementSibling;
+      if (name) name.textContent = fieldLabel(f.key, this.host.axisView());
+    }
+    this.modeButton.textContent = modeLabel(this.mode, this.host.axisView());
+    this.host.changed();
+  }
+
   clearLocks(): void {
     this.locks = {};
     for (const f of this.fields) f.dirty = false;
@@ -130,7 +156,7 @@ export class InputBoxes {
       if (f.dirty) continue; // never overwrite what the user is typing
       const value = locked ?? (point ? this.liveValue(f.key, point) : undefined);
       if (value === undefined) continue;
-      const text = formatNumber(value, this.host.precision());
+      const text = formatNumber(value * factorFor(f.key, this.host.axisView()), this.host.precision());
       if (f.input.value === text) continue;
       f.input.value = text;
       // A focused box keeps its text selected, so typing replaces the live value.
@@ -215,7 +241,7 @@ export class InputBoxes {
     for (const f of this.fields) {
       if (!f.dirty || f.key === 'text') continue;
       const r = this.parse(f);
-      if (r.ok) locks[f.key] = r.value;
+      if (r.ok) locks[f.key] = r.value / factorFor(f.key, this.host.axisView());
     }
     return locks;
   }
@@ -241,7 +267,7 @@ export class InputBoxes {
       f.input.title = r.error;
       return false;
     }
-    this.locks[f.key] = r.value;
+    this.locks[f.key] = r.value / factorFor(f.key, this.host.axisView()); // a typed diameter locks the radius
     f.dirty = false;
     f.input.classList.remove('invalid');
     f.input.title = '';
@@ -273,7 +299,7 @@ export class InputBoxes {
       const label = document.createElement('label');
       label.className = 'input-field';
       const name = document.createElement('span');
-      name.textContent = key === 'text' ? 'Note' : key === 'value' ? (req.kind === 'value' ? req.label : '') : LABELS[key];
+      name.textContent = key === 'text' ? 'Note' : key === 'value' ? (req.kind === 'value' ? req.label : '') : fieldLabel(key, this.host.axisView());
       const input = document.createElement('input');
       if (key === 'text') input.className = 'input-text';
       input.autocomplete = 'off';
@@ -292,7 +318,7 @@ export class InputBoxes {
       this.fields.push(field);
     }
     if (this.request.kind === 'point' && this.request.base) {
-      this.modeButton.textContent = MODE_LABELS[this.mode];
+      this.modeButton.textContent = modeLabel(this.mode, this.host.axisView());
       this.root.append(this.modeButton);
     }
     // A note is typed straight away: the box takes the focus, so keys don't start tools.

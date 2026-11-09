@@ -349,7 +349,14 @@ deferred (ray to Phase 2, autosave to Phase 6).
    labels the axes Z (horizontal) and X (vertical) and supplies a
    centerline at Y = 0; Diameter shows and takes X as Ø (stored values
    unchanged; halving is exact) in the input boxes, status readout,
-   properties panel and inquiry results.
+   properties panel and inquiry results. **(done)** `model/latheView`
+   (`AxisView`, `viewLabel`/`viewRow`: X→Z, Y→X or Ø with factor 2);
+   `Drawing.lathe`, `diameterMode` (saved, optional in the file, not
+   undoable); status bar Lathe and Ø toggles (Ø off without lathe), readout
+   "Z … X/Ø …"; boxes Z/X/Ø/ΔZ/ΔØ, mode button L∠/ΔZX/ZX, a typed diameter
+   locks the radius; properties and inquiry rows renamed and doubled, a
+   typed Ø sets the radius; the renderer draws the axis at Y = 0 as a
+   center-style xline (not an entity, so not snappable yet).
 2. Associativity: snaps report what they hit (entity + feature);
    dimensions anchor each measured point (replaces `refs`; file v2 → v3);
    a geometry change re-measures its dimensions inside the same

@@ -118,6 +118,19 @@ describe('native file', () => {
     expect(errorOf(JSON.stringify({ ...file, sheetScale: 0 }))).toBe('sheetScale must be more than zero.');
   });
 
+  it('round-trips lathe mode and diameter display; a file without them opens with both off', () => {
+    const d = createDrawing('in');
+    d.lathe = true;
+    d.diameterMode = true;
+    const back = reopen(serializeDrawing(d));
+    expect([back.lathe, back.diameterMode]).toEqual([true, true]);
+    const file = JSON.parse(serializeDrawing(d));
+    delete file.lathe;
+    delete file.diameterMode;
+    const old = reopen(JSON.stringify(file));
+    expect([old.lathe, old.diameterMode]).toEqual([false, false]);
+  });
+
   it('round-trips radius, diameter and angular dimensions', () => {
     const d = createDrawing('in');
     const es: Entity[] = [

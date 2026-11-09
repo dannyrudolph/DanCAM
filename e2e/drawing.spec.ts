@@ -1141,6 +1141,49 @@ test('the sheet scale is chosen in the status bar or typed as Custom, and Undo t
   await expect(scale).toHaveValue('10');
 });
 
+test('lathe mode names the axes Z and X; with Ø on, a typed diameter stores the radius', async ({ page }) => {
+  await expect(page.getByTestId('diameter')).toBeDisabled(); // Ø needs lathe mode
+  await page.getByTestId('lathe').click();
+  await page.getByTestId('diameter').click();
+  await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.keyboard.press('l');
+  const names = page.locator('.input-boxes .input-field span');
+  await expect(names).toHaveText(['Z', 'Ø']);
+  await typeValues(page, '0.5', '0.25'); // first point: Z .5, Ø .25
+  const box = (await page.locator('#canvas').boundingBox())!;
+  for (const shown of ['ΔZX', 'ZX']) {
+    await page.mouse.move(box.x + 40, box.y + 40); // the boxes show beside the cursor
+    await page.locator('.input-mode').click();
+    await expect(page.locator('.input-mode')).toHaveText(shown);
+  }
+  await expect(names).toHaveText(['Z', 'Ø']);
+  await typeValues(page, '1.5', '0.375');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const c = await canvasCenter(page);
+  await page.mouse.click(c.x, c.y);
+  await expect(prop(page, 'Start Z')).toHaveText('0.5000');
+  await expect(prop(page, 'Start Ø')).toHaveText('0.2500');
+  await expect(prop(page, 'End Ø')).toHaveText('0.3750');
+  await expect(page.locator('#status .status-coords')).toHaveText(/^Z -?\d+\.\d{4} {2}Ø -?\d+\.\d{4}$/);
+
+  // The stored point is the radius: Ø off shows it as X .125.
+  await page.getByTestId('diameter').click();
+  await expect(prop(page, 'Start X')).toHaveText('0.1250');
+  // A diameter typed in the panel sets the radius.
+  await page.getByTestId('diameter').click();
+  await prop(page, 'End Ø').click();
+  await page.keyboard.type('0.5');
+  await page.keyboard.press('Enter');
+  await page.getByTestId('diameter').click();
+  await expect(prop(page, 'End X')).toHaveText('0.2500');
+
+  await page.getByTestId('lathe').click(); // off again: plain X and Y
+  await expect(prop(page, 'End Y')).toHaveText('0.2500');
+  await expect(page.getByTestId('diameter')).toBeDisabled();
+});
+
 test('the Dimension Styles panel edits a style its dimensions follow, adds, renames and refuses to delete one in use', async ({ page }) => {
   await page.keyboard.press('Shift+D');
   await typeValues(page, '0', '0');

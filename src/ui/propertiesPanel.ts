@@ -4,6 +4,7 @@ import { editableText, toleranceSetter, withDimStyle, withPrecision, withText, w
 import { dimStyleOf } from '../model/dimStyle';
 import type { DimensionEntity, Entity } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
+import { axisView, viewLabel } from '../model/latheView';
 import { KIND_LABEL, type Row, TOLERANCE_LABEL, rowsFor } from '../model/properties';
 import { type PropertySetter, propertySetter, withLayer, withStyle } from '../model/propertyEdit';
 import type { Transaction } from '../model/undo';
@@ -72,11 +73,14 @@ export class PropertiesPanel {
         this.addRow(table, r.label, r.value);
         continue;
       }
-      const text = formatNumber(r.value, precision) + (r.unit ?? '');
-      const dd = this.addRow(table, r.label, text);
-      dd.title = String(r.value);
+      // Lathe mode names coordinates Z and X, and shows a vertical one as a diameter when that is on.
+      const shown = viewLabel(r.label, axisView(d));
+      const value = r.value * shown.factor;
+      const text = formatNumber(value, precision) + (r.unit ?? '');
+      const dd = this.addRow(table, shown.label, text);
+      dd.title = String(value);
       const setter = propertySetter(e, r.label) ?? (e.kind === 'dimension' ? toleranceSetter(d, e, r.label) : undefined);
-      if (setter) this.makeEditable(dd, e, r.label, setter);
+      if (setter) this.makeEditable(dd, e, shown.label, shown.factor === 1 ? setter : { ...setter, set: (v) => setter.set(v / shown.factor) });
     }
     this.root.replaceChildren(title, table);
   }

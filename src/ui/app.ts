@@ -27,6 +27,7 @@ import { type BoxMode, boxModeFor, selectInBox } from '../model/selection';
 import { type Transaction, UndoStack } from '../model/undo';
 import { ensureCurrentLayer } from '../model/layers';
 import { ensureCurrentDimStyle } from '../model/dimStyles';
+import { axisView } from '../model/latheView';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
@@ -230,10 +231,19 @@ export class App {
       },
       (anchor) => this.openSnapMenu(anchor),
       (scale) => this.setSheetScale(scale),
+      (lathe, diameter) => {
+        // Settings like the current layer: saved with the drawing, not undoable.
+        this.drawing.lathe = lathe;
+        this.drawing.diameterMode = diameter;
+        this.status.showMessage(lathe ? `Lathe mode: Z and X${diameter ? ', X as diameter' : ''}` : 'Lathe mode off');
+        this.boxes.relabel();
+        this.refresh();
+      },
     );
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
       precision: () => this.settings.precision,
+      axisView: () => axisView(this.drawing),
       changed: () => this.requestRedraw(),
       enter: (action) => this.enter(action),
       escape: () => this.escape(),
@@ -257,7 +267,7 @@ export class App {
       newProps: () => this.newProps(),
       message: (m) => this.status.showMessage(m),
       selection: () => [...this.selected],
-      report: (r) => this.inquiry.add(r, this.settings.precision),
+      report: (r) => this.inquiry.add(r, this.settings.precision, axisView(this.drawing)),
       continuation: undefined,
     };
     return new ToolRunner(ctx);
@@ -605,6 +615,7 @@ export class App {
     }
     this.unitsButton.textContent = this.drawing.units;
     this.status.showSheetScale(this.drawing.sheetScale);
+    this.status.showAxisView(this.drawing.lathe, this.drawing.diameterMode);
     document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     ensureCurrentDimStyle(this.drawing);
@@ -629,7 +640,7 @@ export class App {
       else this.selected.delete(id);
     }
     this.properties.show(this.drawing, picked, this.settings.precision);
-    this.inquiry.show(this.settings.precision);
+    this.inquiry.show(this.settings.precision, axisView(this.drawing));
     this.requestRedraw();
   }
 

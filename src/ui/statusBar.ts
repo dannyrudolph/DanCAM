@@ -1,6 +1,7 @@
 import { angleDeg } from '../geometry/angle';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
+import { type AxisView, PLAIN_VIEW, axisNames, viewPoint } from '../model/latheView';
 import { SHEET_SCALES, formatSheetScale, parseSheetScale } from '../model/sheetScale';
 import type { SnapKind } from '../snap/snap';
 import type { ScrollMode } from './input';
@@ -19,8 +20,12 @@ export function formatNumber(n: number, decimals: number): string {
   return Number(s) === 0 ? (0).toFixed(decimals) : s;
 }
 
-export function formatReadout(p: Vec2, decimals: number = DEFAULT_PRECISION): string {
-  return `${formatNumber(p.x, decimals)}, ${formatNumber(p.y, decimals)}`;
+/** "1.2500, 0.5000"; in lathe mode with the axes named: "Z 1.2500  X 0.2500" or "Z 1.2500  Ø 0.5000". */
+export function formatReadout(p: Vec2, decimals: number = DEFAULT_PRECISION, view: AxisView = PLAIN_VIEW): string {
+  if (!view.lathe) return `${formatNumber(p.x, decimals)}, ${formatNumber(p.y, decimals)}`;
+  const [h, v] = viewPoint(p, view);
+  const names = axisNames(view);
+  return `${names.h} ${formatNumber(h, decimals)}  ${names.v} ${formatNumber(v, decimals)}`;
 }
 
 /** "L 1.2500  ∠ 30.0000°" from base to p. */
@@ -52,6 +57,9 @@ export class StatusBar {
   private readonly increment: HTMLSelectElement;
   private readonly precision: HTMLSelectElement;
   private readonly sheetScale: HTMLSelectElement;
+  private readonly latheButton: HTMLButtonElement;
+  private readonly diameterButton: HTMLButtonElement;
+  private view: AxisView = PLAIN_VIEW;
   private readonly customScale: HTMLInputElement;
   private shownScale = 1;
   private messageUntil = 0;
@@ -63,6 +71,8 @@ export class StatusBar {
     openSnapMenu: (anchor: DOMRect) => void,
     /** The drawing's sheet scale was chosen; the app commits it as an undo step. */
     private readonly onSheetScale: (scale: number) => void,
+    /** Lathe mode or diameter display was switched; the app stores it in the drawing. */
+    private readonly onAxisView: (lathe: boolean, diameter: boolean) => void,
   ) {
     const span = (cls: string): HTMLElement => {
       const s = document.createElement('span');
@@ -167,8 +177,16 @@ export class StatusBar {
     });
     this.showSheetScale(1);
 
+    // Lathe mode and diameter display are drawing settings too.
+    this.latheButton = this.toggle('Lathe', 'Lathe mode: axes Z and X, with a centerline at X 0', () => this.onAxisView(!this.view.lathe, this.view.diameter));
+    this.latheButton.dataset.testid = 'lathe';
+    this.diameterButton = this.toggle('Ø', 'Diameter: show and type X values as diameters (lathe mode)', () =>
+      this.onAxisView(this.view.lathe, !this.view.diameter),
+    );
+    this.diameterButton.dataset.testid = 'diameter';
+
     const right = span('status-right');
-    right.append(this.sheetScale, this.customScale, scroll, this.osnap, snapTypes, this.ortho, this.polar, this.increment, this.precision);
+    right.append(this.latheButton, this.diameterButton, this.sheetScale, this.customScale, scroll, this.osnap, snapTypes, this.ortho, this.polar, this.increment, this.precision);
     root.append(this.prompt, this.coords, this.fromBase, right);
     this.refreshToggles();
   }
@@ -185,9 +203,21 @@ export class StatusBar {
     this.prompt.classList.add('message');
   }
 
+  /** Shows the drawing's lathe and diameter settings, and names the readout's axes to match. */
+  showAxisView(lathe: boolean, diameter: boolean): void {
+    this.view = { lathe, diameter };
+    const set = (b: HTMLButtonElement, on: boolean): void => {
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    };
+    set(this.latheButton, lathe);
+    set(this.diameterButton, lathe && diameter);
+    this.diameterButton.disabled = !lathe;
+  }
+
   setCursor(p: Vec2 | undefined, base: Vec2 | undefined): void {
     const dp = this.settings.precision;
-    this.coords.textContent = p ? formatReadout(p, dp) : '';
+    this.coords.textContent = p ? formatReadout(p, dp, { lathe: this.view.lathe, diameter: this.view.lathe && this.view.diameter }) : '';
     this.fromBase.textContent = p && base ? formatFromBase(base, p, dp) : '';
   }
 

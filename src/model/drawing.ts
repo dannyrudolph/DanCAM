@@ -28,6 +28,10 @@ export type Drawing = {
   readonly dimStyles: Map<string, DimStyle>;
   /** Print scale (10 = 10:1) dividing dimension sheet sizes; see `sheetScale.ts`. Changed through the undo stack. */
   sheetScale: number;
+  /** Lathe mode: axes named Z and X, a centerline at Y = 0 (see `latheView.ts`). Saved, not undoable. */
+  lathe: boolean;
+  /** In lathe mode, vertical values shown and typed as diameters. Saved, not undoable. */
+  diameterMode: boolean;
   /** Style new dimensions use. A setting like `currentLayer`: saved, not undoable. */
   currentDimStyle: string;
   /**
@@ -51,6 +55,8 @@ export function createDrawing(units: Units): Drawing {
     dimStyles: new Map([[dimStyle.name, dimStyle]]),
     currentDimStyle: dimStyle.name,
     sheetScale: 1,
+    lathe: false,
+    diameterMode: false,
     currentLayer: DEFAULT_LAYER,
     nextId: 1,
   };

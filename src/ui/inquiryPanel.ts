@@ -1,4 +1,5 @@
 import type { Report } from '../commands/tool';
+import { type AxisView, PLAIN_VIEW, viewRow } from '../model/latheView';
 import { formatNumber } from './statusBar';
 
 /** How many results the panel keeps, newest first. */
@@ -7,18 +8,22 @@ const KEEP = 10;
 /**
  * Results of Dist, ID, List and Angle, newest first. Values are shown at the
  * display precision; hovering one shows it at full stored precision.
+ * Results are kept in drawing terms and named for the current axis view
+ * (lathe Z and X, diameters) when shown.
  */
 export class InquiryPanel {
   private results: Report[] = [];
+  private view: AxisView = PLAIN_VIEW;
 
   constructor(private readonly root: HTMLElement) {}
 
-  add(r: Report, precision: number): void {
+  add(r: Report, precision: number, view: AxisView): void {
     this.results = [r, ...this.results].slice(0, KEEP);
-    this.show(precision);
+    this.show(precision, view);
   }
 
-  show(precision: number): void {
+  show(precision: number, view: AxisView = this.view): void {
+    this.view = view;
     this.root.hidden = this.results.length === 0;
     if (this.results.length === 0) {
       this.root.replaceChildren();
@@ -44,7 +49,7 @@ export class InquiryPanel {
       const title = document.createElement('h3');
       title.textContent = r.title;
       const dl = document.createElement('dl');
-      for (const row of r.rows) {
+      for (const row of r.rows.map((x) => viewRow(x, view))) {
         const dt = document.createElement('dt');
         dt.textContent = row.label;
         const dd = document.createElement('dd');
