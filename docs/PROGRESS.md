@@ -527,6 +527,23 @@ Spec: "Blocks".
    other objects left alone.
 4. Snaps and associativity inside instances: snaps on instance geometry,
    anchors that name instance + inner entity, Trim/Extend boundaries.
+   **(done)** Geometry ids reach into instances as paths `insertId/partId`
+   (`block.partRef`, `refEntityId`, `resolveGeometry`: the part as drawn,
+   carrying the path as its id). `drawnGeometry` (plain geometry + parts,
+   visible layers) feeds `findSnap`, so every snap works on instance parts
+   and reports the path in `on`; the app passes it as the point's anchor
+   unchanged. `anchor.ts` and `associate.ts` resolve every anchor through
+   `resolveGeometry`; `dependsOn` matches a path by its instance; a
+   `block` change re-measures dimensions on that block's instances (step
+   5's Edit block relies on it). Copy remaps paths onto the copy
+   (`remapAnchors`). Erase or Explode of the instance deletes its
+   dimensions (spec). The file check accepts paths that resolve. Trim and
+   Extend take instance parts as edges; instances are never trimmed.
+   Browser test: a linear dimension snapped from the tool to a part face
+   reads 3.000, then 2.500 after the tool's X is edited to .5.
+   Not yet: tools that pick a whole object (Radius, Diameter, Center mark,
+   two-line Angle, Symmetric's centerline) can't pick a part inside an
+   instance; point-snapped dimensions can.
 5. Edit block (Save/Cancel, updates every instance in one undo step),
    Rename, Purge.
 6. Library: IndexedDB store, Save to library, insert from the library

@@ -2,6 +2,7 @@ import { arcContainsDeg, arcEnd, arcMid, arcStart } from '../geometry/arc';
 import { pointAtDeg } from '../geometry/circle';
 import { intersectCurves } from '../geometry/curve';
 import { type Vec2, distance, vecNearlyEqual } from '../geometry/vec';
+import { refEntityId, resolveGeometry } from './block';
 import { type Drawing, newEntityId } from './drawing';
 import { type DimensionEntity, type Entity, type EntityId, entityCurve } from './entity';
 
@@ -50,10 +51,8 @@ export function dimAnchorIds(a: DimAnchors, key: DimAnchorKey): EntityId[] {
   return p ? anchorIds(p) : [];
 }
 
-const geometry = (d: Drawing, id: EntityId): Entity | undefined => {
-  const e = d.entities.get(id);
-  return e && e.kind !== 'dimension' && e.kind !== 'insert' ? e : undefined;
-};
+/** Plain geometry, or a part of a block instance by its path (`block.resolveGeometry`). */
+const geometry = resolveGeometry;
 
 /**
  * Where the anchor is now, or undefined when its entity no longer has that
@@ -131,7 +130,12 @@ export function anchorsFromRefs(d: Drawing, e: DimensionEntity, refs: readonly E
  */
 export function remapAnchors(e: Entity, map: ReadonlyMap<EntityId, EntityId>): Entity {
   if (e.kind !== 'dimension' || !e.anchors) return e;
-  const id = (x: EntityId): EntityId => map.get(x) ?? x;
+  // A part's path follows its instance: e5/b2 copied with e5 → e9 is e9/b2.
+  const id = (x: EntityId): EntityId => {
+    const head = refEntityId(x);
+    const to = map.get(head);
+    return to === undefined ? x : to + x.slice(head.length);
+  };
   const point = (a: Anchor | undefined): Anchor | undefined => a && (a.feature === 'int' ? { ...a, id: id(a.id), other: id(a.other) } : { ...a, id: id(a.id) });
   const a = e.anchors;
   const p1 = point(a.p1);

@@ -3,7 +3,7 @@ import { type Transform, rotation } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
 import { type Drawing, newEntityId } from './drawing';
 import type { Change, Transaction } from './undo';
-import { type ArcEntity, type CircleEntity, type Entity, type InsertEntity, type LineEntity, type PointEntity, entityBBox, scaleEntity, transformEntity } from './entity';
+import { type ArcEntity, type CircleEntity, type Entity, type EntityId, type InsertEntity, type LineEntity, type PointEntity, entityBBox, scaleEntity, transformEntity } from './entity';
 
 /**
  * Blocks (spec, "Blocks"): named, reusable geometry kept in the drawing's
@@ -119,4 +119,50 @@ export function explodeInserts(d: Drawing, inserts: readonly InsertEntity[]): Tr
     for (const part of instanceEntities(d, ins)) changes.push({ op: 'add', entity: { ...part, id: newEntityId(d) } });
   }
   return { label: 'Explode', changes };
+}
+
+/**
+ * Geometry ids that reach into instances: `insertId/partId` names a part
+ * of a block instance as drawn. Entity ids never contain "/", so a plain
+ * id and a path can't be confused. Snaps, anchors and dimensions use them
+ * as they use an entity id.
+ */
+export const partRef = (insertId: EntityId, partId: EntityId): EntityId => `${insertId}/${partId}`;
+
+/** The entity a geometry id belongs to: the instance for a part's path. */
+export const refEntityId = (ref: EntityId): EntityId => ref.split('/')[0]!;
+
+/**
+ * The geometry `ref` names, as drawn now, carrying `ref` as its id:
+ * a line, circle, arc, xline, ray or point entity, or a part of an
+ * instance. Undefined for a dimension, an instance itself, or anything
+ * that is gone.
+ */
+export function resolveGeometry(d: Drawing, ref: EntityId): Entity | undefined {
+  const slash = ref.indexOf('/');
+  if (slash < 0) {
+    const e = d.entities.get(ref);
+    return e && e.kind !== 'dimension' && e.kind !== 'insert' ? e : undefined;
+  }
+  const ins = d.entities.get(ref.slice(0, slash));
+  if (ins?.kind !== 'insert') return undefined;
+  const partId = ref.slice(slash + 1);
+  const part = instanceEntities(d, ins).find((p) => p.id === partId);
+  return part && { ...part, id: ref };
+}
+
+/**
+ * Everything drawn that is geometry, on visible layers: plain geometry, and
+ * each instance's parts with their paths as ids. Dimensions are left out.
+ */
+export function* drawnGeometry(d: Drawing): Generator<Entity> {
+  const visible = (layer: string): boolean => d.layers.get(layer)?.visible !== false;
+  for (const e of d.entities.values()) {
+    if (e.kind === 'dimension' || !visible(e.layer)) continue;
+    if (e.kind !== 'insert') {
+      yield e;
+      continue;
+    }
+    for (const part of instanceEntities(d, e)) if (visible(part.layer)) yield { ...part, id: partRef(e.id, part.id) };
+  }
 }

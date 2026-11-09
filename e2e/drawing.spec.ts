@@ -1866,4 +1866,38 @@ test.describe('blocks', () => {
     await page.mouse.click(q.x, q.y);
     await expect(page.locator('#properties h2')).toHaveText(/^Line /);
   });
+
+  test('a dimension snapped to the tool in a block follows the tool when it moves', async ({ page }) => {
+    await makeToolBlock(page); // the tool's edge (0,0)-(1,0) and nose circle, as one instance
+    await page.keyboard.press('l');
+    await typeValues(page, '3', '-0.5');
+    await typeValues(page, '1', '90'); // a part face at Z 3, from -.5 to .5
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 3, minY: -0.5, maxY: 0.5 });
+    const click = async (x: number, y: number) => {
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+    };
+
+    await page.keyboard.press('Shift+D');
+    await click(0, 0); // Endpoint snap on the block's edge: its base end
+    await click(3, 0.5); // the face's top end
+    await click(1.5, 1); // dimension line above
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.keyboard.press('Escape');
+    await click(2, 1);
+    await expect(prop(page, 'Measured')).toHaveText('3.0000');
+    await page.keyboard.press('Escape');
+
+    await click(0.5, 0); // the instance
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+    await prop(page, 'X').click();
+    await page.keyboard.type('0.5');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await click(2.7, 1); // the dimension line, clear of the text now centered on the shorter span
+    await expect(prop(page, 'Measured')).toHaveText('2.5000');
+  });
 });

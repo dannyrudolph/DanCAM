@@ -4,6 +4,7 @@ import { type Curve, type Deferred, intersectCurves, nearestOnCurve, perpendicul
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
+import { drawnGeometry } from '../model/block';
 import type { Drawing } from '../model/drawing';
 import { type EntityId, entityCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
@@ -74,9 +75,8 @@ export function findSnap(
 
   const hovered: Curve[] = [];
   const hoveredIds: EntityId[] = [];
-  for (const e of d.entities.values()) {
-    // Dimensions are annotation, not geometry: nothing snaps to them. Inside blocks: Phase 6 step 4.
-    if (d.layers.get(e.layer)?.visible === false || e.kind === 'dimension' || e.kind === 'insert') continue;
+  // Plain geometry and the parts of block instances (by path), on visible layers; never dimensions.
+  for (const e of drawnGeometry(d)) {
     const onIt = distanceToEntity(d, cursor, e) <= aperture;
     if (e.kind === 'point') {
       if (onIt) point('node', e.at, { id: e.id, feature: 'node' });

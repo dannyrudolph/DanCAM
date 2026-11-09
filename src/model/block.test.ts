@@ -1,13 +1,16 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { copyTool, eraseTool, moveTool } from '../commands/editTools';
 import { stretchTool } from '../commands/stretchTool';
+import { trimTool } from '../commands/trimTools';
+import { SNAP_KINDS, findSnap } from '../snap/snap';
 import { setup } from '../commands/toolHarness';
 import { normDeg } from '../geometry/angle';
 import { type Transform } from '../geometry/transform';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
-import { type BlockDef, type BlockGeometry, insertBBox, instanceEntities } from './block';
+import { type BlockDef, type BlockGeometry, drawnGeometry, explodeInserts, insertBBox, instanceEntities, resolveGeometry } from './block';
 import { createDrawing, drawingBBox } from './drawing';
-import { type Entity, type InsertEntity, transformEntity } from './entity';
+import { type DimensionEntity, type Entity, type InsertEntity, transformEntity } from './entity';
 import { deleteLayer, renameLayer } from './layers';
 import { pickEntity } from './pick';
 import { rowsFor } from './properties';
@@ -220,5 +223,121 @@ describe('blocks in the file (v4)', () => {
     expect(
       edit((f) => f.entities.push({ kind: 'dimension', id: 'e9', layer: '0', dimStyle: 'INCH-3PL', type: 'centerMark', center: v(0, 0), radius: 1, at: v(0, 0), anchors: { curve: 'I' } })),
     ).toBe('entity e9: anchors.curve names "I", which is not geometry in the drawing.');
+  });
+});
+
+describe('reaching inside instances', () => {
+  /** Tool turned 90° at (2, 1): its edge runs up to the tip at (2, 2), the nose circle is centered there. */
+  const turned = insert({ at: v(2, 1), rotationDeg: 90 });
+  const L: Entity = { kind: 'line', id: 'L', layer: '0', start: v(5, 2), end: v(6, 2) };
+  /** Tip of the tool to the start of L: 3 long. */
+  const dim: DimensionEntity = {
+    kind: 'dimension', id: 'D', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', p1: v(2, 2), p2: v(5, 2), dir: v(1, 0), at: v(3.5, 3),
+    anchors: { p1: { id: 'I/b1', feature: 'end' }, p2: { id: 'L', feature: 'start' } },
+  };
+  function measured() {
+    const { d, undo } = drawingWithTool();
+    undo.commit({ label: 'Setup', changes: [{ op: 'add', entity: turned }, { op: 'add', entity: L }, { op: 'add', entity: dim }] });
+    return { d, undo };
+  }
+  const near = (p: { x: number; y: number }, q: { x: number; y: number }) => {
+    expect(p.x).toBeCloseTo(q.x, 12);
+    expect(p.y).toBeCloseTo(q.y, 12);
+  };
+
+  it('a part is named by its instance and part id, as drawn; the instance itself and missing parts are not geometry', () => {
+    const { d } = measured();
+    const edge = resolveGeometry(d, 'I/b1') as Extract<Entity, { kind: 'line' }>;
+    expect([edge.id, edge.layer]).toEqual(['I/b1', 'Part']);
+    near(edge.end, v(2, 2));
+    expect(resolveGeometry(d, 'L')).toBe(L);
+    expect(resolveGeometry(d, 'I')).toBeUndefined();
+    expect(resolveGeometry(d, 'I/b9')).toBeUndefined();
+    expect(resolveGeometry(d, 'D')).toBeUndefined();
+  });
+
+  it('what is drawn: plain geometry and instance parts on visible layers, no dimensions', () => {
+    const { d, undo } = measured();
+    expect([...drawnGeometry(d)].map((e) => e.id)).toEqual(['I/b1', 'I/b2', 'I/b3', 'I/b4', 'L']);
+    undo.commit({ label: 'Hide', changes: [{ op: 'layer', before: d.layers.get('Hidden')!, after: { ...d.layers.get('Hidden')!, visible: false } }] });
+    expect([...drawnGeometry(d)].map((e) => e.id)).toEqual(['I/b1', 'I/b2', 'I/b3', 'L']);
+  });
+
+  it('snaps land on an instance\'s geometry and say which part: the tool tip, the nose center, where it crosses a line', () => {
+    const { d } = measured();
+    const all = new Set(SNAP_KINDS);
+    const tip = findSnap(d, v(2.003, 2.004), 0.01, all)!;
+    expect(tip.kind).toBe('end');
+    near(tip.at, v(2, 2));
+    expect(tip.on).toEqual({ id: 'I/b1', feature: 'end' });
+    expect(findSnap(d, v(2.26, 2), 0.02, new Set(['cen'] as const))?.on).toEqual({ id: 'I/b2', feature: 'center' });
+    const cross: Entity = { kind: 'line', id: 'X', layer: '0', start: v(1, 1.25), end: v(3, 1.25) }; // where only the edge is: below the arc's end (2, 1.5) and the nose circle
+    d.entities.set('X', cross);
+    const hit = findSnap(d, v(2.004, 1.253), 0.01, new Set(['int'] as const))!;
+    near(hit.at, v(2, 1.25));
+    expect(hit.on).toEqual({ id: 'I/b1', feature: 'int', other: 'X' });
+  });
+
+  it('a dimension from the tool tip follows the instance when it moves, and goes when it is erased or exploded; undo brings both back', () => {
+    const { d, undo } = measured();
+    undo.commit({ label: 'Move', changes: [{ op: 'modify', before: turned, after: { ...turned, at: v(3, 1) } }] });
+    const moved = d.entities.get('D') as Extract<DimensionEntity, { type: 'linear' }>;
+    near(moved.p1, v(3, 2));
+    expect(moved.anchors?.p1).toEqual({ id: 'I/b1', feature: 'end' });
+    undo.undo();
+    near((d.entities.get('D') as typeof moved).p1, v(2, 2));
+
+    undo.commit({ label: 'Erase', changes: [{ op: 'remove', entity: turned }] });
+    expect(d.entities.has('D')).toBe(false);
+    undo.undo();
+    expect(d.entities.get('D')).toEqual(dim);
+
+    undo.commit(explodeInserts(d, [turned]));
+    expect(d.entities.has('D')).toBe(false);
+  });
+
+  it('redefining the block re-measures dimensions on its instances', () => {
+    const { d, undo } = measured();
+    const longer: BlockDef = { ...TOOL, entities: TOOL.entities.map((e) => (e.id === 'b1' ? { ...e, end: v(0.5, 0) } : e)) as BlockGeometry[] };
+    undo.commit({ label: 'Edit block', changes: [{ op: 'block', before: TOOL, after: longer }] });
+    near((d.entities.get('D') as Extract<DimensionEntity, { type: 'linear' }>).p1, v(2, 1.5));
+  });
+
+  it('copied together with the instance, a dimension anchors to the copy\'s part', () => {
+    const t = setup();
+    t.drawing.blocks.set('Tool', TOOL);
+    t.add(turned);
+    t.add(dim);
+    t.add(L);
+    t.select('I', 'D', 'L');
+    t.runner.start(copyTool);
+    t.click(0, 0);
+    t.click(0, 5);
+    const copy = t.entities().find((e) => e.kind === 'dimension' && e.id !== 'D') as DimensionEntity;
+    const copiedInsert = t.entities().find((e) => e.kind === 'insert' && e.id !== 'I')!;
+    expect(copy.anchors?.p1).toEqual({ id: `${copiedInsert.id}/b1`, feature: 'end' });
+  });
+
+  it('saved with the drawing; a path to a part the block doesn\'t have is refused', () => {
+    const { d } = measured();
+    const text = serializeDrawing(d);
+    const back = parseDrawing(text);
+    if (!back.ok) throw new Error(back.error);
+    expect(back.drawing.entities.get('D')).toEqual(dim);
+    const r = parseDrawing(text.replace('"I/b1"', '"I/b9"'));
+    expect(r.ok ? 'opened' : r.error).toBe('entity D: anchors.p1 names "I/b9", which is not geometry in the drawing.');
+  });
+
+  it('Trim cuts a line where it crosses an instance\'s edge; the instance itself is never trimmed', () => {
+    const t = setup();
+    t.drawing.blocks.set('Tool', { ...TOOL, entities: TOOL.entities.slice(0, 1) });
+    t.add(insert({ layer: '0', at: v(2, 1), rotationDeg: 90 })); // edge (2, 1)-(2, 2)
+    t.add({ kind: 'line', id: 'X', layer: '0', start: v(1, 1.5), end: v(3, 1.5) });
+    t.runner.start(trimTool);
+    t.finish(); // every object is an edge
+    t.pick('X', 2.5, 1.5);
+    expect(t.drawing.entities.get('X')).toMatchObject({ start: v(1, 1.5), end: v(2, 1.5) });
+    const req = t.runner.request;
+    expect(req?.kind === 'entity' && req.accepts(t.drawing.entities.get('I')!)).toBe(false);
   });
 });
