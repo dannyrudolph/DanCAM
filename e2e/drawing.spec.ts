@@ -2137,8 +2137,8 @@ test.describe('Import STEP', () => {
     await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
     await expect(status).toHaveText('Import pin-mm.step: choose where Z0 goes, Flip and Half or Full, then click or press Enter to place it');
     await page.keyboard.press('Enter');
-    await expect(prop(page, 'entity-count')).toHaveText('13');
-    await expect(status).toHaveText('Imported pin-mm.step: 13 lines and arcs on layer pin-mm.');
+    await expect(prop(page, 'entity-count')).toHaveText('14');
+    await expect(status).toHaveText('Imported pin-mm.step: 14 lines and arcs on layer pin-mm.');
     await expect(page.locator('#layers')).toContainText('pin-mm');
 
     // The Ø10 body runs from Z-39 (after the 1x45° chamfer) to the shoulder at Z-10.
@@ -2150,6 +2150,14 @@ test.describe('Import STEP', () => {
     await expect(prop(page, 'Start Z')).toHaveText('-39.0000');
     await expect(prop(page, 'End Z')).toHaveText('-10.0000');
     await expect(prop(page, 'Start X')).toHaveText('5.0000');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('');
+
+    // The Ø3 bore, 8 deep from Z0, is inside the part: hidden.
+    await page.keyboard.press('Escape');
+    const b = at(-4, 1.5);
+    await page.mouse.click(b.x, b.y);
+    await expect(prop(page, 'Start Z')).toHaveText('-8.0000');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('hidden');
 
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+z');

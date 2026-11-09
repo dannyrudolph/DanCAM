@@ -8,11 +8,16 @@ import type { Vec2 } from '../geometry/vec';
  * file is in `io/step/turnedProfile`.
  */
 
+/**
+ * How a curve shows in a side view: `hidden` inside the part (a bore),
+ * `tangent` where two faces meet smoothly; absent, a visible edge.
+ */
+export type ProfileStyle = 'hidden' | 'tangent';
+
 export type ProfileCurve =
-  /** `tangent`: the edge where two faces meet smoothly, drawn in the tangent line style. */
-  | { readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2; readonly tangent?: true }
+  | { readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2; readonly style?: ProfileStyle }
   /** Counter-clockwise from startDeg to endDeg. */
-  | { readonly kind: 'arc'; readonly center: Vec2; readonly radius: number; readonly startDeg: number; readonly endDeg: number };
+  | { readonly kind: 'arc'; readonly center: Vec2; readonly radius: number; readonly startDeg: number; readonly endDeg: number; readonly style?: ProfileStyle };
 
 export type LeftOut = {
   /** Faces of the solid that aren't round about the axis: cross holes, flats, slots, hex. */
@@ -105,13 +110,13 @@ export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurv
     if (c.kind === 'arc') {
       const close = (a: number, b: number): boolean => degApart(a, b) * (Math.PI / 180) * c.radius <= tol;
       const same = arcs.some(
-        (o) => Math.abs(o.center.x - c.center.x) <= tol && Math.abs(o.center.y - c.center.y) <= tol && Math.abs(o.radius - c.radius) <= tol && close(o.startDeg, c.startDeg) && close(o.endDeg, c.endDeg),
+        (o) => Math.abs(o.center.x - c.center.x) <= tol && Math.abs(o.center.y - c.center.y) <= tol && Math.abs(o.radius - c.radius) <= tol && o.style === c.style && close(o.startDeg, c.startDeg) && close(o.endDeg, c.endDeg),
       );
       if (!same) arcs.push(c);
       continue;
     }
     const [a, b] = c.start.x < c.end.x || (Math.abs(c.start.x - c.end.x) <= tol && c.start.y < c.end.y) ? [c.start, c.end] : [c.end, c.start];
-    lines.push(c.tangent ? { a, b, tangent: true } : { a, b });
+    lines.push(c.style ? { a, b, style: c.style } : { a, b });
   }
   // Join lines on one carrier whose spans overlap or touch, until nothing joins.
   let joined = true;
@@ -129,14 +134,14 @@ export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurv
       }
     }
   }
-  return [...lines.map((l): ProfileCurve => (l.tangent ? { kind: 'line', start: l.a, end: l.b, tangent: true } : { kind: 'line', start: l.a, end: l.b })), ...arcs];
+  return [...lines.map((l): ProfileCurve => (l.style ? { kind: 'line', start: l.a, end: l.b, style: l.style } : { kind: 'line', start: l.a, end: l.b })), ...arcs];
 }
 
-type Joinable = { readonly a: Vec2; readonly b: Vec2; readonly tangent?: true };
+type Joinable = { readonly a: Vec2; readonly b: Vec2; readonly style?: ProfileStyle };
 
 /** One line covering both when they lie on one line, overlap or touch, and are the same kind of edge. */
 function join(p: Joinable, q: Joinable, tol: number): Joinable | undefined {
-  if (p.tangent !== q.tangent) return undefined;
+  if (p.style !== q.style) return undefined;
   const d = { x: p.b.x - p.a.x, y: p.b.y - p.a.y };
   const len = Math.hypot(d.x, d.y);
   if (len === 0) return undefined;
@@ -151,14 +156,18 @@ function join(p: Joinable, q: Joinable, tol: number): Joinable | undefined {
 }
 
 /**
- * The edges a side view shows across the part (spec, "STEP import"): at
- * each Z where a circular edge lies on the outside of the part, a line from
- * the centerline out to it. Where two faces meet smoothly there (a radius
- * running into a diameter) it is a tangent edge; where one of them is a
- * flat face, the face is the edge. Edges inside the part, a bore's, get
- * none. The ends of the profile's curves are its edges.
+ * The profile as a side view shows it (spec, "STEP import"): what lies
+ * inside the part, below its outside at that Z (a bore, its drill point, an
+ * inner shoulder or radius), hidden; and at each Z with a circular edge, a
+ * line from the centerline across the part. It is visible when the edge is
+ * on the outside, in the tangent style where two faces meet smoothly there
+ * (a radius running into a diameter; where one of them is a flat face, the
+ * face is the edge), and hidden when every edge at that Z is inside. The
+ * ends of the profile's curves are its edges.
  */
-export function edgeLines(curves: readonly ProfileCurve[], tol: number): ProfileCurve[] {
+export function sideView(curves: readonly ProfileCurve[], tol: number): ProfileCurve[] {
+  const inside = (p: Vec2): boolean => p.y < radiusAt(curves, p.x, tol) - tol;
+  const out: ProfileCurve[] = curves.map((c) => (inside(showing(c, tol)) ? { ...c, style: 'hidden' } : c));
   const ends = curves.flatMap(curveEnds);
   const outer: Vec2[] = [];
   for (const e of ends) {
@@ -167,16 +176,29 @@ export function edgeLines(curves: readonly ProfileCurve[], tol: number): Profile
     if (i < 0) outer.push(e.at);
     else if (e.at.y > outer[i]!.y) outer[i] = e.at;
   }
-  const out: ProfileCurve[] = [];
   for (const p of outer) {
-    if (p.y < radiusAt(curves, p.x, tol) - tol) continue;
+    const line = { kind: 'line', start: { x: p.x, y: 0 }, end: p } as const;
+    if (inside(p)) {
+      out.push({ ...line, style: 'hidden' });
+      continue;
+    }
     const meeting = ends.filter((e) => Math.abs(e.at.x - p.x) <= tol && Math.abs(e.at.y - p.y) <= tol).map((e) => e.away);
     const [u, w] = meeting;
     const smooth = meeting.length === 2 && u !== undefined && w !== undefined && Math.abs(u.x * w.y - u.y * w.x) <= tol && u.x * w.x + u.y * w.y < 0 && Math.abs(u.x) > tol;
-    const line = { kind: 'line', start: { x: p.x, y: 0 }, end: p } as const;
-    out.push(smooth ? { ...line, tangent: true } : line);
+    out.push(smooth ? { ...line, style: 'tangent' } : line);
   }
   return out;
+}
+
+/** The point that says whether a curve is inside the part: a flat face's outer end, any other curve's middle. */
+function showing(c: ProfileCurve, tol: number): Vec2 {
+  if (c.kind === 'line') {
+    if (Math.abs(c.end.x - c.start.x) <= tol) return c.start.y > c.end.y ? c.start : c.end;
+    return { x: (c.start.x + c.end.x) / 2, y: (c.start.y + c.end.y) / 2 };
+  }
+  const sweep = (((c.endDeg - c.startDeg) % 360) + 360) % 360;
+  const mid = ((c.startDeg + sweep / 2) * Math.PI) / 180;
+  return { x: c.center.x + c.radius * Math.cos(mid), y: c.center.y + c.radius * Math.sin(mid) };
 }
 
 /** Each end of a curve, with the unit direction the curve leaves it in. */

@@ -2,7 +2,7 @@ import { TOL } from '../../geometry/tolerance';
 import type { Vec2 } from '../../geometry/vec';
 import { type Vec3, add3, cross3, dot3, length3, scale3, sub3 } from '../../geometry/vec3';
 import type { Units } from '../../model/drawing';
-import { type LeftOut, type ProfileCurve, type TurnedProfile, edgeLines, merge, scaleCurve } from '../../model/profilePlacement';
+import { type LeftOut, type ProfileCurve, type TurnedProfile, merge, scaleCurve, sideView } from '../../model/profilePlacement';
 import { MM_PER_INCH } from '../../model/units';
 import type { Placement, StepEdge, StepFace, StepModel } from './stepModel';
 
@@ -98,7 +98,7 @@ export function turnedProfile(model: StepModel, units: Units): ProfileResult {
   }
   const scaled = curves.map((c) => scaleCurve(c, k));
   const outline = merge(scaled, tol * k);
-  return { ok: true, profile: { curves: merge([...outline, ...edgeLines(outline, tol * k)], tol * k), left } };
+  return { ok: true, profile: { curves: merge(sideView(outline, tol * k), tol * k), left } };
 }
 
 const parallel = (a: Vec3, b: Vec3, tol: number): boolean => length3(cross3(a, b)) <= tol;

@@ -65,12 +65,13 @@ describe('Import STEP', () => {
     expect(again.t.entities()).toEqual([]);
   });
 
-  it('a tangent edge becomes a line in the tangent style; the rest take the layer\'s', () => {
+  it('a tangent edge and what is inside the part come in tangent and hidden; the rest take the layer\'s style', () => {
     let n = 0;
     const made = profileEntities(
       [
-        { kind: 'line', start: { x: 1, y: 0 }, end: { x: 1, y: 2 }, tangent: true },
+        { kind: 'line', start: { x: 1, y: 0 }, end: { x: 1, y: 2 }, style: 'tangent' },
         { kind: 'line', start: { x: 0, y: 2 }, end: { x: 1, y: 2 } },
+        { kind: 'arc', center: { x: 0, y: 0 }, radius: 1, startDeg: 0, endDeg: 90, style: 'hidden' },
       ],
       'pin',
       () => `e${++n}`,
@@ -78,6 +79,7 @@ describe('Import STEP', () => {
     expect(made.map((e) => [e.layer, e.style])).toEqual([
       ['pin', 'tangent'],
       ['pin', undefined],
+      ['pin', 'hidden'],
     ]);
   });
 
