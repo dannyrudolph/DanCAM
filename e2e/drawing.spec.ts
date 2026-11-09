@@ -2120,3 +2120,51 @@ test('lathe mode marks Z0 X0 with a faint center mark, and a click near it start
   await expect(prop(page, 'Start Z')).toHaveAttribute('title', '0');
   await expect(prop(page, 'Start X')).toHaveAttribute('title', '0');
 });
+
+test.describe('Import STEP', () => {
+  async function importFile(page: Page, path: string) {
+    const choosing = page.waitForEvent('filechooser');
+    await page.getByTestId('import-step').click();
+    await (await choosing).setFiles(path);
+  }
+
+  test('a turned part from a STEP file is laid along Z with Z0 at its right end, on a layer named after the file', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await importFile(page, 'test-fixtures/step/pin-mm.step');
+    await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
+    await expect(status).toHaveText('Import pin-mm.step: choose where Z0 goes, Flip and Half or Full, then click or press Enter to place it');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('10');
+    await expect(status).toHaveText('Imported pin-mm.step: 10 lines and arcs on layer pin-mm.');
+    await expect(page.locator('#layers')).toContainText('pin-mm');
+
+    // The Ø10 body runs from Z-39 (after the 1x45° chamfer) to the shoulder at Z-10.
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -40, maxX: 0, minY: 0, maxY: 5 });
+    const p = at(-25, 5);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'Start Z')).toHaveText('-39.0000');
+    await expect(prop(page, 'End Z')).toHaveText('-10.0000');
+    await expect(prop(page, 'Start X')).toHaveText('5.0000');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+  });
+
+  test('cross holes and flats are reported as left out; a file that isn\'t STEP is refused', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await importFile(page, 'test-fixtures/step/cross-hole-flat-mm.step');
+    await page.locator('[data-option="zero:left"]').click();
+    await page.keyboard.press('Enter');
+    await expect(status).toHaveText('Imported cross-hole-flat-mm.step: 3 lines and arcs on layer cross-hole-flat-mm. Left out: 4 faces not round about the axis (cross holes, flats, slots).');
+
+    await importFile(page, 'test-fixtures/step/make_fixtures.py');
+    await expect(status).toHaveText("Can't import make_fixtures.py: This is not a STEP file (it should start with ISO-10303-21;).");
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+  });
+});

@@ -5,7 +5,8 @@ import pinMm from '../../../test-fixtures/step/pin-mm.step?raw';
 import pinTilted from '../../../test-fixtures/step/pin-tilted-mm.step?raw';
 import type { Units } from '../../model/drawing';
 import { type StepFace, type StepModel, readStep } from './stepModel';
-import { type ProfileCurve, type TurnedProfile, placeProfile, turnedProfile } from './turnedProfile';
+import { type ProfileCurve, type TurnedProfile, placeProfile } from '../../model/profilePlacement';
+import { turnedProfile } from './turnedProfile';
 
 function profile(text: string, units: Units = 'mm'): TurnedProfile {
   const m = readStep(text);

@@ -668,6 +668,24 @@ for the done-when and as fixtures.
    with Z0 at Right/Left, Flip, Half/Full; Place as one undo step on a new
    layer named after the file; the left-out report. Browser test with a
    fixture file.
+   **(done)** The 2D part moved to `model/profilePlacement` (ProfileCurve,
+   TurnedProfile, `placeProfile`, `merge`), so `commands/` doesn't import
+   `io/`. `commands/stepImportTool` (`createStepImportTool`, one-shot):
+   options Z0 at right end (default) / left end, Flip, Half / Full, kept
+   for the session; the part shown in place through a new
+   `PointRequest.shown` (drawn whatever the cursor, even off the canvas);
+   click or Enter places it: a new layer named after the file
+   (`layerNameFor`, next free name via `layers.freeLayerName`, black,
+   Visible) and its lines and arcs, one undo step "Import X"; message with
+   the count and what was left out (`leftOutMessage`). App: toolbar button
+   after Save As (`import-step`); `importStep` reads the file (any
+   .step/.stp), says why it can't, turns lathe mode on, clears a stale
+   status message so the prompt shows, and fits the view to every
+   placement the options allow. The reader checks the opening line before
+   tokenising (a non-STEP file gets the plain message) and takes a BOM.
+   Browser tests: the pin into an mm drawing (lathe on, Z0 right, 10
+   curves on layer pin-mm, the Ø10 reads Z-39 to Z-10 at X5, Undo); the
+   cross-hole bar's left-out message; a Python file refused.
 4. Done-when: a real Solid Edge file (spec, roadmap Phase 7).
 
 ## Open questions

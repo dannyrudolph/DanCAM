@@ -50,7 +50,7 @@ function tokenize(text: string): { tokens: Token[]; lines: number[] } {
     if (c === '\n') {
       line++;
       i++;
-    } else if (c === ' ' || c === '\t' || c === '\r') {
+    } else if (c === ' ' || c === '\t' || c === '\r' || c === '\uFEFF') {
       i++;
     } else if (c === '/' && text[i + 1] === '*') {
       const end = text.indexOf('*/', i + 2);
@@ -123,6 +123,7 @@ export function parsePart21(text: string): Part21Result {
 }
 
 function parse(text: string): Part21 {
+  if (!/^\s*ISO-10303-21\s*;/.test(text)) throw new SyntaxError21('This is not a STEP file (it should start with ISO-10303-21;).');
   const { tokens, lines } = tokenize(text);
   let i = 0;
   const where = (): string => `line ${lines[Math.min(i, lines.length - 1)] ?? 1}`;

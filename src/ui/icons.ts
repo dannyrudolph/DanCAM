@@ -43,6 +43,7 @@ export const ICONS = {
   fromLibrary: svg('<path d="M16 9 A6 6 0 1 0 14.2 14.2"/><path d="M16 4 V9 H11"/>'),
   exportFile: svg('<path d="M4 12 V17 H16 V12"/><path d="M10 13 V3 M7 6 L10 3 L13 6"/>'),
   importFile: svg('<path d="M4 12 V17 H16 V12"/><path d="M10 3 V13 M7 10 L10 13 L13 10"/>'),
+  importStep: svg('<path d="M2 8 H7 V6 H13 V8 H18 V14 H13 V12 H7 V14 H2 Z"/><path d="M10 1 V5 M8 3 L10 5 L12 3"/><path d="M1 17 H19" stroke-dasharray="3 1.5 1 1.5"/>'),
   explode: svg('<path d="M7 7 L4 4 M13 7 L16 4 M7 13 L4 16 M13 13 L16 16"/><rect x="7.5" y="7.5" width="5" height="5" rx="1"/>'),
   centerMark: svg('<circle cx="10" cy="10" r="6"/><path d="M8 10 H12 M10 8 V12 M14 10 H19 M1 10 H6 M10 1 V6 M10 14 V19"/>'),
   dimLeader: svg('<path d="M3 17 L11 7 H18"/><path d="M3 17 L4.2 13.6 L6 15.2 Z" fill="currentColor"/><path d="M12 4 H18"/>'),
