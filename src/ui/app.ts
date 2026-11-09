@@ -42,6 +42,7 @@ import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
+import { blockEditDrawing, saveBlockEdit } from '../model/blockEdit';
 import { BlocksPanel } from './blocksPanel';
 import { DimStylesPanel } from './dimStylesPanel';
 import { LayersPanel } from './layersPanel';
@@ -187,7 +188,18 @@ export class App {
       INSERT_TOOL.use(name);
       this.startTool(INSERT_TOOL);
     },
+    edit: (name) => this.editBlock(name),
+    commit: (tx) => {
+      this.runner.stop(); // as for a layer edit: a tool mid-step must not undo it
+      this.undo.commit(tx);
+      this.status.showMessage(tx.label);
+      this.refresh();
+    },
+    message: (m) => this.status.showMessage(m),
   });
+  /** Edit block: the drawing set aside while the block is open by itself, to return to on Save or Cancel. */
+  private blockEdit: { readonly name: string; readonly outer: Drawing; readonly outerUndo: UndoStack; readonly outerView: vp.Viewport } | undefined;
+  private readonly blockEditBar = el('block-edit');
   private readonly inquiry = new InquiryPanel(el('inquiry'));
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
@@ -247,8 +259,11 @@ export class App {
       (scale) => this.setSheetScale(scale),
       (lathe, diameter) => {
         // Settings like the current layer: saved with the drawing, not undoable.
-        this.drawing.lathe = lathe;
-        this.drawing.diameterMode = diameter;
+        for (const d of [this.drawing, this.blockEdit?.outer]) {
+          if (!d) continue;
+          d.lathe = lathe;
+          d.diameterMode = diameter;
+        }
         this.status.showMessage(lathe ? `Lathe mode: Z and X${diameter ? ', X as diameter' : ''}` : 'Lathe mode off');
         this.boxes.relabel();
         this.refresh();
@@ -306,15 +321,79 @@ export class App {
     return !this.undo.dirty || window.confirm(`Discard unsaved changes to ${this.file.name}?`);
   }
 
+  /** True (and says so) while a block is open in Edit block: the file can't be replaced or saved then. */
+  private inBlockEdit(): boolean {
+    if (!this.blockEdit) return false;
+    this.status.showMessage(`Save or cancel the block ${this.blockEdit.name} first.`);
+    return true;
+  }
+
+  /** Edit block: opens the block by itself (base point at the origin, marked) with Save block and Cancel. */
+  private editBlock(name: string): void {
+    if (this.inBlockEdit() || !this.drawing.blocks.has(name)) return;
+    this.runner.stop();
+    this.menu.close();
+    this.blockEdit = { name, outer: this.drawing, outerUndo: this.undo, outerView: this.view };
+    const d = blockEditDrawing(this.drawing, name);
+    this.drawing = d;
+    this.undo = new UndoStack(d);
+    this.runner = this.makeRunner();
+    this.selected.clear();
+    const text = document.createElement('span');
+    text.textContent = `Editing block ${name}: the base point is at the marker. Every instance follows when you save.`;
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Save block';
+    save.className = 'option-button active';
+    save.dataset.testid = 'block-edit-save';
+    save.addEventListener('click', () => this.finishBlockEdit(true));
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.className = 'option-button';
+    cancel.dataset.testid = 'block-edit-cancel';
+    cancel.addEventListener('click', () => this.finishBlockEdit(false));
+    this.blockEditBar.replaceChildren(text, save, cancel);
+    this.blockEditBar.hidden = false;
+    this.zoomExtents();
+    this.status.showMessage(`Editing block ${name}`);
+    this.refresh();
+  }
+
+  /** Save block (one undo step in the drawing; stays open with a message when it can't) or Cancel. */
+  private finishBlockEdit(save: boolean): void {
+    const open = this.blockEdit;
+    if (!open) return;
+    this.runner.stop();
+    const r = save ? saveBlockEdit(open.outer, open.name, this.drawing) : undefined;
+    if (r && !r.ok) {
+      this.status.showMessage(r.error);
+      return;
+    }
+    this.blockEdit = undefined;
+    this.blockEditBar.hidden = true;
+    this.blockEditBar.replaceChildren();
+    if (save && this.drawing.layers.has(this.drawing.currentLayer)) open.outer.currentLayer = this.drawing.currentLayer;
+    this.drawing = open.outer;
+    this.undo = open.outerUndo;
+    this.runner = this.makeRunner();
+    this.selected.clear();
+    this.view = open.outerView;
+    if (r?.ok && r.tx) this.undo.commit(r.tx);
+    const left = r?.ok && r.left > 0 ? ` (${r.left} object${r.left === 1 ? '' : 's'} left out: a block holds only lines, circles, arcs and points)` : '';
+    this.status.showMessage(!r ? 'Block edit cancelled' : r.tx ? `Saved block ${open.name}${left}` : `No change to block ${open.name}${left}`);
+    this.refresh();
+  }
+
   private newDrawing(units: Units): void {
-    if (!this.canDiscard()) return;
+    if (this.inBlockEdit() || !this.canDiscard()) return;
     this.file.reset();
     this.setDrawing(createDrawing(units));
     this.status.showMessage(`New ${UNIT_LABEL[units]} drawing`);
   }
 
   private async openDrawing(): Promise<void> {
-    if (!this.canDiscard()) return;
+    if (this.inBlockEdit() || !this.canDiscard()) return;
     try {
       const picked = await this.file.open();
       if (!picked) return;
@@ -332,6 +411,7 @@ export class App {
   }
 
   private async saveDrawing(saveAs: boolean): Promise<void> {
+    if (this.inBlockEdit()) return;
     try {
       if (!(await this.file.save(serializeDrawing(this.drawing), saveAs))) return;
       this.undo.markSaved();
@@ -343,6 +423,7 @@ export class App {
   }
 
   private openUnitsMenu(anchor: DOMRect): void {
+    if (this.inBlockEdit()) return;
     const other: Units = this.drawing.units === 'in' ? 'mm' : 'in';
     const op = other === 'mm' ? '×' : '÷';
     this.menu.open(anchor.left, anchor.bottom, [
@@ -619,6 +700,10 @@ export class App {
 
   /** Sizes every dimension for printing at `scale`, as one undo step. */
   private setSheetScale(scale: number): void {
+    if (this.inBlockEdit()) {
+      this.refresh();
+      return;
+    }
     const before = this.drawing.sheetScale;
     if (scale !== before) this.undo.commit({ label: 'Sheet scale', changes: [{ op: 'sheetScale', before, after: scale }] });
     this.refresh();
@@ -640,7 +725,7 @@ export class App {
     ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
     this.dimStylesPanel.show(this.drawing);
-    this.blocksPanel.show(this.drawing);
+    this.blocksPanel.show(this.drawing, this.blockEdit?.name);
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value')) this.onceSnap = undefined;
     this.boxes.setRequest(req);
@@ -733,6 +818,7 @@ export class App {
         selectBox: this.selectBox,
         nextPoint: next,
         snap,
+        ...(this.blockEdit && { basePoint: { x: 0, y: 0 } }),
       }, window.devicePixelRatio || 1);
     this.canvas.dataset.snap = snap?.kind ?? '';
     this.status.setCursor(next ?? snap?.at ?? cursor, req?.base);

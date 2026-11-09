@@ -68,6 +68,8 @@ export type Overlay = {
   readonly nextPoint: Vec2 | undefined;
   /** The object snap the cursor is on; drawn instead of the next-point marker. */
   readonly snap: Snap | undefined;
+  /** Edit block: the block's base point (the origin), marked like the ordinate origin. */
+  readonly basePoint?: Vec2;
 };
 
 /**
@@ -90,6 +92,7 @@ export function render(
   }
   drawEntities(ctx, v, drawing, overlay.selected);
   if (showsOrigin(drawing)) drawOriginMark(ctx, worldToScreen(v, drawing.dimOrigin));
+  if (overlay.basePoint) drawOriginMark(ctx, worldToScreen(v, overlay.basePoint));
   for (const e of overlay.preview) {
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }

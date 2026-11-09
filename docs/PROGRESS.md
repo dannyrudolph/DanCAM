@@ -546,6 +546,26 @@ Spec: "Blocks".
    instance; point-snapped dimensions can.
 5. Edit block (Save/Cancel, updates every instance in one undo step),
    Rename, Purge.
+   **(done)** `model/blockEdit`: `blockEditDrawing` opens the block by
+   itself (base at the origin; the drawing's layers, styles, units and
+   settings; no blocks; new ids past its `e<n>` ids); `saveBlockEdit`
+   keeps only lines/circles/arcs/points (counts the rest as left out),
+   refuses an empty block, keeps part ids (so dimensions on kept parts stay
+   anchored and re-measure; those on deleted parts go), carries layers
+   made or changed while editing, one undo step "Edit block X", none when
+   nothing changed. `renameBlock` (instances follow; a change of case is
+   fine; clashes and blanks refused), `deleteBlock` (refused while used),
+   `purgeBlocks` (every unused one, one step). App: the Blocks panel's
+   pencil opens Edit block: its own drawing, undo stack and view, a base
+   point marker, a bar "Editing block X" with Save block / Cancel. Save
+   that can't (empty) stays open with the message. While editing, New,
+   Open, Save, Units and Sheet scale are refused ("Save or cancel the
+   block X first."); Lathe mode applies to both. Panel: double-click the
+   name to rename (Enter or leaving applies, Esc cancels), trash deletes,
+   Purge in the header. Browser tests: edit with two instances, erase the
+   nose, Save (both change, one undo brings it back), Ctrl+S refused while
+   editing; Cancel; rename; delete and purge refused while used, then
+   purge.
 6. Library: IndexedDB store, Save to library, insert from the library
    (copied in), Update from library, Export/Import library file; name
    clashes asked about, never overwritten silently.

@@ -60,6 +60,16 @@ input {
   min-height: 32px;
 }
 
+/* Edit block: the bar says which block is open, with Save block and Cancel. */
+#block-edit {
+  background: var(--panel-2);
+  border-bottom: 2px solid var(--accent);
+}
+
+#block-edit span {
+  margin-right: 8px;
+}
+
 .options-tool {
   font-weight: 600;
   margin-right: 8px;
@@ -669,13 +679,17 @@ input {
 
 .block-row {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 40px 1fr auto auto auto; /* preview, name, count, edit, delete */
   grid-template-rows: auto auto;
   column-gap: 6px;
   align-items: center;
   padding: 2px;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.block-row .layer-name-input {
+  min-width: 0;
 }
 
 .block-row:hover {
@@ -704,7 +718,7 @@ input {
 }
 
 .block-description {
-  grid-column: 2 / span 2;
+  grid-column: 2 / span 4;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

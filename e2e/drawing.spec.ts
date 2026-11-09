@@ -1900,4 +1900,84 @@ test.describe('blocks', () => {
     await click(2.7, 1); // the dimension line, clear of the text now centered on the shorter span
     await expect(prop(page, 'Measured')).toHaveText('2.5000');
   });
+
+  test('Edit block: the block opens by itself; Save changes every instance in one undo step', async ({ page }) => {
+    await makeToolBlock(page);
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await row.locator('.block-preview').click(); // a second copy at (0, 1)
+    await typeValues(page, '0', '1');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(row.locator('.layer-count')).toHaveText('2');
+
+    await row.locator('[data-role="edit"]').click();
+    await expect(page.locator('#block-edit')).toBeVisible();
+    await expect(page.locator('#block-edit')).toContainText('Editing block Tool');
+    await expect(page.locator('#blocks .blocks-empty')).toHaveText('Editing Tool. Save block or Cancel in the bar above the drawing.');
+    await expect(prop(page, 'entity-count')).toHaveText('2'); // the block's edge and nose circle
+    await page.keyboard.press('Control+s');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Save or cancel the block Tool first.');
+
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Circle /);
+    await page.keyboard.press('Delete');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    await page.getByTestId('block-edit-save').click();
+    await expect(page.locator('#block-edit')).toBeHidden();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Saved block Tool');
+    await expect(prop(page, 'entity-count')).toHaveText('2'); // both instances, back in the drawing
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+
+    await page.keyboard.press('Control+z'); // one step brings the nose back to both
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+  });
+
+  test('Edit block Cancel, then Rename, Delete and Purge from the Blocks panel', async ({ page }) => {
+    await makeToolBlock(page);
+    const preview = (name: string) => page.locator(`#blocks li[data-block="${name}"] .block-preview svg g > *`);
+    await page.locator('#blocks li[data-block="Tool"] [data-role="edit"]').click();
+    await page.getByTestId('zoom-extents').click();
+    const extents = { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 };
+    let { at } = await prober(page, extents);
+    let p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+    await page.getByTestId('block-edit-cancel').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Block edit cancelled');
+    await expect(preview('Tool')).toHaveCount(2);
+    await page.getByTestId('zoom-extents').click(); // the bar is gone: the canvas is taller again
+    ({ at } = await prober(page, extents));
+
+    await page.locator('#blocks li[data-block="Tool"] [data-role="name"]').dblclick();
+    const input = page.locator('#blocks input[data-role="name-input"]');
+    await expect(input).toBeFocused();
+    await input.fill('Boring bar');
+    await input.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Rename block Tool to Boring bar');
+    await expect(preview('Boring bar')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(prop(page, 'Block')).toHaveText('Boring bar');
+
+    await page.locator('#blocks li[data-block="Boring bar"] [data-role="delete"]').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Boring bar has 1 instance in the drawing; erase or explode them first.');
+    await page.getByTestId('purge-blocks').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Every block is in use; nothing to purge.');
+
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete'); // the only instance gone, the block is unused
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+    await page.getByTestId('purge-blocks').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Purge 1 block');
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible();
+    await page.keyboard.press('Control+z');
+    await expect(preview('Boring bar')).toHaveCount(2);
+  });
 });

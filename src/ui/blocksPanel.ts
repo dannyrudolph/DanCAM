@@ -1,38 +1,74 @@
 import { arcEnd, arcStart, arcSweepDeg } from '../geometry/arc';
 import { union } from '../geometry/bbox';
 import { type BlockDef, insertsOf } from '../model/block';
+import { type BlockEdit, deleteBlock, purgeBlocks, renameBlock } from '../model/blockEdit';
 import type { Drawing } from '../model/drawing';
 import { entityBBox } from '../model/entity';
+import type { Transaction } from '../model/undo';
+import { ICONS } from './icons';
 
 export type BlocksHost = {
   /** Starts Insert with the block named `name`. */
   insert(name: string): void;
+  /** Opens the block named `name` in Edit block. */
+  edit(name: string): void;
+  /** Applies a change (rename, delete, purge) through the undo stack. */
+  commit(tx: Transaction): void;
+  message(text: string): void;
 };
 
 /**
  * The Blocks panel (spec, "Blocks"): the drawing's blocks by name, each
  * with a small preview, how many instances there are, and its description.
- * Clicking one starts Insert with it.
+ * Clicking one starts Insert with it; double-clicking its name renames it;
+ * its buttons open Edit block or delete it (when unused). Purge in the
+ * header deletes every unused block. While a block is being edited the
+ * panel says so instead.
  */
 export class BlocksPanel {
+  private drawing: Drawing | undefined;
+  private editing: string | undefined;
+  private renaming: string | undefined;
+
   constructor(
     private readonly root: HTMLElement,
     private readonly host: BlocksHost,
   ) {}
 
-  show(d: Drawing): void {
+  /** `editing`: the block open in Edit block, if any. */
+  show(d: Drawing, editing?: string): void {
+    this.drawing = d;
+    this.editing = editing;
+    if (this.renaming !== undefined) return; // don't rebuild under the user's hands
+    this.render();
+  }
+
+  private render(): void {
+    const d = this.drawing;
+    if (!d) return;
     const title = document.createElement('h2');
     title.textContent = 'Blocks';
     const header = document.createElement('div');
     header.className = 'layers-header';
     header.append(title);
-    if (d.blocks.size === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'blocks-empty';
-      empty.textContent = 'None yet. Select geometry and choose Create block (K).';
-      this.root.replaceChildren(header, empty);
+    const note = (text: string): HTMLParagraphElement => {
+      const p = document.createElement('p');
+      p.className = 'blocks-empty';
+      p.textContent = text;
+      return p;
+    };
+    if (this.editing !== undefined) {
+      this.root.replaceChildren(header, note(`Editing ${this.editing}. Save block or Cancel in the bar above the drawing.`));
       return;
     }
+    if (d.blocks.size === 0) {
+      this.root.replaceChildren(header, note('None yet. Select geometry and choose Create block (K).'));
+      return;
+    }
+    const purge = iconButton(ICONS.trash, 'Purge: delete every block no instance uses', 'purge-blocks');
+    purge.addEventListener('click', () => this.apply(purgeBlocks(d)));
+    header.append(purge);
+
     const list = document.createElement('ul');
     list.className = 'layer-list';
     const byName = [...d.blocks.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
@@ -41,25 +77,87 @@ export class BlocksPanel {
       li.className = 'block-row';
       li.dataset.block = def.name;
       li.title = `Insert ${def.name}${def.description === '' ? '' : `: ${def.description}`}`;
-      li.addEventListener('click', () => this.host.insert(def.name));
+      li.addEventListener('click', (e) => {
+        if (e.target instanceof Element && e.target.closest('button, input')) return;
+        this.host.insert(def.name);
+      });
       const preview = document.createElement('span');
       preview.className = 'block-preview';
       preview.innerHTML = blockPreviewSvg(def);
-      const name = document.createElement('span');
-      name.className = 'layer-name';
-      name.textContent = def.name;
       const count = document.createElement('span');
       count.className = 'layer-count';
       count.textContent = String(insertsOf(d, def.name).length);
       count.title = 'Instances in the drawing';
+      const edit = iconButton(ICONS.editBlock, 'Edit block: change its geometry; every instance follows');
+      edit.dataset.role = 'edit';
+      edit.addEventListener('click', () => this.host.edit(def.name));
+      const del = iconButton(ICONS.trash, 'Delete block (only one no instance uses)');
+      del.dataset.role = 'delete';
+      del.addEventListener('click', () => this.apply(deleteBlock(d, def.name)));
       const description = document.createElement('span');
       description.className = 'block-description';
       description.textContent = def.description;
-      li.append(preview, name, count, description);
+      li.append(preview, this.nameCell(d, def.name), count, edit, del, description);
       list.append(li);
     }
     this.root.replaceChildren(header, list);
+    this.root.querySelector<HTMLInputElement>('input.layer-name-input')?.select();
   }
+
+  private apply(r: BlockEdit): void {
+    if (r.ok) this.host.commit(r.tx);
+    else this.host.message(r.error);
+  }
+
+  /** The name, or a text box while renaming (double-click; Enter or leaving it applies, Esc cancels). */
+  private nameCell(d: Drawing, name: string): HTMLElement {
+    if (this.renaming !== name) {
+      const span = document.createElement('span');
+      span.className = 'layer-name';
+      span.textContent = name;
+      span.dataset.role = 'name';
+      span.title = `Double-click to rename; click the row to insert`;
+      span.addEventListener('dblclick', () => {
+        this.renaming = name;
+        this.render();
+      });
+      return span;
+    }
+    const input = document.createElement('input');
+    input.className = 'layer-name-input';
+    input.value = name;
+    input.spellcheck = false;
+    input.dataset.role = 'name-input';
+    let done = false;
+    const finish = (apply: boolean): void => {
+      if (done) return;
+      done = true;
+      this.renaming = undefined;
+      const to = input.value;
+      if (apply && to.trim() !== name) this.apply(renameBlock(d, name, to));
+      this.render();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // typing a name must not start tools
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        finish(e.key === 'Enter');
+      }
+    });
+    input.addEventListener('blur', () => finish(true));
+    return input;
+  }
+}
+
+function iconButton(icon: string, title: string, testId?: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'layer-icon-button';
+  b.innerHTML = icon;
+  b.title = title;
+  b.tabIndex = -1;
+  if (testId) b.dataset.testid = testId;
+  return b;
 }
 
 const fmt = (n: number): string => String(Math.round(n * 1e6) / 1e6);
