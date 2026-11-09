@@ -223,13 +223,23 @@ function outlines(f: SolidFace, e: Vec3, ctx: Ctx): Piece3[] {
         const d = unit3(cross3(at.axis, e))!;
         curves = [
           ...[1, -1].map((sg) => full({ kind: 'circle', center: add3(at.origin, scale3(d, sg * s.major)), axis: cross3(d, at.axis), ref: scale3(d, sg), radius: s.minor })),
-          ...[1, -1].map((sg) => full({ kind: 'circle', center: add3(at.origin, scale3(at.axis, sg * s.minor)), axis: at.axis, ref: at.ref, radius: s.major })),
+          // The rims (where the tube faces along the axis), seen edge-on; a rim the face's boundary runs along is that edge
+          // (a fillet meeting a flat face), already drawn, and clipping it to the face would only be rounding either way.
+          ...[1, -1]
+            .filter((sg) => !f.segs.some((g) => onRim(g.p.v, sg) && onRim(g.q.v, sg)))
+            .map((sg) => full({ kind: 'circle', center: add3(at.origin, scale3(at.axis, sg * s.minor)), axis: at.axis, ref: at.ref, radius: s.major })),
         ];
       }
       break;
     }
   }
   return curves.flatMap((p) => clip(p, (q) => insideFace(f, q, 0), ctx));
+}
+
+/** Whether a torus parameter v is its rim on the `sg` side (v = ±π/2, a whole number of turns either way). */
+function onRim(v: number, sg: number): boolean {
+  const off = v - (sg * Math.PI) / 2;
+  return Math.abs(off - 2 * Math.PI * Math.round(off / (2 * Math.PI))) <= PARALLEL;
 }
 
 /** The parts of the piece where `keep` holds: sampled, then each change narrowed down. */

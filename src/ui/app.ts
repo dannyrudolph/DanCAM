@@ -45,10 +45,10 @@ import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
 import { blockEditDrawing, saveBlockEdit } from '../model/blockEdit';
 import { BlocksPanel } from './blocksPanel';
-import { createStepImportTool, profileEntities } from '../commands/stepImportTool';
+import { type ViewsFor, createStepImportTool, profileEntities } from '../commands/stepImportTool';
 import { readStep } from '../io/step/stepModel';
 import { turnedProfile } from '../io/step/turnedProfile';
-import { placeProfile } from '../model/profilePlacement';
+import { threeViews } from '../io/step/threeViews';
 import { LibraryPanel } from './libraryPanel';
 import { IndexedDbLibrary } from '../io/libraryStore';
 import { DimStylesPanel } from './dimStylesPanel';
@@ -437,12 +437,19 @@ export class App {
       return;
     }
     this.drawing.lathe = true; // a setting, like the Lathe button: not undoable
-    STEP_IMPORT_TOOL.load(file.name, profile.profile);
+    const stepModel = model.ok ? model.model : undefined;
+    const units = this.drawing.units;
+    const views: ViewsFor | undefined = stepModel
+      ? (flip, turn) => {
+          const v = threeViews(stepModel, units, { flip, turn });
+          return v.ok ? v.views : undefined;
+        }
+      : undefined;
+    STEP_IMPORT_TOOL.load(file.name, profile.profile, views);
     this.status.clearMessage(); // the placing prompt, not whatever was said before the file dialog
     this.startTool(STEP_IMPORT_TOOL);
-    // Fit every place the options can put it (Z0 at either end, both halves), so each choice stays in view.
-    const ends = (['left', 'right'] as const).flatMap((zeroAt) => placeProfile(profile.profile, { zeroAt, flip: false, full: true }));
-    const box = [...profileEntities(ends, '0', () => 'x').map(entityBBox), fromPoints([{ x: 0, y: 0 }])].reduce(union);
+    // Fit every place the options can put it (Z0 at either end, both halves, the three views), so each choice stays in view.
+    const box = [...profileEntities(STEP_IMPORT_TOOL.reach(), '0', () => 'x').map(entityBBox), fromPoints([{ x: 0, y: 0 }])].reduce(union);
     this.view = vp.zoomExtents(this.view, box);
     this.refresh();
   }

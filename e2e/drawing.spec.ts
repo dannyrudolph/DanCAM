@@ -2138,7 +2138,7 @@ test.describe('Import STEP', () => {
     await importFile(page, 'test-fixtures/step/pin-mm.step');
     await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
-    await expect(status).toHaveText('Import pin-mm.step: choose where Z0 goes, Flip and Half or Full, then click or press Enter to place it');
+    await expect(status).toHaveText('Import pin-mm.step: choose the profile or three views, where Z0 goes and how it turns, then click or press Enter to place it');
     await page.keyboard.press('Enter');
     await expect(prop(page, 'entity-count')).toHaveText('14');
     await expect(status).toHaveText('Imported pin-mm.step: 14 lines and arcs on layer pin-mm.');
@@ -2177,5 +2177,34 @@ test.describe('Import STEP', () => {
     await importFile(page, 'test-fixtures/step/make_fixtures.py');
     await expect(status).toHaveText("Can't import make_fixtures.py: This is not a STEP file (it should start with ISO-10303-21;).");
     await expect(prop(page, 'entity-count')).toHaveText('3');
+  });
+
+  test('3 views: the shaft laid out third-angle, its cross hole a circle in the top view, a layer per view', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await importFile(page, 'test-fixtures/step/shaft.step');
+    await expect(page.locator('[data-option="half"]')).toBeEnabled();
+    await page.locator('[data-option="mode:views"]').click();
+    await expect(page.locator('[data-option="mode:views"]')).toHaveClass(/active/);
+    await expect(page.locator('[data-option="half"]')).toBeDisabled();
+    await page.keyboard.press('Enter');
+    await expect(status).toHaveText(
+      'Imported shaft.step as three views: 147 lines and arcs on layers shaft front, shaft fitted, shaft top, shaft end. Curves on shaft fitted are fitted with arcs and lines.',
+    );
+    for (const name of ['shaft front', 'shaft top', 'shaft end', 'shaft fitted']) await expect(page.locator('#layers')).toContainText(name);
+
+    // Front view Z-61.2 to Z0; the top view above it (a gap of 61.2/8); the cross hole 1.8 from the far end, seen down its axis.
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -61.2, maxX: 11.92, minY: -2.135, maxY: 14.0142779 });
+    const p = at(-59.4 + 0.56, 11.8792779);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Circle/);
+    await expect(prop(page, 'Radius')).toHaveText('0.5600');
+    await expect(prop(page, 'Layer').locator('select')).toHaveValue('shaft top');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
   });
 });

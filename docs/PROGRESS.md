@@ -731,6 +731,23 @@ Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
 7. Import tool: Profile / 3 views, Turn 90°, the views laid out third-angle
    with Z0 and Flip as now, a layer per view and one for fitted curves, one
    undo step. Browser test.
+   **(done)** `commands/stepImportTool`: `load(name, profile, views?)`
+   takes a `ViewsFor(flip, turn)` callback (the app wraps io/step's
+   `threeViews`; commands don't import io), memoized per flip and turn.
+   Options Profile / 3 views (3 views disabled when the views can't be
+   taken), Z0 right/left, Flip, Turn 90° (views only), Half/Full (profile
+   only). `layoutViews(views, zeroAt)` lays them out third-angle (gap the
+   front view's height or length/8). Place: layers `<name> front/top/end`
+   and `<name> fitted` (each the next free name), one undo step; the
+   message names the layers and says the fitted ones are fitted. `reach()`
+   gives the app every curve the options can place, to fit the screen.
+   Found on the way: a fillet's rim (a torus outline seen edge-on) lies on
+   the face's boundary, so clipping it to the face was rounding either
+   way, and Node and Chromium drew different fragments; a rim the face's
+   boundary runs along is now left to that edge. Tests: tool (options per
+   mode, Turn/Flip reach the callback once each, layers, undo), layout,
+   the rim; browser: shaft.step as 3 views, 147 curves, the cross hole a
+   R0.56 circle on `shaft top`, Undo.
 8. Done-when: shaft.step with its cross hole, slot and tang flat in every
    view, checked with List and dimensions.
 

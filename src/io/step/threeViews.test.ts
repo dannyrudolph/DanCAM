@@ -76,6 +76,23 @@ describe('three views', () => {
     expect(flat?.style).toBeUndefined();
   });
 
+  it('a fillet\'s rim is its tangent edge with the flat face, drawn once: whole pieces, not rounding\'s fragments', () => {
+    const v = views(shaft);
+    const [, , right] = curvesBox(v.front);
+    // The R0.15 fillet where the Ø3.97 meets the face 3.76 from the head end, seen edge-on: the tangent edge in two pieces
+    // either side of the Ø1.85 tang's edge and the slot's wall (visible).
+    const at = lines(v.front)
+      .filter((l) => near(l.start.x, l.end.x) && near(l.start.x - right, -3.76))
+      .map((l) => [Math.round(Math.min(l.start.y, l.end.y) * 1e4) / 1e4, Math.round(Math.max(l.start.y, l.end.y) * 1e4) / 1e4, l.style ?? 'visible'])
+      .sort((p, q) => (p[0] as number) - (q[0] as number));
+    expect(at).toEqual([
+      [-1.985, -0.925, 'tangent'],
+      [-0.925, 0.925, 'visible'],
+      [0.925, 1.1, 'tangent'],
+      [1.1, 1.9411, 'visible'],
+    ]);
+  });
+
   it('Turn moves the cross hole\'s circle into the front view; Flip puts it at the far end', () => {
     const turned = views(shaft, false, 1);
     // Exactly the hole's circle (the break-out curves lie on the hole), the far one hidden under it.
