@@ -28,6 +28,8 @@ const COLORS = {
   grip: '#0969da',
   /** Lathe mode's centerline at Y = 0: part of the view, not the drawing. */
   latheAxis: '#8c959f',
+  /** Lathe mode's Z0 X0 center mark, fainter than the centerline. */
+  latheOrigin: '#b8bec6',
   origin: '#0969da',
   hotGrip: '#d1242f',
   gripEdge: '#ffffff',
@@ -89,6 +91,7 @@ export function render(
   if (drawing.lathe) {
     const axis: Entity = { kind: 'xline', id: 'lathe-axis', layer: '', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } };
     drawEntity(ctx, v, drawing, axis, LINE_STYLES.center, COLORS.latheAxis, 0);
+    drawCenterMark(ctx, worldToScreen(v, { x: 0, y: 0 }), COLORS.latheOrigin);
   }
   drawEntities(ctx, v, drawing, overlay.selected);
   if (showsOrigin(drawing)) drawOriginMark(ctx, worldToScreen(v, drawing.dimOrigin));
@@ -271,6 +274,21 @@ function drawOriginMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineTo(s.x + 2 * r, s.y);
   ctx.moveTo(s.x, s.y - 2 * r);
   ctx.lineTo(s.x, s.y + 2 * r);
+  ctx.stroke();
+}
+
+/** A drafting center mark, a fixed size on screen: a small cross at the center and longer arms past a gap. */
+function drawCenterMark(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + 5 * dx, s.y + 5 * dy);
+    ctx.moveTo(s.x + 8 * dx, s.y + 8 * dy);
+    ctx.lineTo(s.x + 16 * dx, s.y + 16 * dy);
+  }
   ctx.stroke();
 }
 

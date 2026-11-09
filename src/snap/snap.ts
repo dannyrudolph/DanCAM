@@ -48,7 +48,8 @@ type Candidate = Snap & { readonly score: number; readonly dist: number };
  * anywhere, as long as their object is under the cursor; they rank as if
  * they were at the edge of the aperture, so a point snap close to the cursor
  * beats them. Otherwise the point nearest the cursor wins, and Nearest only
- * when nothing else is found. Perpendicular and Tangent need `base`; without
+ * when nothing else is found. In lathe mode Center also takes Z0 X0 when
+ * it is within the aperture. Perpendicular and Tangent need `base`; without
  * one, `deferOk` lets them give a deferred snap on the object under the
  * cursor (Tangent on circles and arcs, Perpendicular on anything), ranked
  * like Center so that point snaps in the aperture win.
@@ -72,6 +73,9 @@ export function findSnap(
     const dist = distance(cursor, at);
     found.push({ kind, at, score: Math.min(dist, aperture), dist, ...(on && { on }) });
   };
+
+  // Lathe mode marks Z0 X0 (the part's datum) and Center snaps to it, to start a profile there.
+  if (d.lathe) point('cen', { x: 0, y: 0 });
 
   const hovered: Curve[] = [];
   const hoveredIds: EntityId[] = [];

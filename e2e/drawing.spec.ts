@@ -2085,3 +2085,38 @@ test.describe('blocks', () => {
     await expect(other.locator('#library li')).toHaveCount(1);
   });
 });
+
+test('lathe mode marks Z0 X0 with a faint center mark, and a click near it starts a line exactly there', async ({ page }) => {
+  await page.keyboard.press('c');
+  await typeValues(page, '3', '3');
+  await typeValues(page, '4'); // something to zoom to, clear of the origin
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -1, maxX: 7, minY: -1, maxY: 7 });
+  const o = at(0, 0);
+  /** The red channel of the pixel `dy` CSS pixels above the origin. */
+  const redAbove = (dy: number) =>
+    page.evaluate(([sx, sy]) => {
+      const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
+      const r = c.getBoundingClientRect();
+      const k = c.width / r.width;
+      return c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k), Math.round((sy! - r.top) * k), 1, 1).data[0];
+    }, [o.x, o.y - dy]);
+  await expect.poll(() => redAbove(12)).toBe(255); // lathe mode off: paper
+  await page.getByTestId('lathe').click();
+  await expect.poll(() => redAbove(12)).toBeLessThan(250); // the mark's upper arm: grey…
+  expect(await redAbove(12)).toBeGreaterThan(128); // …and faint, not ink
+  expect(await redAbove(6.5)).toBe(255); // the gap between the cross and the arm
+
+  await page.keyboard.press('l');
+  await page.mouse.move(o.x + 4, o.y - 3);
+  await page.mouse.click(o.x + 4, o.y - 3); // Center snap onto Z0 X0
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  const mid = at(0.5, 0);
+  await page.mouse.click(mid.x, mid.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+  await expect(prop(page, 'Start Z')).toHaveAttribute('title', '0');
+  await expect(prop(page, 'Start X')).toHaveAttribute('title', '0');
+});
