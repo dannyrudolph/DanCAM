@@ -210,7 +210,16 @@ points along an edge, then its new angle).
    by one; no grips yet; line style ignored (no Style row). Properties:
    Dim style, Type, Text, Measured, points. Four demo dimensions, one per
    fit case.
-3. Linear (H/V by drag or forced) and Aligned tools, placement preview.
+3. **Linear (Shift+D) and Aligned (G) tools (done).** `commands/dimTools`:
+   Two points (snaps; the second has the first as base) or Pick a line
+   (its ends; `refs` = the line), then the dimension line's position,
+   previewed live; one undo step each; sticky. Linear: Auto H/V
+   (`linearDirFor`: beside the points' span → vertical, above/below →
+   horizontal, off a corner → the larger overshoot), or Horizontal /
+   Vertical forced; method and orientation remembered for the session.
+   Same two points refused; Enter at placement drops it. Toolbar: a
+   Dimensions group before Inquiry. Shortcuts chosen by Claude, not yet
+   confirmed by the user.
 4. Radius, Diameter, Angular (two lines / arc / vertex + 2 points).
 5. Leader / note (text typed in a box at the cursor).
 6. Dimension Styles panel; per-dimension precision / tolerance / text

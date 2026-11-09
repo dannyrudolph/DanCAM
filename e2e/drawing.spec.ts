@@ -1043,6 +1043,48 @@ test.describe('trim and extend', () => {
   });
 });
 
+test.describe('dimensions', () => {
+  test('a linear dimension between two snapped endpoints reads exactly, and Vertical forces its direction', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 1300 }); // room above the line for the dimension text at this zoom
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const scale = box.width * 0.9; // extents 1 × 0
+    const c = await canvasCenter(page);
+    const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
+
+    await page.keyboard.press('Shift+D');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick the first point to measure from');
+    const near = (x: number, dx: number, dy: number) => ({ x: at(x, 0).x + dx, y: at(x, 0).y + dy }); // a few pixels off an end
+    for (const p of [near(0, 4, -3), near(1, -4, 3), at(0.5, 0.3)]) await page.mouse.click(p.x, p.y); // Endpoint snaps take both
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await page.keyboard.press('Escape');
+    const text = at(0.5, 0.3);
+    await page.mouse.click(text.x, text.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+    await expect(prop(page, 'Text')).toHaveText('1.000');
+    await expect(prop(page, 'Point 2 X')).toHaveText('1.0000');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Shift+D');
+    for (const p of [near(0, 4, -3), near(1, -4, 3)]) await page.mouse.click(p.x, p.y);
+    await page.locator('[data-option="orient:v"]').click();
+    await expect(page.locator('[data-option="orient:v"]')).toHaveClass(/active/);
+    const below = at(0.5, -0.3);
+    await page.mouse.click(below.x, below.y);
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.keyboard.press('Escape');
+    // The points are level, so it measures zero; with no room inside, its text sits above the
+    // upper arrow: center .24 + .1225 above the line, its top clear of the first dimension's text.
+    const zeroText = at(0.5, 0.41);
+    await page.mouse.click(zeroText.x, zeroText.y);
+    await expect(prop(page, 'Text')).toHaveText('.000');
+  });
+});
+
 test.describe('Phase 3 done-when: a turned profile built from construction lines by trimming alone', () => {
   test('six xlines trimmed to a shaft step, with a .010 x 45° chamfer and an R.020 fillet, exact to 1e-12', async ({ page }) => {
     // Xlines: centerline and two radii (Ø.250, Ø.375), the front face, shoulder at Z .4 and back face at Z 1.
