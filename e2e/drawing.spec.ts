@@ -1330,6 +1330,47 @@ test('a dimension snapped to a line follows when the line is edited, and is eras
   await expect(prop(page, 'Measured')).toHaveText('2.5000');
 });
 
+test('Symmetric diameter in lathe mode: a snapped shoulder reads Ø twice its height, and follows the profile', async ({ page }) => {
+  await page.getByTestId('lathe').click();
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0.5');
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '0', '-0.5'); // with the line, makes the extents 1 × 1
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: 0, maxX: 1, minY: -0.5, maxY: 0.5 });
+
+  await expect(page.getByTestId('tool-dimSymmetric')).toBeVisible();
+  await page.keyboard.press('Shift+M');
+  await expect(page.getByTestId('tool-dimSymmetric')).toHaveClass(/active/);
+  let p = at(1, 0.5);
+  await page.mouse.move(p.x - 2, p.y + 2);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await page.mouse.click(p.x - 2, p.y + 2);
+  p = at(1.3, 0.2);
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('3');
+
+  const dim = at(1.3, 0.45); // on the dimension line, between the arrow and the text
+  await page.mouse.click(dim.x, dim.y);
+  await expect(prop(page, 'Type')).toHaveText('Symmetric diameter');
+  await expect(prop(page, 'Text')).toHaveText('Ø1.000');
+
+  await page.keyboard.press('Escape');
+  p = at(0.5, 0.5);
+  await page.mouse.click(p.x, p.y);
+  await prop(page, 'End X').click(); // lathe mode: Y is named X
+  await page.keyboard.type('0.625');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(dim.x, dim.y);
+  await expect(prop(page, 'Text')).toHaveText('Ø1.250');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

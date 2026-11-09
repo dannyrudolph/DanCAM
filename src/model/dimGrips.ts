@@ -1,6 +1,7 @@
 import { cosSinDeg } from '../geometry/angle';
 import { type Vec2, distance, vecNearlyEqual } from '../geometry/vec';
-import { angularSector, dimLine, dimensionLayout } from './dimLayout';
+import { TOL } from '../geometry/tolerance';
+import { angularSector, axisOffset, dimLine, dimensionLayout, symmetricLine } from './dimLayout';
 import { dimStyleOf } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
@@ -17,6 +18,9 @@ import type { Grip } from './grips';
  *   text along the line, and the line with it.
  * - radius, diameter: `text` moves the text (and its leader).
  * - angular: `arc`, on the dimension arc, sets its radius and side.
+ * - symmetric: `p1` moves the feature point; `line1`, where the dimension
+ *   line meets its extension line, moves the line along the axis; `text`
+ *   moves the text along the line.
  * - leader: `tip` moves the arrow point, `text` the landing.
  */
 
@@ -47,6 +51,15 @@ export function dimensionGrips(d: Drawing, e: DimensionEntity): Grip[] {
       const [c, s] = cosSinDeg(start + sweep / 2);
       const r = distance(e.at, e.vertex);
       return [{ key: 'arc', at: { x: e.vertex.x + r * c, y: e.vertex.y + r * s } }];
+    }
+    case 'symmetric': {
+      const { a1 } = symmetricLine(e);
+      const t = dimensionLayout(d, e).textBox;
+      return [
+        { key: 'p1', at: e.p1 },
+        { key: 'line1', at: a1 },
+        { key: 'text', at: mid({ x: t.minX, y: t.minY }, { x: t.maxX, y: t.maxY }) },
+      ];
     }
     case 'leader':
       return [
@@ -107,6 +120,15 @@ export function applyDimensionGrip(d: Drawing, e: DimensionEntity, key: string, 
       return key === 'text' && !vecNearlyEqual(to, e.center) ? { ...e, at: to } : undefined;
     case 'angular':
       return key === 'arc' && !vecNearlyEqual(to, e.vertex) ? { ...e, at: to } : undefined;
+    case 'symmetric': {
+      if (key === 'p1') {
+        const moved = { ...withoutAnchors(e, ['p1']), p1: to } as typeof e;
+        return Math.abs(axisOffset(moved)) <= TOL ? undefined : moved;
+      }
+      if (key === 'line1') return { ...e, at: to };
+      if (key === 'text') return { ...e, textAt: to };
+      return undefined;
+    }
     case 'leader':
       if (key === 'tip') return vecNearlyEqual(to, e.at) ? undefined : { ...e, tip: to };
       if (key === 'text') return vecNearlyEqual(to, e.tip) ? undefined : { ...e, at: to };

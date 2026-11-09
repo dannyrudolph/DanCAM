@@ -86,9 +86,27 @@ export function measuredValue(e: DimensionEntity): number | undefined {
       return 2 * e.radius;
     case 'angular':
       return angularSector(e).sweep;
+    case 'symmetric':
+      return 2 * Math.abs(axisOffset(e));
     case 'leader':
       return undefined;
   }
+}
+
+/** How far `p1` is from a symmetric dimension's axis, positive to the axis's left. */
+export function axisOffset(e: Extract<DimensionEntity, { type: 'symmetric' }>): number {
+  return dot(sub(e.p1, e.axisBase), { x: -e.axisDir.y, y: e.axisDir.x });
+}
+
+/**
+ * A symmetric dimension's line: `ax` where it crosses the axis (square to
+ * it, level with `at`), `a1` at the feature's side, `a2` mirrored across.
+ */
+export function symmetricLine(e: Extract<DimensionEntity, { type: 'symmetric' }>): { ax: Vec2; a1: Vec2; a2: Vec2 } {
+  const n = { x: -e.axisDir.y, y: e.axisDir.x };
+  const ax = add(e.axisBase, e.axisDir, dot(sub(e.at, e.axisBase), e.axisDir));
+  const h = axisOffset(e);
+  return { ax, a1: add(ax, n, h), a2: add(ax, n, -h) };
 }
 
 /** Arrow with its tip at `tip`, pointing along the unit vector `d`; 3:1 long to wide. */
@@ -153,7 +171,7 @@ function pieceTo(lines: Segment[]): (from: Vec2, to: Vec2) => void {
 }
 
 /** The format for `e`: its style, with this dimension's overrides on top. */
-function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimStyle, altFactor: number): DimFormat {
+function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimStyle, altFactor: number, diameter: boolean): DimFormat {
   const text = e.textOverride === undefined ? {} : { override: e.textOverride };
   if (e.type === 'angular') return { ...angleFormat(e.precision === undefined ? style : { ...style, anglePrecision: e.precision }), ...text };
   const own: DimStyle = {
@@ -163,7 +181,7 @@ function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimSt
   };
   const f = { ...lengthFormat(own, altFactor), ...text };
   if (e.type === 'radius') return { ...f, prefix: `R${f.prefix ?? ''}` };
-  if (e.type === 'diameter') return { ...f, prefix: `Ø${f.prefix ?? ''}` };
+  if (e.type === 'diameter' || e.type === 'symmetric' || diameter) return { ...f, prefix: `Ø${f.prefix ?? ''}` };
   return f;
 }
 
@@ -246,6 +264,41 @@ function linearParts(e: Extract<DimensionEntity, { type: 'linear' | 'aligned' }>
       break;
   }
   return { lines, arcs: [], arrows, fit, ...placeText(block, center) };
+}
+
+/**
+ * Symmetric diameter. Full: as a linear dimension from the feature to its
+ * mirror across the axis. Half: the feature's extension line and one arrow,
+ * the dimension line running past the centerline by an arrow length; the
+ * text halfway to the axis, or past the axis when it doesn't fit, or where
+ * `textAt` puts it on the line.
+ */
+function symmetricParts(e: Extract<DimensionEntity, { type: 'symmetric' }>, style: DimStyle, block: Block): Parts {
+  const { ax, a1, a2 } = symmetricLine(e);
+  if (style.symmetric === 'full') {
+    const mirror = add(e.p1, sub(a2, a1));
+    const { axisBase: _b, axisDir: _d, ...rest } = e;
+    return linearParts({ ...rest, type: 'linear', p2: mirror, dir: { x: -e.axisDir.y, y: e.axisDir.x } }, style, block);
+  }
+  const lines: Segment[] = [];
+  const off = sub(a1, e.p1);
+  const dist = len(off);
+  if (dist > style.extOffset) {
+    const d = { x: off.x / dist, y: off.y / dist };
+    lines.push([add(e.p1, d, style.extOffset), add(a1, d, style.extExtend)]);
+  }
+  const span = len(sub(ax, a1));
+  const w = span > TOL ? { x: (ax.x - a1.x) / span, y: (ax.y - a1.y) / span } : { x: -e.axisDir.y, y: e.axisDir.x };
+  const half = halfChord(block, style.textGap, w);
+  const arrowLen = style.arrowSize;
+  const end = span + arrowLen; // past the centerline
+  const fits = span >= 2 * half + arrowLen;
+  const t = e.textAt ? dot(sub(e.textAt, a1), w) : fits ? span / 2 : end + half;
+  const piece = pieceTo(lines);
+  piece(add(a1, w, Math.min(0, t - half)), add(a1, w, t - half));
+  piece(add(a1, w, t + half), add(a1, w, Math.max(end, t + half)));
+  const fit: Fit = t - half >= -TOL && t + half <= span + TOL ? 'inside' : 'textOutside';
+  return { lines, arcs: [], arrows: [arrow(a1, neg(w), arrowLen)], fit, ...placeText(block, add(a1, w, t)) };
 }
 
 /**
@@ -368,13 +421,13 @@ function angularParts(e: Extract<DimensionEntity, { type: 'angular' }>, style: D
 }
 
 /** The layout of `e` drawn with `style`; `altFactor` converts to the alternate unit. */
-export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: number): DimLayout {
+export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: number, diameter = false): DimLayout {
   if (e.type === 'leader') {
     const text = { main: e.text };
     return { text, ...leaderParts(e, style, textBlock(text, style.textHeight)) };
   }
   const value = measuredValue(e)!;
-  const text = formatDimension(value, formatFor(e, style, altFactor));
+  const text = formatDimension(value, formatFor(e, style, altFactor, diameter));
   const block = textBlock(text, style.textHeight);
   switch (e.type) {
     case 'linear':
@@ -385,12 +438,24 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
       return { value, text, ...radialParts(e, style, block) };
     case 'angular':
       return { value, text, ...angularParts(e, style, block) };
+    case 'symmetric':
+      return { value, text, ...symmetricParts(e, style, block) };
   }
+}
+
+/**
+ * True for a linear dimension that reads a diameter in lathe view with Ø
+ * on: square to the centerline (Y = 0) and measured from one side of it to
+ * the other (spec, "Symmetric diameter").
+ */
+export function readsDiameter(d: Drawing, e: DimensionEntity): boolean {
+  if (!d.lathe || !d.diameterMode || e.type !== 'linear' || Math.abs(e.dir.x) > TOL) return false;
+  return (e.p1.y > TOL && e.p2.y < -TOL) || (e.p1.y < -TOL && e.p2.y > TOL);
 }
 
 /** `e` laid out with its style in `d`, sized for the drawing's sheet scale. */
 export function dimensionLayout(d: Drawing, e: DimensionEntity): DimLayout {
-  return layoutDimension(e, atSheetScale(dimStyleOf(d, e.dimStyle), d.sheetScale), altUnitFactor(d.units));
+  return layoutDimension(e, atSheetScale(dimStyleOf(d, e.dimStyle), d.sheetScale), altUnitFactor(d.units), readsDiameter(d, e));
 }
 
 export function layoutBBox(l: DimLayout): BBox {

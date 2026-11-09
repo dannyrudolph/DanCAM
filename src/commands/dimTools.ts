@@ -1,5 +1,5 @@
 import { TOL } from '../geometry/tolerance';
-import { type Vec2, distance, sub, vecNearlyEqual } from '../geometry/vec';
+import { type Vec2, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
 import type { Anchor, DimAnchors } from '../model/anchor';
 import { angleBetweenLines, arcArms } from '../model/associate';
 import { expandSymbols } from '../model/dimFormat';
@@ -112,8 +112,8 @@ export const createAlignedDimTool = (): ToolDef => createDimTool('aligned');
 /** Makes the dimension for a placement point; undefined when it can't be placed there. */
 type MakeDim = (id: EntityId, at: Vec2) => DimensionEntity | undefined;
 
-/** The placement step: previews as the cursor moves, then adds the dimension as one undo step. */
-function* place(ctx: ToolContext, name: string, prompt: string, make: MakeDim): Generator<Request, void, ToolInput> {
+/** The placement step: previews as the cursor moves, then adds the dimension as one undo step. False when Enter ended it instead. */
+function* place(ctx: ToolContext, name: string, prompt: string, make: MakeDim): Generator<Request, boolean, ToolInput> {
   for (;;) {
     const input = yield {
       kind: 'point',
@@ -123,12 +123,12 @@ function* place(ctx: ToolContext, name: string, prompt: string, make: MakeDim): 
         return d ? [d] : [];
       },
     };
-    if (input.kind === 'finish') return;
+    if (input.kind === 'finish') return false;
     if (input.kind !== 'point') continue;
     const at = input.at;
     if (!make(PREVIEW_ID, at)) continue;
     addEntity(ctx, `${name} dimension`, (id) => make(id, at)!);
-    return;
+    return true;
   }
 }
 
@@ -258,6 +258,74 @@ export function createAngularDimTool(): ToolDef {
           return;
         }
         yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, anchors));
+      }
+    },
+  };
+}
+
+/** The lathe centerline: Y = 0, Z increasing. */
+const LATHE_AXIS = { base: { x: 0, y: 0 }, dir: H } as const;
+
+/**
+ * Symmetric diameter (Shift+M): the centerline (the lathe axis in lathe
+ * mode, or a picked line, ray or xline), then feature after feature, each
+ * followed by where its dimension line goes, until Enter. Each reads Ø
+ * twice the feature's distance from the axis; snapped features are
+ * anchored, and so is a picked centerline.
+ */
+export function createSymmetricDimTool(): ToolDef {
+  const name = 'Symmetric diameter';
+  const lathe = new MethodChoice<'axis' | 'pick'>(
+    [
+      { key: 'axis', label: 'Lathe axis' },
+      { key: 'pick', label: 'Pick centerline' },
+    ],
+    'axis',
+  );
+  return {
+    id: 'dimSymmetric',
+    label: 'Symmetric diameter',
+    shortcut: 'shift+m',
+    *run(ctx): ToolGen {
+      const method = ctx.drawing.lathe ? lathe : new MethodChoice<'axis' | 'pick'>([{ key: 'pick', label: 'Pick centerline' }], 'pick');
+      let axis: { base: Vec2; dir: Vec2 } = LATHE_AXIS;
+      let axisId: EntityId | undefined;
+      if (method.current === 'pick') {
+        const isAxis = (e: { kind: string }): boolean => e.kind === 'line' || e.kind === 'xline' || e.kind === 'ray';
+        const pick = yield* method.entity(ctx, { prompt: `${name}: pick the centerline`, accepts: isAxis });
+        if (!pick) return;
+        const e = pick.entity;
+        if (e.kind === 'line') axis = { base: e.start, dir: unit(sub(e.end, e.start)) };
+        else if (e.kind === 'xline' || e.kind === 'ray') axis = { base: e.base, dir: e.dir };
+        else return;
+        axisId = e.id;
+      }
+      const { base, dir } = axis;
+      const layer = ctx.newProps().layer;
+      for (;;) {
+        const feature = yield* method.anchoredPoint({ prompt: `${name}: pick a feature (Enter to finish)` });
+        if (!feature) return;
+        const p1 = feature.at;
+        const along = dot(sub(p1, base), dir);
+        const axisBase = { x: base.x + dir.x * along, y: base.y + dir.y * along };
+        if (distance(p1, axisBase) <= TOL) {
+          ctx.message('That point is on the centerline; pick a feature off it.');
+          continue;
+        }
+        const anchors: DimAnchors = { ...(feature.anchor && { p1: feature.anchor }), ...(axisId !== undefined && { axis: axisId }) };
+        const placed = yield* place(ctx, name, 'pick where the dimension line goes', (id, at) => ({
+          kind: 'dimension',
+          id,
+          layer,
+          dimStyle: ctx.drawing.currentDimStyle,
+          type: 'symmetric',
+          p1,
+          axisBase,
+          axisDir: dir,
+          at,
+          ...(Object.keys(anchors).length > 0 && { anchors }),
+        }));
+        if (!placed) return;
       }
     },
   };

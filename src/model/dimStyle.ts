@@ -27,6 +27,8 @@ export type DimStyle = {
   readonly dual?: { readonly precision: number; readonly zeros: ZeroRules };
   readonly prefix?: string;
   readonly suffix?: string;
+  /** Symmetric diameters: one side of the axis drawn (absent: half) or both. */
+  readonly symmetric?: 'half' | 'full';
 };
 
 const INCH_STYLE: DimStyle = {

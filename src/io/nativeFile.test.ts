@@ -179,6 +179,22 @@ describe('native file', () => {
     expect(errorOf(text.replace('"deg": 90', '"deg": 45'))).toBe('entities[2].anchors.p1.deg must be 0, 90, 180 or 270.');
   });
 
+  it('round-trips a symmetric diameter on a centerline, and a Full style; a bad style value is refused', () => {
+    const d = createDrawing('in');
+    d.dimStyles.set('FULL', { ...defaultDimStyle('in'), name: 'FULL', symmetric: 'full' });
+    d.entities.set('e1', { kind: 'line', id: 'e1', layer: '0', start: { x: 0, y: 0 }, end: { x: 1, y: 0 } });
+    const e: Entity = {
+      kind: 'dimension', id: 'e2', layer: '0', dimStyle: 'FULL', type: 'symmetric',
+      p1: { x: 0.2, y: 0.094 }, axisBase: { x: 0.2, y: 0 }, axisDir: { x: 1, y: 0 }, at: { x: 0.3, y: 0.05 }, anchors: { axis: 'e1' },
+    };
+    d.entities.set('e2', e);
+    const text = serializeDrawing(d);
+    const back = reopen(text);
+    expect(back.entities.get('e2')).toEqual(e);
+    expect(back.dimStyles.get('FULL')?.symmetric).toBe('full');
+    expect(errorOf(text.replace('"symmetric": "full"', '"symmetric": "both"'))).toBe('dimStyles[1].symmetric must be "half" or "full".');
+  });
+
   it('round-trips radius, diameter and angular dimensions', () => {
     const d = createDrawing('in');
     const es: Entity[] = [
@@ -203,7 +219,7 @@ describe('native file', () => {
     expect(reopen(v2({ entities: [dimension] })).entities.get('e1')).toEqual(dimension);
     expect(errorOf(v2({ entities: [{ ...dimension, dimStyle: 'NOPE' }] }))).toBe('entities[0]: dimension style "NOPE" is not defined.');
     expect(errorOf(v2({ entities: [{ ...dimension, dir: { x: 2, y: 0 } }] }))).toBe('entities[0].dir must be a unit vector.');
-    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be linear, aligned, radius, diameter, angular or leader.');
+    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be linear, aligned, radius, diameter, angular, symmetric or leader.');
     const style = defaultDimStyle('in');
     expect(errorOf(v2({ dimStyles: [{ ...style, precision: 9 }] }))).toBe('dimStyles[0].precision must be a whole number from 0 to 8.');
     expect(errorOf(v2({ dimStyles: [{ ...style, textHeight: 0 }] }))).toBe('dimStyles[0].textHeight must be more than zero.');

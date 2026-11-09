@@ -378,7 +378,19 @@ deferred (ray to Phase 2, autosave to Phase 6).
 3. Symmetric diameter (Shift+M): the lathe centerline (or a picked one),
    then features one after another; Ø + twice the distance; Half (default)
    or Full per style. In lathe mode a linear dimension across the
-   centerline gets Ø automatically.
+   centerline gets Ø automatically. **(done)** Dimension type `symmetric`
+   (`p1`, `axisBase` = its foot, `axisDir`; `at` sets where the line
+   crosses the axis); value 2 × distance, always Ø. Style
+   `symmetric?: 'half' | 'full'` (absent = Half; Styles panel
+   "Symmetric Ø"). Half: one extension line and arrow at the feature, line
+   an arrow length past the axis, text halfway or past the axis when it
+   doesn't fit; Full: the linear layout to the mirrored point. Tool
+   Shift+M: lathe axis (or Pick centerline; outside lathe mode always
+   picked, anchored as `anchors.axis`), then feature + placement pairs
+   until Enter, each one undo step. Re-measures with its feature and
+   centerline; moved together, the line goes along. Grips p1, line1,
+   text. `readsDiameter`: lathe + Ø on, a vertical linear dimension across
+   Y = 0 gets Ø. Picking an edge (instead of a point) isn't offered.
 4. Baseline (Shift+B) and Continue (Shift+K) from a linear dimension.
 5. Ordinate (Shift+Z): DIMORIGIN with a marker; Z or X by drag or forced;
    X as Ø in lathe mode; common baseline; auto-jog; Align Ordinates.

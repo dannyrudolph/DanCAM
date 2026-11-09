@@ -2,10 +2,10 @@ import { cosSinDeg } from '../geometry/angle';
 import { arcEnd, arcStart } from '../geometry/arc';
 import { lineLine } from '../geometry/intersect';
 import { TOL, nearlyEqual } from '../geometry/tolerance';
-import { type Vec2, add, cross, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
+import { type Vec2, add, cross, distance, dot, scale, sub, vecNearlyEqual } from '../geometry/vec';
 import { type Anchor, type DimAnchorKey, type DimAnchors, anchorIds, anchorPoint, dimAnchorIds, withoutAnchors } from './anchor';
 import type { Drawing } from './drawing';
-import { type ArcEntity, type DimensionEntity, type EntityId, type LineEntity, dimensionPoints } from './entity';
+import { type ArcEntity, type DimensionEntity, type EntityId, type LineEntity, dimensionPoints, entityCurve } from './entity';
 import type { Change } from './undo';
 
 /**
@@ -149,6 +149,34 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
       next = setAnchor(setAnchor(next, 'p1', r1.anchor), 'p2', r2.anchor);
       return withAnchors({ ...shifted(e, sub(rv.at, e.vertex)), vertex: rv.at, p1: r1.at, p2: r2.at, dir1, dir2 }, next);
     }
+    case 'symmetric': {
+      const r1 = follow(d, anchors.p1, e.p1);
+      if (r1 === GONE) return undefined;
+      let axisBase = e.axisBase;
+      let axisDir = e.axisDir;
+      if (anchors.axis !== undefined) {
+        const c = d.entities.get(anchors.axis);
+        const curve = c && entityCurve(c);
+        if (curve?.kind === 'segment') {
+          axisBase = curve.a;
+          axisDir = unit(sub(curve.b, curve.a));
+        } else if (curve?.kind === 'ray' || curve?.kind === 'xline') {
+          axisBase = curve.base;
+          axisDir = curve.dir;
+        } else return undefined;
+        // Keep the direction the dimension had, so its side and text don't flip.
+        if (dot(axisDir, e.axisDir) < 0) axisDir = { x: -axisDir.x, y: -axisDir.y };
+      }
+      const footOf = (p: Vec2): Vec2 => add(axisBase, scale(axisDir, dot(sub(p, axisBase), axisDir)));
+      const foot = footOf(r1.at);
+      if (distance(foot, r1.at) <= TOL) return undefined;
+      // Moved with its axis (a Move of the part): the dimension line goes along.
+      const oldFoot = footOf(e.p1);
+      const v = sub(r1.at, e.p1);
+      const axisMoved = anchors.axis !== undefined && !vecNearlyEqual(oldFoot, e.axisBase);
+      const moved = axisMoved && vecNearlyEqual(sub(foot, e.axisBase), v) ? shifted(e, v) : e;
+      return withAnchors({ ...moved, p1: r1.at, axisBase: foot, axisDir }, setAnchor(anchors, 'p1', r1.anchor));
+    }
     case 'leader':
       return e;
   }
@@ -164,7 +192,7 @@ function sameMeasure(a: DimensionEntity, b: DimensionEntity): boolean {
   return true;
 }
 
-const KEYS: readonly DimAnchorKey[] = ['p1', 'p2', 'vertex', 'curve', 'lines'];
+const KEYS: readonly DimAnchorKey[] = ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'];
 
 /** The dimension without the anchors that no longer measure it where it is. */
 export function keepMatching(d: Drawing, e: DimensionEntity): DimensionEntity {

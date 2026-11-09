@@ -175,6 +175,12 @@ export class DimStylesPanel {
     row('Angles', this.selectInput('angleFormat', angles, s.angleFormat, (v) => edit({ angleFormat: v as DimStyle['angleFormat'] })));
     row('Angle precision', this.selectInput('anglePrecision', PLACES, String(s.anglePrecision), (v) => edit({ anglePrecision: Number(v) })));
 
+    const sym = [
+      ['half', 'Half'],
+      ['full', 'Full'],
+    ];
+    row('Symmetric Ø', this.selectInput('symmetric', sym, s.symmetric ?? 'half', (v) => edit({ symmetric: v === 'full' ? 'full' : undefined })));
+
     const alt = d.units === 'in' ? 'mm' : 'inch';
     const dualDefault = d.units === 'in' ? { precision: 2, zeros: MM_ZEROS } : { precision: 3, zeros: INCH_ZEROS };
     row(`Dual units (${alt})`, this.checkbox('dual', s.dual !== undefined, (on) => edit({ dual: on ? dualDefault : undefined })));

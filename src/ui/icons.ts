@@ -31,6 +31,7 @@ export const ICONS = {
   dimRadius: svg('<path d="M3 17 A14 14 0 0 1 17 3"/><path d="M17 17 L7 7"/><path d="M7.5 10.2 L7 7 L10.2 7.5"/><circle cx="17" cy="17" r="1.2" fill="currentColor"/>'),
   dimDiameter: svg('<circle cx="10" cy="10" r="7"/><path d="M5 15 L15 5"/><path d="M5.3 12 L5 15 L8 14.7 M14.7 8 L15 5 L12 5.3"/>'),
   dimAngular: svg('<path d="M3 17 H18 M3 17 L14 4"/><path d="M14 17 A11 11 0 0 0 10.2 8.6"/><path d="M11.5 15 L14 17 L16.2 15 "/>'),
+  dimSymmetric: svg('<path d="M2 17 H18" stroke-dasharray="4 1.5 1 1.5"/><path d="M4 5 H14 M10 5 V19"/><path d="M8.5 8 L10 5 L11.5 8"/>'),
   dimLeader: svg('<path d="M3 17 L11 7 H18"/><path d="M3 17 L4.2 13.6 L6 15.2 Z" fill="currentColor"/><path d="M12 4 H18"/>'),
   dist: svg('<path d="M3 10 H17 M3 6 V14 M17 6 V14 M6 8 L3 10 L6 12 M14 8 L17 10 L14 12"/>'),
   id: svg('<path d="M10 2 V7 M10 13 V18 M2 10 H7 M13 10 H18"/><circle cx="10" cy="10" r="3"/>'),

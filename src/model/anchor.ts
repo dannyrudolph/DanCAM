@@ -21,7 +21,8 @@ export type Anchor =
  * What a dimension measures, so it follows the geometry. Point anchors for
  * the points it measures (`p1`, `p2`; `vertex` too for an angle by three
  * points); `curve` for a radius, diameter or arc angle (the arc or circle
- * itself); `lines` for the angle between two lines.
+ * itself); `lines` for the angle between two lines; `axis` for the
+ * centerline of a symmetric diameter.
  */
 export type DimAnchors = {
   readonly p1?: Anchor;
@@ -29,6 +30,8 @@ export type DimAnchors = {
   readonly vertex?: Anchor;
   readonly curve?: EntityId;
   readonly lines?: readonly [EntityId, EntityId];
+  /** A symmetric diameter's centerline: a line, ray or xline (none: the lathe axis, fixed). */
+  readonly axis?: EntityId;
 };
 
 export type DimAnchorKey = keyof DimAnchors;
@@ -42,6 +45,7 @@ export function anchorIds(a: Anchor): EntityId[] {
 export function dimAnchorIds(a: DimAnchors, key: DimAnchorKey): EntityId[] {
   if (key === 'curve') return a.curve === undefined ? [] : [a.curve];
   if (key === 'lines') return a.lines ? [...a.lines] : [];
+  if (key === 'axis') return a.axis === undefined ? [] : [a.axis];
   const p = a[key];
   return p ? anchorIds(p) : [];
 }
@@ -139,6 +143,7 @@ export function remapAnchors(e: Entity, map: ReadonlyMap<EntityId, EntityId>): E
     ...(vertex && { vertex }),
     ...(a.curve !== undefined && { curve: id(a.curve) }),
     ...(a.lines && { lines: [id(a.lines[0]), id(a.lines[1])] as const }),
+    ...(a.axis !== undefined && { axis: id(a.axis) }),
   };
   return { ...e, anchors };
 }

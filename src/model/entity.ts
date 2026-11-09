@@ -76,6 +76,11 @@ export type RayEntity = EntityBase & {
  *   vectors `dir1` and `dir2`, on the side where `at` is (so it can read
  *   the reflex angle). `p1` and `p2` are where each arm's extension line
  *   starts (the end of the measured geometry; the vertex when there is none).
+ * - `symmetric`: a diameter on a half view: Ø twice the distance from `p1`
+ *   to the axis through `axisBase` along the unit vector `axisDir`.
+ *   `axisBase` is `p1`'s foot on the axis when placed. The dimension line
+ *   is square to the axis where `at` is along it (spec, "Symmetric
+ *   diameter"); its style draws one side (Half) or both (Full).
  * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
  *   (the landing), a short horizontal shoulder, then `text` as typed.
  *
@@ -99,6 +104,7 @@ export type DimensionEntity = EntityBase & {
     | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
     | { readonly type: 'radius' | 'diameter'; readonly center: Vec2; readonly radius: number }
     | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
+    | { readonly type: 'symmetric'; readonly p1: Vec2; readonly axisBase: Vec2; readonly axisDir: Vec2 }
     | { readonly type: 'leader'; readonly tip: Vec2; readonly text: string }
   );
 
@@ -117,6 +123,8 @@ function measuredPoints(e: DimensionEntity): Vec2[] {
       return [e.center, e.at];
     case 'angular':
       return [e.vertex, e.p1, e.p2, e.at];
+    case 'symmetric':
+      return [e.p1, e.axisBase, e.at];
     case 'leader':
       return [e.tip, e.at];
   }
@@ -139,6 +147,8 @@ function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity 
       return { ...e, at, center: f(e.center) };
     case 'angular':
       return { ...e, at, vertex: f(e.vertex), p1: f(e.p1), p2: f(e.p2) };
+    case 'symmetric':
+      return { ...e, at, p1: f(e.p1), axisBase: f(e.axisBase) };
     case 'leader':
       return { ...e, at, tip: f(e.tip) };
   }
@@ -197,6 +207,8 @@ export function transformEntity(e: Entity, t: Transform): Entity {
           return { ...m, radius: transformLength(t, m.radius) };
         case 'angular':
           return { ...m, dir1: transformDir(t, m.dir1), dir2: transformDir(t, m.dir2) };
+        case 'symmetric':
+          return { ...m, axisDir: transformDir(t, m.axisDir) };
         default:
           return m;
       }

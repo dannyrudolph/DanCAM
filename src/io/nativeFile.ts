@@ -172,7 +172,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
       const anchors = anchorsFromRefs(d, e, named);
       if (anchors) d.entities.set(id, { ...e, anchors });
     }
-    for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines'] as const) {
+    for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'] as const) {
       for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
         const g = d.entities.get(a);
         if (!g || g.kind === 'dimension') throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
@@ -256,10 +256,12 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
         dir1: unitVec(o.dir1, `${at}.dir1`),
         dir2: unitVec(o.dir2, `${at}.dir2`),
       };
+    case 'symmetric':
+      return { ...common, type: 'symmetric', p1: vec(o.p1, `${at}.p1`), axisBase: vec(o.axisBase, `${at}.axisBase`), axisDir: unitVec(o.axisDir, `${at}.axisDir`) };
     case 'leader':
       return { ...common, type: 'leader', tip: vec(o.tip, `${at}.tip`), text: str(o.text, `${at}.text`) };
     default:
-      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular or leader.`);
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric or leader.`);
   }
 }
 
@@ -286,6 +288,11 @@ function anchor(v: unknown, at: string): Anchor {
   }
 }
 
+function symmetricStyle(v: unknown, at: string): 'half' | 'full' {
+  if (v !== 'half' && v !== 'full') throw new FileError(`${at} must be "half" or "full".`);
+  return v;
+}
+
 function dimAnchors(v: unknown, at: string): DimAnchors {
   const o = obj(v, at);
   const lines = o.lines === undefined ? undefined : arr(o.lines, `${at}.lines`).map((x, i) => str(x, `${at}.lines[${i}]`));
@@ -295,6 +302,7 @@ function dimAnchors(v: unknown, at: string): DimAnchors {
     ...(o.p2 !== undefined && { p2: anchor(o.p2, `${at}.p2`) }),
     ...(o.vertex !== undefined && { vertex: anchor(o.vertex, `${at}.vertex`) }),
     ...(o.curve !== undefined && { curve: str(o.curve, `${at}.curve`) }),
+    ...(o.axis !== undefined && { axis: str(o.axis, `${at}.axis`) }),
     ...(lines && { lines: [lines[0]!, lines[1]!] as const }),
   };
 }
@@ -344,6 +352,7 @@ function readDimStyle(o: Record<string, unknown>, at: string): DimStyle {
     ...(dual && { dual }),
     ...(o.prefix === undefined ? {} : { prefix: str(o.prefix, `${at}.prefix`) }),
     ...(o.suffix === undefined ? {} : { suffix: str(o.suffix, `${at}.suffix`) }),
+    ...(o.symmetric === undefined ? {} : { symmetric: symmetricStyle(o.symmetric, `${at}.symmetric`) }),
   };
 }
 
