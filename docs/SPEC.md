@@ -191,6 +191,16 @@ A block is a named, reusable piece of drawing, such as a cutting tool sketch (in
 - **Edit block:** opens the definition by itself with Save and Cancel buttons. Saving updates every instance in the drawing in one undo step. Rename, Explode (an instance back to plain geometry, on the layers it shows on) and Purge (remove unused definitions) are also offered.
 - **Library:** saved blocks are available to every drawing. Save to library copies a definition into the browser's library (IndexedDB). Inserting a library block copies its definition into the drawing, so the drawing file stands alone and opens anywhere. Changing a library block does not change drawings until Update from library is chosen. Export library and Import library write and read a `.cad2d-blocks.json` file, for backup and for moving to another machine. A name already in the drawing or library is never silently overwritten.
 
+## STEP import (turned parts)
+
+A turned part modelled in Solid Edge comes in as its lathe profile: the half-section through its axis, laid along Z, ready to dimension. The model is never kept or linked; the import is plain geometry, edited like anything drawn (CAD-1).
+
+- **What it reads:** a STEP file (`.step`, `.stp`, AP203/AP214/AP242 B-rep). The reader is part of DanCAM, with no CAD kernel: it reads points, directions, axis placements, the faces of a turned part (planes, cylinders, cones, tori and spheres) and their edges, and the file's length unit, converting to the drawing's units.
+- **The axis:** the line most of the cylinders, cones and tori share. The part is turned so the axis lies on Z (X = 0, the lathe centerline) with radius on X, the way lathe mode draws.
+- **The profile:** each face of revolution about the axis becomes its exact generating curve. A cylinder is a line at its radius, a cone an angled line (to its apex when it closes on the axis, as a drill point does), a flat face square to the axis a vertical line (down to the axis when it's a full disk), a torus an arc, and a sphere on the axis an arc. Faces split in two by the exporter come out as one line. Bores, internal grooves and undercuts come through, since they are part of the half-section.
+- **Left out, and said so:** features that aren't round about the axis (cross holes, flats, slots, hex, knurls) and faces the reader can't take exactly (freeform B-spline surfaces). The import reports how many faces it left out and why.
+- **Placing it:** Import STEP turns lathe mode on and shows the profile with option buttons. **Z0 at** the right end (the default; the part runs into −Z) or the left end. **Flip** turns it end for end, since a STEP file's axis direction is arbitrary. **Half** profile (the default, above the centerline) or **Full** (mirrored below). Place puts it on a new layer named after the file, as one undo step.
+
 ## Files, saving and printing
 
 The native format is a versioned JSON file that you own and that stays readable without the app. DXF is the bridge to Solid Edge, CAM and customers.
@@ -227,10 +237,13 @@ Each phase ends with something you can use and check by hand. Phases 1–3 alrea
 7. **Phase 6: Blocks** (moved ahead of output, user decision 2026-11-09)
    - Block definitions with a description, Create block, Insert, instances edited as one object, snaps and associativity into instances, Edit block, Explode, Purge, and a library shared by all drawings with export and import. No nesting.
    - Done when: a cutting tool sketch saved to the library from one drawing is inserted into another beside a lathe profile, moved, rotated and mirrored onto the part with snaps, dimensioned from its tip to the part, redefined, and the drawing saves and reopens the same.
-8. **Phase 7: Output**
+8. **Phase 7: STEP import for turned parts** (ahead of output, user decision 2026-11-09)
+   - A STEP reader with no new package, the turned profile from a part's faces of revolution, and Import STEP with Z0 at either end, Flip, and half or full profile (see "STEP import").
+   - Done when: one of your real Solid Edge STEP files of a lathe part imports with every diameter, length, chamfer and radius matching the model, checked with List and dimensions, and its cross holes and flats reported as left out.
+9. **Phase 8: Output**
    - DXF export and import (with blocks), PDF and SVG at scale, title block, autosave, PWA offline install.
    - Done when: an exported DXF opens in Solid Edge with correct units and sizes, and a 10:1 PDF measures true with calipers.
-9. **Later, optional**
+10. **Later, optional**
    - Lathe G-code export from a selected profile, nested blocks, per-instance text fields (attributes), hatching, more linetypes, multiple views or sheets.
 
 ## Testing and CLAUDE.md

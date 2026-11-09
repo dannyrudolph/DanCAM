@@ -279,7 +279,7 @@ points along an edge, then its new angle).
       text. Undoable (`sheetScale` change), saved (optional in the file;
       absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
       20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
-      cancels). Print/PDF uses it in Phase 7 (Output).
+      cancels). Print/PDF uses it in Phase 8 (Output).
    c. **Dimension Styles panel (done).** `model/dimStyles` (like
       `layers`): New copies the style being edited as NAME-2, -3…; edit
       (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
@@ -327,7 +327,7 @@ Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
 user will give feedback on a working version; done-when uses our own
 reference drawing); ASME unidirectional text; leader text typed in a box
 at the cursor is fine (CAD-9 exception for notes); plain sans font for
-now, stroke font question at Phase 7 (Output).
+now, stroke font question at Phase 8 (Output).
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
@@ -341,7 +341,7 @@ line's first point was brought forward into step 2).
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
-deferred (ray to Phase 2, autosave to Phase 7, Output).
+deferred (ray to Phase 2, autosave to Output, now Phase 8).
 
 ## Phase 5 (plan approved 2026-11-09): in progress
 
@@ -603,8 +603,40 @@ harness, file round trip and v3 migration, library store tests (fake
 IndexedDB in memory, no new package), and e2e for each tool and the
 done-when.
 
+Step 7 waits: STEP import (Phase 7) comes first (user, 2026-11-09).
+
+## Phase 7: STEP import for turned parts (plan approved 2026-11-09): in progress
+
+Decisions (user, 2026-11-09): a priority ahead of Output (now Phase 8),
+started before Phase 6's step 7. Defaults taken where the user didn't
+choose (open to change): a STEP reader written here, no CAD kernel package
+(CAD-8); the import is plain lines and arcs on a new layer named after the
+file. Spec: "STEP import (turned parts)". Real Solid Edge files asked for,
+for the done-when and as fixtures.
+
+1. STEP reader (`io/step`): ISO 10303-21 text (header, data section,
+   simple and complex instances, strings, enums, lists, `$` and `*`);
+   typed access to points, directions, axis placements, lines, circles,
+   ellipses, planes, cylinders, cones, tori, spheres, faces, loops and
+   edges; the length unit (mm, inch, metre) as a scale to the drawing's.
+   Tests: hand-written fixtures in the shape exporters write, every
+   entity read exactly; malformed files refused with the reason.
+2. Turned profile (pure): find the axis (the line most faces of
+   revolution share); map points to (z, r); each face about the axis to
+   its generating curve (cylinder, cone and its apex, plane square to the
+   axis and a full disk to the axis, torus, sphere and its pole); split
+   faces joined, duplicates dropped; the rest counted as left out with the
+   reason. Tests: a pin with chamfers, corner radii and a bore; a ball end;
+   a drill point; a cross hole and a flat left out; faces split in two; an
+   axis tilted in space; an inch file.
+3. Import STEP (toolbar, file group): pick a file, lathe mode on, preview
+   with Z0 at Right/Left, Flip, Half/Full; Place as one undo step on a new
+   layer named after the file; the left-out report. Browser test with a
+   fixture file.
+4. Done-when: a real Solid Edge file (spec, roadmap Phase 7).
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).
-- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 7 (Output).
+- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 8 (Output).
