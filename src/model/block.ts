@@ -1,6 +1,8 @@
 import { type BBox, fromPoints, union } from '../geometry/bbox';
 import { type Transform, rotation } from '../geometry/transform';
-import type { Drawing } from './drawing';
+import type { Vec2 } from '../geometry/vec';
+import { type Drawing, newEntityId } from './drawing';
+import type { Change, Transaction } from './undo';
 import { type ArcEntity, type CircleEntity, type Entity, type InsertEntity, type LineEntity, type PointEntity, entityBBox, scaleEntity, transformEntity } from './entity';
 
 /**
@@ -68,4 +70,40 @@ export function insertsOf(d: Drawing, name: string): InsertEntity[] {
 /** The block with every length passed through `f`, for converting units. */
 export function scaleBlock(def: BlockDef, f: (length: number) => number): BlockDef {
   return { ...def, entities: def.entities.map((e) => scaleEntity(e, f) as BlockGeometry) };
+}
+
+/** What Create block does with the geometry it was made from. */
+export type AfterCreate = 'convert' | 'keep' | 'delete';
+
+/** Why `name` can't name a new block, or undefined when it can. Names are compared without case, as layers are. */
+export function blockNameError(d: Drawing, name: string): string | undefined {
+  if (name === '') return 'A block needs a name.';
+  const key = name.toLowerCase();
+  const clash = [...d.blocks.keys()].find((n) => n.toLowerCase() === key);
+  return clash === undefined ? undefined : `There is already a block named ${clash}.`;
+}
+
+/**
+ * Create block as one undo step: a definition of `sources` about `base`
+ * (moved so the base is the origin, ids b1, b2, … in order), then the
+ * sources replaced by an instance at `base` on `layer` (convert), left
+ * (keep) or erased (delete).
+ */
+export function createBlock(
+  d: Drawing,
+  sources: readonly BlockGeometry[],
+  base: Vec2,
+  name: string,
+  description: string,
+  after: AfterCreate,
+  layer: string,
+): Transaction {
+  const toOrigin = { kind: 'translate' as const, dx: -base.x, dy: -base.y };
+  const entities = sources.map((e, i) => ({ ...transformEntity(e, toOrigin), id: `b${i + 1}` }) as BlockGeometry);
+  const changes: Change[] = [{ op: 'block', after: { name, description, entities } }];
+  if (after !== 'keep') for (const entity of sources) changes.push({ op: 'remove', entity });
+  if (after === 'convert') {
+    changes.push({ op: 'add', entity: { kind: 'insert', id: newEntityId(d), layer, block: name, at: base, rotationDeg: 0, scale: 1, mirrored: false } });
+  }
+  return { label: `Create block ${name}`, changes };
 }

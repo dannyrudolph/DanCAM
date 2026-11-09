@@ -486,6 +486,22 @@ Spec: "Blocks".
    the browser from step 2, when inserts can be made.
 2. Create block (K) and Insert (Shift+I) with a Blocks panel in the
    sidebar (name, preview, description); unit scaling on insert.
+   Split (user, 2026-11-09): 2a Create block and the panel; 2b Insert.
+   **2a (done)** `commands/blockTools.createBlockTool` (K, toolbar group
+   "Blocks", one-shot like the edit tools): selection first or a
+   selection step; only lines, circles, arcs and points go in (others are
+   left out, with a message); base point, then name (text box at the base;
+   blank or a name used in any case refused, asked again), then
+   description (Enter for none). Options Convert to block (default) / Keep
+   objects / Delete objects, kept for the session. `block.createBlock`:
+   one undo step "Create block X": definition about the base (ids b1…),
+   sources removed unless kept, an instance at the base on the current
+   layer when converted. `ui/blocksPanel` (section `#blocks`): name,
+   instance count, description, SVG preview (`blockPreviewSvg`); "None
+   yet" hint when empty. Browser test checks the instance is drawn (canvas
+   pixels; fails if inserts aren't drawn) and its properties.
+   Unit scaling on insert moves to step 6, where blocks come from a library
+   in another unit; a drawing's own blocks are always in its units.
 3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
    Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
    Z/X, rotation, scale, mirrored), List; Explode (Shift+U).

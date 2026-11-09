@@ -1724,3 +1724,75 @@ test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by te
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('blocks', () => {
+  test('Create block (K): the selection becomes a block, listed in the Blocks panel and drawn as one instance', async ({ page }) => {
+    await expect(page.locator('#blocks .blocks-empty')).toHaveText('None yet. Select geometry and choose Create block (K).');
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0'); // length 1 at 0°
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('c');
+    await typeValues(page, '1', '0');
+    await typeValues(page, '0.25');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.move(box.x + 3, box.y + 3); // a window over everything
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator('#properties h2')).toHaveText('2 objects');
+
+    await page.keyboard.press('k');
+    await expect(page.getByTestId('tool-createBlock')).toHaveClass(/active/);
+    await expect(page.locator('[data-option="after:convert"]')).toHaveClass(/active/);
+    await typeValues(page, '0', '0'); // base point: the left end
+    const field = page.locator('.input-boxes input[data-field="text"]');
+    await expect(field).toBeFocused();
+    await page.keyboard.type('Tool'); // letters are text, not shortcuts
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Create block Tool: type a description (holder, insert, notes), or press Enter for none');
+    await page.keyboard.type('MGEHR holder');
+    await page.keyboard.press('Enter');
+
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await expect(row.locator('.layer-name')).toHaveText('Tool');
+    await expect(row.locator('.layer-count')).toHaveText('1');
+    await expect(row.locator('.block-description')).toHaveText('MGEHR holder');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+
+    // Drawn: ink on the edge line, paper just above it (polled: the canvas repaints on the next frame).
+    const at = await extentsMapper(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const probe = async (x: number, y: number): Promise<string> => {
+      const p = at(x, y);
+      return page.evaluate(([sx, sy]) => {
+        const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
+        const r = c.getBoundingClientRect();
+        const k = c.width / r.width;
+        const data = c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k) - 2, Math.round((sy! - r.top) * k) - 2, 5, 5).data;
+        let paper = true;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3]! === 0) return 'not painted';
+          if (data[i]! < 128) return 'ink';
+          if (data[i]! < 250) paper = false;
+        }
+        return paper ? 'paper' : 'grey';
+      }, [p.x, p.y]);
+    };
+    await expect.poll(() => probe(0.5, 0)).toBe('ink');
+    await expect.poll(() => probe(0.5, 0.15)).toBe('paper');
+
+    const p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block e\d+$/);
+    await expect(prop(page, 'Block')).toHaveText('Tool');
+    await expect(prop(page, 'Description')).toHaveText('MGEHR holder');
+    await expect(prop(page, 'Mirrored')).toHaveText('No');
+
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible();
+  });
+});

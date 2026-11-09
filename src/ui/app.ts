@@ -1,5 +1,6 @@
 import { createArcTool } from '../commands/arcTool';
 import { createArrayTool } from '../commands/arrayTool';
+import { createBlockTool } from '../commands/blockTools';
 import { createCircleTool } from '../commands/circleTool';
 import { createChamferTool, createFilletTool } from '../commands/cornerTools';
 import { createBaselineDimTool, createContinueDimTool } from '../commands/chainDimTools';
@@ -41,6 +42,7 @@ import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
+import { BlocksPanel } from './blocksPanel';
 import { DimStylesPanel } from './dimStylesPanel';
 import { LayersPanel } from './layersPanel';
 import { PropertiesPanel } from './propertiesPanel';
@@ -68,8 +70,9 @@ export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), cre
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
 export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool(), createOffsetTool(), createBreakTool(), joinTool, createLengthenTool(), createArrayTool(), stretchTool];
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
+export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
-export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...INQUIRY_TOOLS];
+export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...BLOCK_TOOLS, ...INQUIRY_TOOLS];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -177,6 +180,7 @@ export class App {
     },
     message: (m) => this.status.showMessage(m),
   });
+  private readonly blocksPanel = new BlocksPanel(el('blocks'));
   private readonly inquiry = new InquiryPanel(el('inquiry'));
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
@@ -629,6 +633,7 @@ export class App {
     ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
     this.dimStylesPanel.show(this.drawing);
+    this.blocksPanel.show(this.drawing);
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value')) this.onceSnap = undefined;
     this.boxes.setRequest(req);
@@ -767,6 +772,10 @@ export class App {
     gapDim.className = 'toolbar-separator';
     bar.append(gapDim);
     addTools(DIMENSION_TOOLS);
+    const gapBlocks = document.createElement('span');
+    gapBlocks.className = 'toolbar-separator';
+    bar.append(gapBlocks);
+    addTools(BLOCK_TOOLS);
     const gap2 = document.createElement('span');
     gap2.className = 'toolbar-separator';
     bar.append(gap2);

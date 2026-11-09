@@ -661,3 +661,55 @@ input {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+#blocks {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.block-preview {
+  grid-row: span 2;
+  display: flex;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.block-preview svg {
+  width: 100%;
+  height: 100%;
+}
+
+.block-preview svg * {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+.block-description {
+  grid-column: 2 / span 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.blocks-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
