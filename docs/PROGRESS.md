@@ -621,6 +621,21 @@ for the done-when and as fixtures.
    edges; the length unit (mm, inch, metre) as a scale to the drawing's.
    Tests: hand-written fixtures in the shape exporters write, every
    entity read exactly; malformed files refused with the reason.
+   **(done)** `io/step/part21` (syntax: comments, '' in strings, enums,
+   typed values, complex instances, AP242 `DATA(...)`; errors give the
+   line) and `io/step/stepModel` (`readStep`: every ADVANCED_FACE with its
+   surface, loops and edges, `sameSense`; SURFACE_CURVE/SEAM_CURVE/
+   TRIMMED_CURVE unwrapped; other surfaces and curves kept by type name; a
+   face with a broken reference listed as unreadable, not fatal; length
+   unit from the geometry context (SI prefixes, INCH, FOOT, or by its
+   measure); angles in radians whatever the file's unit; the declared
+   distance uncertainty). `geometry/vec3`. Fixtures in
+   `test-fixtures/step/`, written by OpenCascade through CadQuery
+   (`make_fixtures.py`, run from a throwaway venv; not a project
+   dependency): a pin (chamfers, shoulder fillet, bore with a 118° drill
+   point), the pin tilted in space, a ball-end rod in inches along X, a
+   bar with a cross hole and a flat. Tests load them with Vite's `?raw`
+   (no @types/node).
 2. Turned profile (pure): find the axis (the line most faces of
    revolution share); map points to (z, r); each face about the axis to
    its generating curve (cylinder, cone and its apex, plane square to the
