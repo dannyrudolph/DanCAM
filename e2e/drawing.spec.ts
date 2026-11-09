@@ -2137,8 +2137,8 @@ test.describe('Import STEP', () => {
     await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
     await expect(status).toHaveText('Import pin-mm.step: choose where Z0 goes, Flip and Half or Full, then click or press Enter to place it');
     await page.keyboard.press('Enter');
-    await expect(prop(page, 'entity-count')).toHaveText('10');
-    await expect(status).toHaveText('Imported pin-mm.step: 10 lines and arcs on layer pin-mm.');
+    await expect(prop(page, 'entity-count')).toHaveText('13');
+    await expect(status).toHaveText('Imported pin-mm.step: 13 lines and arcs on layer pin-mm.');
     await expect(page.locator('#layers')).toContainText('pin-mm');
 
     // The Ø10 body runs from Z-39 (after the 1x45° chamfer) to the shoulder at Z-10.

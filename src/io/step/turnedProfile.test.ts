@@ -21,21 +21,24 @@ function shape(curves: readonly ProfileCurve[]): string[] {
   const n = (v: number): string => (Math.round(v * 1e6) / 1e6 + 0).toFixed(6);
   const p = (q: { x: number; y: number }): string => `(${n(q.x)}, ${n(q.y)})`;
   const deg = (d: number): string => n(((d % 360) + 360) % 360);
-  return curves.map((c) => (c.kind === 'line' ? `line ${p(c.start)}-${p(c.end)}` : `arc ${p(c.center)} R${n(c.radius)} ${deg(c.startDeg)}→${deg(c.endDeg)}`)).sort();
+  return curves.map((c) => (c.kind === 'line' ? `line ${p(c.start)}-${p(c.end)}${c.tangent ? ' tangent' : ''}` : `arc ${p(c.center)} R${n(c.radius)} ${deg(c.startDeg)}→${deg(c.endDeg)}`)).sort();
 }
 
 const TIP = 32 - 1.5 / Math.tan((59 * Math.PI) / 180); // where the 118° drill point closes
 
-/** The pin as the fixture script makes it, Z0 at its left end. */
+/** The pin as the fixture script makes it, Z0 at its left end, with a line across it at each outside edge. */
 const PIN = shape([
   { kind: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 4 } }, // left end face, down to the axis
   { kind: 'line', start: { x: 0, y: 4 }, end: { x: 1, y: 5 } }, // 1x45° chamfer
+  { kind: 'line', start: { x: 1, y: 0 }, end: { x: 1, y: 5 } }, // its edge with the Ø10
   { kind: 'line', start: { x: 1, y: 5 }, end: { x: 30, y: 5 } }, // Ø10
-  { kind: 'line', start: { x: 30, y: 3.5 }, end: { x: 30, y: 5 } }, // shoulder face
+  { kind: 'line', start: { x: 30, y: 0 }, end: { x: 30, y: 5 } }, // shoulder face, and the Ø10's edge across the part
   { kind: 'arc', center: { x: 30.5, y: 3.5 }, radius: 0.5, startDeg: 180, endDeg: 270 }, // R.5 fillet into the shoulder
+  { kind: 'line', start: { x: 30.5, y: 0 }, end: { x: 30.5, y: 3 }, tangent: true }, // where the fillet runs smoothly into the Ø6
   { kind: 'line', start: { x: 30.5, y: 3 }, end: { x: 39.5, y: 3 } }, // Ø6
+  { kind: 'line', start: { x: 39.5, y: 0 }, end: { x: 39.5, y: 3 } }, // its edge with the chamfer
   { kind: 'line', start: { x: 39.5, y: 3 }, end: { x: 40, y: 2.5 } }, // .5x45° chamfer
-  { kind: 'line', start: { x: 40, y: 1.5 }, end: { x: 40, y: 2.5 } }, // right end face, round the bore
+  { kind: 'line', start: { x: 40, y: 0 }, end: { x: 40, y: 2.5 } }, // right end face, across the bore (its edges are inside: no lines)
   { kind: 'line', start: { x: 32, y: 1.5 }, end: { x: 40, y: 1.5 } }, // Ø3 bore
   { kind: 'line', start: { x: TIP, y: 0 }, end: { x: 32, y: 1.5 } }, // 118° drill point to the axis
 ]);
@@ -59,14 +62,16 @@ describe('turned profile', () => {
     const right = placeProfile(p, { zeroAt: 'right', flip: false, full: false });
     expect(shape(right)).toContain('line (-40.000000, 0.000000)-(-40.000000, 4.000000)');
     expect(shape(right)).toContain('line (-8.000000, 1.500000)-(0.000000, 1.500000)'); // the bore runs in from Z0
+    expect(shape(right)).toContain('line (-9.500000, 0.000000)-(-9.500000, 3.000000) tangent');
 
     const flipped = shape(placeProfile(p, { zeroAt: 'left', flip: true, full: false }));
     expect(flipped).toContain('line (0.000000, 1.500000)-(8.000000, 1.500000)'); // the bored end now at the left
     expect(flipped).toContain('arc (9.500000, 3.500000) R0.500000 270.000000→0.000000'); // the fillet, mirrored end for end
 
     const full = shape(placeProfile(p, { zeroAt: 'left', flip: false, full: true }));
-    expect(full).toHaveLength(19); // 10 above, 10 below, the two halves of the left end face joined into one
+    expect(full).toHaveLength(20); // 13 above, 13 below, the halves of the 6 lines from the centerline joined across it
     expect(full).toContain('line (0.000000, -4.000000)-(0.000000, 4.000000)');
+    expect(full).toContain('line (30.500000, -3.000000)-(30.500000, 3.000000) tangent');
     expect(full).toContain('arc (30.500000, -3.500000) R0.500000 90.000000→180.000000');
   });
 
@@ -75,6 +80,7 @@ describe('turned profile', () => {
       shape([
         { kind: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 0.125 } },
         { kind: 'line', start: { x: 0, y: 0.125 }, end: { x: 1, y: 0.125 } },
+        { kind: 'line', start: { x: 1, y: 0 }, end: { x: 1, y: 0.125 }, tangent: true }, // the Ø.25 runs smoothly into the ball
         { kind: 'arc', center: { x: 1, y: 0 }, radius: 0.125, startDeg: 0, endDeg: 90 },
       ]),
     );
@@ -112,5 +118,38 @@ describe('turned profile', () => {
     const planes = { ...m.model, faces: m.model.faces.filter((f) => f.surface.kind === 'plane') };
     const r = turnedProfile(planes, 'mm');
     expect(r.ok ? 'profile' : r.error).toBe('There is no turned part here: no cylinders, cones or tori share an axis.');
+  });
+
+  it('an end face whose normal points against its edge circle\'s axis is still round, not left out', () => {
+    // As Solid Edge writes them: each disk's edge is one full circle about +Z
+    // starting on its X axis, and the disk at Z0 faces -Z. Seen from that
+    // face, the circle's closing point falls a rounding error across the
+    // direction it starts in.
+    const at = (z: number, axisZ = 1) => ({ origin: { x: 0, y: 0, z }, axis: { x: 0, y: 0, z: axisZ }, ref: { x: 1, y: 0, z: 0 } });
+    const circle = (z: number, r: number) => ({ start: { x: r, y: 0, z }, end: { x: r, y: 0, z }, curve: { kind: 'circle' as const, at: at(z), radius: r }, sameSense: true });
+    const model: StepModel = {
+      faces: [
+        { id: 1, surface: { kind: 'plane', at: at(0, -1) }, loops: [{ edges: [circle(0, 2)] }] },
+        { id: 2, surface: { kind: 'cylinder', at: at(0), radius: 2 }, loops: [{ edges: [circle(0, 2)] }, { edges: [circle(5, 2)] }] },
+        { id: 3, surface: { kind: 'plane', at: at(5, -1) }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(5, 2)] }] },
+        { id: 4, surface: { kind: 'cylinder', at: at(5), radius: 1 }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(8, 1)] }] },
+        { id: 5, surface: { kind: 'plane', at: at(8) }, loops: [{ edges: [circle(8, 1)] }] },
+      ],
+      unreadable: [],
+      mmPerUnit: 1,
+      uncertainty: undefined,
+    };
+    const r = turnedProfile(model, 'mm');
+    if (!r.ok) throw new Error(r.error);
+    expect(r.profile.left.notRound).toBe(0);
+    expect(shape(r.profile.curves)).toEqual(
+      shape([
+        { kind: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 2 } },
+        { kind: 'line', start: { x: 0, y: 2 }, end: { x: 5, y: 2 } },
+        { kind: 'line', start: { x: 5, y: 0 }, end: { x: 5, y: 2 } }, // the shoulder face, and the Ø4's edge across the part
+        { kind: 'line', start: { x: 5, y: 1 }, end: { x: 8, y: 1 } },
+        { kind: 'line', start: { x: 8, y: 0 }, end: { x: 8, y: 1 } },
+      ]),
+    );
   });
 });

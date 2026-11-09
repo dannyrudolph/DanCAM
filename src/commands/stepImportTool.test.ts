@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TurnedProfile } from '../model/profilePlacement';
-import { createStepImportTool, layerNameFor, leftOutMessage } from './stepImportTool';
+import { createStepImportTool, layerNameFor, leftOutMessage, profileEntities } from './stepImportTool';
 import { setup } from './toolHarness';
 
 /** A stepped pin, 3 long: Ø2 for the first 1, then Ø1, with its end faces. */
@@ -63,6 +63,22 @@ describe('Import STEP', () => {
     const again = started();
     again.t.runner.stop();
     expect(again.t.entities()).toEqual([]);
+  });
+
+  it('a tangent edge becomes a line in the tangent style; the rest take the layer\'s', () => {
+    let n = 0;
+    const made = profileEntities(
+      [
+        { kind: 'line', start: { x: 1, y: 0 }, end: { x: 1, y: 2 }, tangent: true },
+        { kind: 'line', start: { x: 0, y: 2 }, end: { x: 1, y: 2 } },
+      ],
+      'pin',
+      () => `e${++n}`,
+    );
+    expect(made.map((e) => [e.layer, e.style])).toEqual([
+      ['pin', 'tangent'],
+      ['pin', undefined],
+    ]);
   });
 
   it('names: the file name without folders or extension; what was left out, in words', () => {

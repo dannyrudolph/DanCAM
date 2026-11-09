@@ -2,7 +2,7 @@ import { TOL } from '../../geometry/tolerance';
 import type { Vec2 } from '../../geometry/vec';
 import { type Vec3, add3, cross3, dot3, length3, scale3, sub3 } from '../../geometry/vec3';
 import type { Units } from '../../model/drawing';
-import { type LeftOut, type ProfileCurve, type TurnedProfile, merge, scaleCurve } from '../../model/profilePlacement';
+import { type LeftOut, type ProfileCurve, type TurnedProfile, edgeLines, merge, scaleCurve } from '../../model/profilePlacement';
 import { MM_PER_INCH } from '../../model/units';
 import type { Placement, StepEdge, StepFace, StepModel } from './stepModel';
 
@@ -97,7 +97,8 @@ export function turnedProfile(model: StepModel, units: Units): ProfileResult {
     curves.push(toPlus ? { kind: 'arc', center: cap.center, radius: cap.radius, startDeg: 0, endDeg: atDeg } : { kind: 'arc', center: cap.center, radius: cap.radius, startDeg: atDeg, endDeg: 180 });
   }
   const scaled = curves.map((c) => scaleCurve(c, k));
-  return { ok: true, profile: { curves: merge(scaled, tol * k), left } };
+  const outline = merge(scaled, tol * k);
+  return { ok: true, profile: { curves: merge([...outline, ...edgeLines(outline, tol * k)], tol * k), left } };
 }
 
 const parallel = (a: Vec3, b: Vec3, tol: number): boolean => length3(cross3(a, b)) <= tol;
@@ -186,7 +187,27 @@ function planeSpan(face: StepFace, axis: Axis, at: Placement, zr: (q: Vec3) => V
   const centre = add3(axis.point, scale3(axis.dir, z));
   const u = at.ref;
   const v = cross3(at.axis, at.ref);
-  const flat = (p: Vec3): Vec2 => ({ x: dot3(sub3(p, centre), u), y: dot3(sub3(p, centre), v) });
+  // The ray from the axis runs through the middle of the widest gap between
+  // sampled points, so it never grazes a vertex (an edge circle's start
+  // vertex lies on its reference direction, where rounding could hide the
+  // one crossing).
+  const angles = face.loops
+    .flatMap((l) => l.edges.flatMap(edgePoints))
+    .map((p) => Math.atan2(dot3(sub3(p, centre), v), dot3(sub3(p, centre), u)))
+    .sort((a, b) => a - b);
+  let ray = 0;
+  let widest = -1;
+  for (let i = 0; i < angles.length; i++) {
+    const a = angles[i]!;
+    const b = i + 1 < angles.length ? angles[i + 1]! : angles[0]! + 2 * Math.PI;
+    if (b - a > widest) [widest, ray] = [b - a, (a + b) / 2];
+  }
+  const [cos, sin] = [Math.cos(ray), Math.sin(ray)];
+  const flat = (p: Vec3): Vec2 => {
+    const w = sub3(p, centre);
+    const [x, y] = [dot3(w, u), dot3(w, v)];
+    return { x: x * cos + y * sin, y: y * cos - x * sin };
+  };
   const around: Vec3[][] = [];
   let rMax = 0;
   for (const loop of face.loops) {

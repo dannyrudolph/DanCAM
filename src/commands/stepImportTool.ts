@@ -29,7 +29,7 @@ export function layerNameFor(fileName: string): string {
 
 /** The placed profile as drawing entities on `layer`. */
 export function profileEntities(curves: readonly ProfileCurve[], layer: string, id: () => EntityId): Entity[] {
-  return curves.map((c): Entity => (c.kind === 'line' ? { kind: 'line', id: id(), layer, start: c.start, end: c.end } : { kind: 'arc', id: id(), layer, center: c.center, radius: c.radius, startDeg: c.startDeg, endDeg: c.endDeg }));
+  return curves.map((c): Entity => (c.kind === 'line' ? { kind: 'line', id: id(), layer, ...(c.tangent ? { style: 'tangent' as const } : {}), start: c.start, end: c.end } : { kind: 'arc', id: id(), layer, center: c.center, radius: c.radius, startDeg: c.startDeg, endDeg: c.endDeg }));
 }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;

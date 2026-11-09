@@ -9,7 +9,8 @@ import type { Vec2 } from '../geometry/vec';
  */
 
 export type ProfileCurve =
-  | { readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2 }
+  /** `tangent`: the edge where two faces meet smoothly, drawn in the tangent line style. */
+  | { readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2; readonly tangent?: true }
   /** Counter-clockwise from startDeg to endDeg. */
   | { readonly kind: 'arc'; readonly center: Vec2; readonly radius: number; readonly startDeg: number; readonly endDeg: number };
 
@@ -65,24 +66,24 @@ function arcZs(c: Extract<ProfileCurve, { kind: 'arc' }>): number[] {
 
 export function scaleCurve(c: ProfileCurve, k: number): ProfileCurve {
   const s = (p: Vec2): Vec2 => ({ x: p.x * k, y: p.y * k });
-  return c.kind === 'line' ? { kind: 'line', start: s(c.start), end: s(c.end) } : { ...c, center: s(c.center), radius: c.radius * k };
+  return c.kind === 'line' ? { ...c, start: s(c.start), end: s(c.end) } : { ...c, center: s(c.center), radius: c.radius * k };
 }
 
 function moveCurve(c: ProfileCurve, dz: number): ProfileCurve {
   const m = (p: Vec2): Vec2 => ({ x: p.x + dz, y: p.y });
-  return c.kind === 'line' ? { kind: 'line', start: m(c.start), end: m(c.end) } : { ...c, center: m(c.center) };
+  return c.kind === 'line' ? { ...c, start: m(c.start), end: m(c.end) } : { ...c, center: m(c.center) };
 }
 
 /** End for end: Z negated; an arc keeps running counter-clockwise. */
 function flipCurve(c: ProfileCurve): ProfileCurve {
   const f = (p: Vec2): Vec2 => ({ x: -p.x, y: p.y });
-  return c.kind === 'line' ? { kind: 'line', start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: 180 - c.endDeg, endDeg: 180 - c.startDeg };
+  return c.kind === 'line' ? { ...c, start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: 180 - c.endDeg, endDeg: 180 - c.startDeg };
 }
 
 /** Below the centerline: radius negated; an arc keeps running counter-clockwise. */
 function mirrorCurve(c: ProfileCurve): ProfileCurve {
   const f = (p: Vec2): Vec2 => ({ x: p.x, y: -p.y });
-  return c.kind === 'line' ? { kind: 'line', start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: -c.endDeg, endDeg: -c.startDeg };
+  return c.kind === 'line' ? { ...c, start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: -c.endDeg, endDeg: -c.startDeg };
 }
 
 /** How far apart two angles are, in degrees, the short way round. */
@@ -98,7 +99,7 @@ function degApart(a: number, b: number): number {
  * (bottom to top when vertical).
  */
 export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurve[] {
-  const lines: { a: Vec2; b: Vec2 }[] = [];
+  const lines: Joinable[] = [];
   const arcs: Extract<ProfileCurve, { kind: 'arc' }>[] = [];
   for (const c of curves) {
     if (c.kind === 'arc') {
@@ -110,7 +111,7 @@ export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurv
       continue;
     }
     const [a, b] = c.start.x < c.end.x || (Math.abs(c.start.x - c.end.x) <= tol && c.start.y < c.end.y) ? [c.start, c.end] : [c.end, c.start];
-    lines.push({ a, b });
+    lines.push(c.tangent ? { a, b, tangent: true } : { a, b });
   }
   // Join lines on one carrier whose spans overlap or touch, until nothing joins.
   let joined = true;
@@ -128,11 +129,14 @@ export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurv
       }
     }
   }
-  return [...lines.map((l): ProfileCurve => ({ kind: 'line', start: l.a, end: l.b })), ...arcs];
+  return [...lines.map((l): ProfileCurve => (l.tangent ? { kind: 'line', start: l.a, end: l.b, tangent: true } : { kind: 'line', start: l.a, end: l.b })), ...arcs];
 }
 
-/** One line covering both when they lie on one line and overlap or touch. */
-function join(p: { a: Vec2; b: Vec2 }, q: { a: Vec2; b: Vec2 }, tol: number): { a: Vec2; b: Vec2 } | undefined {
+type Joinable = { readonly a: Vec2; readonly b: Vec2; readonly tangent?: true };
+
+/** One line covering both when they lie on one line, overlap or touch, and are the same kind of edge. */
+function join(p: Joinable, q: Joinable, tol: number): Joinable | undefined {
+  if (p.tangent !== q.tangent) return undefined;
   const d = { x: p.b.x - p.a.x, y: p.b.y - p.a.y };
   const len = Math.hypot(d.x, d.y);
   if (len === 0) return undefined;
@@ -143,5 +147,79 @@ function join(p: { a: Vec2; b: Vec2 }, q: { a: Vec2; b: Vec2 }, tol: number): { 
   const [qa, qb] = [t(q.a), t(q.b)];
   if (Math.min(qa, qb) > len + tol || Math.max(qa, qb) < -tol) return undefined;
   const pts = [p.a, p.b, q.a, q.b].sort((x, y) => t(x) - t(y));
-  return { a: pts[0]!, b: pts[3]! };
+  return { ...p, a: pts[0]!, b: pts[3]! };
+}
+
+/**
+ * The edges a side view shows across the part (spec, "STEP import"): at
+ * each Z where a circular edge lies on the outside of the part, a line from
+ * the centerline out to it. Where two faces meet smoothly there (a radius
+ * running into a diameter) it is a tangent edge; where one of them is a
+ * flat face, the face is the edge. Edges inside the part, a bore's, get
+ * none. The ends of the profile's curves are its edges.
+ */
+export function edgeLines(curves: readonly ProfileCurve[], tol: number): ProfileCurve[] {
+  const ends = curves.flatMap(curveEnds);
+  const outer: Vec2[] = [];
+  for (const e of ends) {
+    if (e.at.y <= tol) continue;
+    const i = outer.findIndex((p) => Math.abs(p.x - e.at.x) <= tol);
+    if (i < 0) outer.push(e.at);
+    else if (e.at.y > outer[i]!.y) outer[i] = e.at;
+  }
+  const out: ProfileCurve[] = [];
+  for (const p of outer) {
+    if (p.y < radiusAt(curves, p.x, tol) - tol) continue;
+    const meeting = ends.filter((e) => Math.abs(e.at.x - p.x) <= tol && Math.abs(e.at.y - p.y) <= tol).map((e) => e.away);
+    const [u, w] = meeting;
+    const smooth = meeting.length === 2 && u !== undefined && w !== undefined && Math.abs(u.x * w.y - u.y * w.x) <= tol && u.x * w.x + u.y * w.y < 0 && Math.abs(u.x) > tol;
+    const line = { kind: 'line', start: { x: p.x, y: 0 }, end: p } as const;
+    out.push(smooth ? { ...line, tangent: true } : line);
+  }
+  return out;
+}
+
+/** Each end of a curve, with the unit direction the curve leaves it in. */
+function curveEnds(c: ProfileCurve): { at: Vec2; away: Vec2 }[] {
+  if (c.kind === 'line') {
+    const len = Math.hypot(c.end.x - c.start.x, c.end.y - c.start.y);
+    if (len === 0) return [];
+    const d = { x: (c.end.x - c.start.x) / len, y: (c.end.y - c.start.y) / len };
+    return [
+      { at: c.start, away: d },
+      { at: c.end, away: { x: -d.x, y: -d.y } },
+    ];
+  }
+  const rad = (deg: number): number => (deg * Math.PI) / 180;
+  const at = (deg: number): Vec2 => ({ x: c.center.x + c.radius * Math.cos(rad(deg)), y: c.center.y + c.radius * Math.sin(rad(deg)) });
+  const ccw = (deg: number): Vec2 => ({ x: -Math.sin(rad(deg)), y: Math.cos(rad(deg)) });
+  const back = ccw(c.endDeg);
+  return [
+    { at: at(c.startDeg), away: ccw(c.startDeg) },
+    { at: at(c.endDeg), away: { x: -back.x, y: -back.y } },
+  ];
+}
+
+/** The largest radius the profile reaches at `z`. */
+function radiusAt(curves: readonly ProfileCurve[], z: number, tol: number): number {
+  let r = 0;
+  for (const c of curves) {
+    if (c.kind === 'line') {
+      const [a, b] = c.start.x <= c.end.x ? [c.start, c.end] : [c.end, c.start];
+      if (z < a.x - tol || z > b.x + tol) continue;
+      const along = b.x - a.x <= tol ? Math.max(a.y, b.y) : a.y + ((Math.min(Math.max(z, a.x), b.x) - a.x) * (b.y - a.y)) / (b.x - a.x);
+      r = Math.max(r, along);
+      continue;
+    }
+    const dz = z - c.center.x;
+    if (Math.abs(dz) > c.radius + tol) continue;
+    const dy = Math.sqrt(Math.max(0, c.radius * c.radius - dz * dz));
+    const slack = (tol / c.radius) * (180 / Math.PI);
+    const sweep = (((c.endDeg - c.startDeg) % 360) + 360) % 360;
+    for (const y of [c.center.y + dy, c.center.y - dy]) {
+      const from = ((((Math.atan2(y - c.center.y, dz) * 180) / Math.PI - c.startDeg) % 360) + 360) % 360;
+      if (from <= sweep + slack || from >= 360 - slack) r = Math.max(r, y);
+    }
+  }
+  return r;
 }
