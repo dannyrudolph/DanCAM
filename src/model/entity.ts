@@ -3,6 +3,7 @@ import { arcBBox } from '../geometry/arc';
 import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
 import { circleBBox } from '../geometry/circle';
 import type { Curve } from '../geometry/curve';
+import { normDeg } from '../geometry/angle';
 import { type Transform, transformArc, transformDir, transformLength, transformPoint } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
 import { type Tolerance, scaleTolerance } from './dimFormat';
@@ -177,7 +178,24 @@ function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity 
   }
 }
 
-export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity | DimensionEntity;
+/**
+ * An instance of a block (spec, "Blocks"): the definition named `block`,
+ * whose geometry is stored about its base point at the origin, placed with
+ * its base point at `at`. Mirrored first (about the block's own X axis),
+ * then scaled by `scale` (uniform, more than zero), then rotated by
+ * `rotationDeg` ([0, 360)). Its geometry is worked out from the drawing's
+ * block table (`model/block`); on layer 0 it takes the instance's layer.
+ */
+export type InsertEntity = EntityBase & {
+  readonly kind: 'insert';
+  readonly block: string;
+  readonly at: Vec2;
+  readonly rotationDeg: number;
+  readonly scale: number;
+  readonly mirrored: boolean;
+};
+
+export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity | DimensionEntity | InsertEntity;
 
 /** The layer and style a tool gives each new entity. */
 export type EntityProps = { readonly layer: string; readonly style?: LineStyleName };
@@ -186,10 +204,13 @@ export type EntityProps = { readonly layer: string; readonly style?: LineStyleNa
  * Bounds of the geometry. Xlines and rays are infinite, so they contribute
  * nothing, as in AutoCAD. A dimension gives the bounds of its defining
  * points; its drawn extent (text, arrows) needs its style, in `dimLayout`.
+ * An insert gives its insertion point; its drawn extent needs its block,
+ * in `block.insertBBox`.
  */
 export function entityBBox(e: Entity): BBox {
   switch (e.kind) {
     case 'point':
+    case 'insert':
       return fromPoints([e.at]);
     case 'line':
       return fromPoints([e.start, e.end]);
@@ -220,6 +241,8 @@ export function transformEntity(e: Entity, t: Transform): Entity {
     case 'xline':
     case 'ray':
       return { ...e, base: p(e.base), dir: transformDir(t, e.dir) };
+    case 'insert':
+      return transformInsert(e, t);
     case 'dimension': {
       const m = mapDimensionPoints(e, p);
       switch (m.type) {
@@ -241,15 +264,36 @@ export function transformEntity(e: Entity, t: Transform): Entity {
 }
 
 /**
+ * An instance under a move, rotate, mirror or scale. A mirror about a line
+ * at m° flips the instance and turns it to 2m − its rotation, since
+ * reflecting about m equals rotating by 2m after reflecting about X.
+ */
+function transformInsert(e: InsertEntity, t: Transform): InsertEntity {
+  const at = transformPoint(t, e.at);
+  switch (t.kind) {
+    case 'translate':
+      return { ...e, at };
+    case 'rotate':
+      return { ...e, at, rotationDeg: normDeg(e.rotationDeg + t.deg) };
+    case 'scale':
+      return { ...e, at, scale: e.scale * t.factor };
+    case 'mirror':
+      return { ...e, at, rotationDeg: normDeg(2 * t.deg - e.rotationDeg), mirrored: !e.mirrored };
+  }
+}
+
+/**
  * The entity with every length passed through `f` (a scale about the origin):
  * positions and radii change; angles and xline directions don't. Used to
  * convert units, where `f` divides by 25.4 exactly rather than multiplying by
- * a rounded reciprocal.
+ * a rounded reciprocal. An insert's position moves; its scale doesn't,
+ * since its block's geometry is converted with the drawing.
  */
 export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
   const p = (v: Vec2): Vec2 => ({ x: f(v.x), y: f(v.y) });
   switch (e.kind) {
     case 'point':
+    case 'insert':
       return { ...e, at: p(e.at) };
     case 'line':
       return { ...e, start: p(e.start), end: p(e.end) };
@@ -268,11 +312,12 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
   }
 }
 
-/** The entity as a curve with its real extent, or undefined for a point or a dimension. */
+/** The entity as a curve with its real extent, or undefined for a point, a dimension or an insert. */
 export function entityCurve(e: Entity): Curve | undefined {
   switch (e.kind) {
     case 'point':
     case 'dimension':
+    case 'insert':
       return undefined;
     case 'line':
       return { kind: 'segment', a: e.start, b: e.end };

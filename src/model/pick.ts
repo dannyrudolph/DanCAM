@@ -4,11 +4,12 @@ import { distanceToSegment } from '../geometry/distance';
 import { distanceToRay } from '../geometry/ray';
 import { distanceToXline } from '../geometry/xline';
 import type { Vec2 } from '../geometry/vec';
+import { instanceEntities } from './block';
 import { dimensionLayout, distanceToLayout } from './dimLayout';
 import type { Drawing } from './drawing';
 import type { Entity, EntityId } from './entity';
 
-/** Distance from `p` to what `e` draws; a dimension's text counts as solid. */
+/** Distance from `p` to what `e` draws; a dimension's text counts as solid, an insert's insertion point counts. */
 export function distanceToEntity(d: Drawing, p: Vec2, e: Entity): number {
   switch (e.kind) {
     case 'point':
@@ -25,6 +26,8 @@ export function distanceToEntity(d: Drawing, p: Vec2, e: Entity): number {
       return distanceToRay(p, e);
     case 'dimension':
       return distanceToLayout(p, dimensionLayout(d, e));
+    case 'insert':
+      return instanceEntities(d, e).reduce((best, part) => Math.min(best, distanceToEntity(d, p, part)), Math.hypot(p.x - e.at.x, p.y - e.at.y));
   }
 }
 

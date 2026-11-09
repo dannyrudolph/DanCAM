@@ -52,7 +52,7 @@ export function dimAnchorIds(a: DimAnchors, key: DimAnchorKey): EntityId[] {
 
 const geometry = (d: Drawing, id: EntityId): Entity | undefined => {
   const e = d.entities.get(id);
-  return e && e.kind !== 'dimension' ? e : undefined;
+  return e && e.kind !== 'dimension' && e.kind !== 'insert' ? e : undefined;
 };
 
 /**

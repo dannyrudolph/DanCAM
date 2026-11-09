@@ -453,7 +453,7 @@ we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
 defaults to Half; a dimension is deleted when the geometry it measures is
 deleted; shortcuts as above.
 
-## Phase 6: Blocks (plan proposed 2026-11-09, awaiting approval)
+## Phase 6: Blocks (plan approved 2026-11-09): in progress
 
 Decisions (user, 2026-11-09): blocks come before output (Output is now
 Phase 7). Main use: a cutting tool sketch (a whole sub-part) moved and
@@ -465,6 +465,25 @@ Spec: "Blocks".
    description) and an `insert` entity (block, at, rotation, scale,
    mirrored, layer); geometry transformed for render, bounds, hit test;
    undo records for definitions; file v4 (v3 opens as before).
+   **(done)** `model/block`: `BlockDef` {name, description, entities:
+   lines/circles/arcs/points about the base at the origin, in drawing
+   units, ids unique within the block}; `instanceTransforms` (mirror about
+   own X, scale, rotate, move; identity steps skipped), `instanceEntities`
+   (layer-0 parts take the instance's layer), `insertBBox`, `insertsOf`,
+   `scaleBlock`. `InsertEntity` {block, at, rotationDeg, scale, mirrored};
+   `transformEntity` moves/rotates/scales it, a mirror at m° flips it and
+   turns it to 2m − rotation. `Drawing.blocks`; undo `block` op (refuses an
+   insert of an undefined block, removing a block with instances, removing
+   a layer a block uses); Convert units converts definitions (instances
+   keep their scale). Extents, pick, window/crossing select, grip
+   (insertion point), properties rows, Stretch (moves it when its
+   insertion point is in the window); the renderer draws parts in their
+   layers' colors. Layer rename carries block geometry; delete refused
+   while a block uses the layer. Snaps skip instances until step 4; anchors
+   never name an instance. The base point isn't a field: the origin is the
+   base. A units field is left to the library (step 6), since a drawing's
+   blocks are always in its units. Rendering is checked in
+   the browser from step 2, when inserts can be made.
 2. Create block (K) and Insert (Shift+I) with a Blocks panel in the
    sidebar (name, preview, description); unit scaling on insert.
 3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/

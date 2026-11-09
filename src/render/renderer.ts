@@ -6,6 +6,7 @@ import { clipLine, clipRay, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type DimLayout, dimensionLayout } from '../model/dimLayout';
+import { instanceEntities } from '../model/block';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import type { BoxMode } from '../model/selection';
@@ -104,6 +105,15 @@ function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawi
     const layer = drawing.layers.get(e.layer);
     if (layer && !layer.visible) continue;
     const isSelected = selected.has(e.id);
+    if (e.kind === 'insert' && !isSelected) {
+      // Each part in its own layer's color (layer 0 parts are already on the instance's layer).
+      for (const part of instanceEntities(drawing, e)) {
+        const partLayer = drawing.layers.get(part.layer);
+        if (partLayer && !partLayer.visible) continue;
+        drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), partLayer?.color ?? COLORS.fallbackLine, 0);
+      }
+      continue;
+    }
     const color = isSelected ? COLORS.selected : (layer?.color ?? COLORS.fallbackLine);
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
@@ -184,6 +194,10 @@ function drawEntity(
       return;
     case 'dimension':
       drawDimension(ctx, v, dimensionLayout(drawing, e), color, extraWidth);
+      return;
+    case 'insert':
+      // Selected or a preview: every part in the one color.
+      for (const part of instanceEntities(drawing, e)) drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), color, extraWidth);
       return;
   }
 }

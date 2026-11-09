@@ -4,6 +4,7 @@ import type { Tolerance, ZeroRules } from '../model/dimFormat';
 import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
 import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
+import { type BlockDef, isBlockGeometry } from '../model/block';
 import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
@@ -15,16 +16,16 @@ import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
  */
 export const FILE_EXTENSION = '.cad2d.json';
 export const FORMAT = 'DanCAM drawing';
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Version 2 added dimension styles (and dimension entities, which need
  * them); version 3 anchors dimensions to geometry (`anchors` in place of
- * the unused `refs`).
+ * the unused `refs`); version 4 adds blocks (`blocks` and `insert` entities).
  */
-type FileV3 = {
+type FileV4 = {
   format: typeof FORMAT;
-  schemaVersion: 3;
+  schemaVersion: 4;
   units: Units;
   nextId: number;
   /** Optional: files from before layers had a current layer open on "0". */
@@ -39,11 +40,12 @@ type FileV3 = {
   diameterMode?: boolean;
   layers: Layer[];
   dimStyles: DimStyle[];
+  blocks: BlockDef[];
   entities: Entity[];
 };
 
 export function serializeDrawing(d: Drawing): string {
-  const file: FileV3 = {
+  const file: FileV4 = {
     format: FORMAT,
     schemaVersion: SCHEMA_VERSION,
     units: d.units,
@@ -56,6 +58,7 @@ export function serializeDrawing(d: Drawing): string {
     diameterMode: d.diameterMode,
     layers: [...d.layers.values()],
     dimStyles: [...d.dimStyles.values()],
+    blocks: [...d.blocks.values()],
     entities: [...d.entities.values()],
   };
   return `${JSON.stringify(file, null, 2)}\n`;
@@ -81,6 +84,8 @@ const MIGRATIONS: Readonly<Record<number, (file: Record<string, unknown>) => Rec
   },
   // 2 → 3: dimensions' `refs` become anchors, worked out once the geometry is read.
   2: (file) => ({ ...file, schemaVersion: 3, [REFS_FROM_V2]: true }),
+  // 3 → 4: no blocks yet.
+  3: (file) => ({ ...file, schemaVersion: 4, blocks: [] }),
 };
 
 
@@ -151,6 +156,12 @@ function readCurrent(file: Record<string, unknown>): Drawing {
   if (file.lathe !== undefined) d.lathe = bool(file.lathe, 'lathe');
   if (file.diameterMode !== undefined) d.diameterMode = bool(file.diameterMode, 'diameterMode');
 
+  arr(file.blocks, 'blocks').forEach((v, i) => {
+    const b = readBlock(d, obj(v, `blocks[${i}]`), `blocks[${i}]`);
+    if (d.blocks.has(b.name)) throw new FileError(`blocks[${i}]: block "${b.name}" appears twice.`);
+    d.blocks.set(b.name, b);
+  });
+
   let maxId = 0;
   const refs = new Map<EntityId, EntityId[]>();
   arr(file.entities, 'entities').forEach((v, i) => {
@@ -164,6 +175,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     if (e.kind === 'dimension' && !d.dimStyles.has(e.dimStyle)) {
       throw new FileError(`entities[${i}]: dimension style "${e.dimStyle}" is not defined.`);
     }
+    if (e.kind === 'insert' && !d.blocks.has(e.block)) throw new FileError(`entities[${i}]: block "${e.block}" is not defined.`);
     d.entities.set(e.id, e);
     const n = /^e(\d+)$/.exec(e.id);
     if (n) maxId = Math.max(maxId, Number(n[1]));
@@ -179,7 +191,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'] as const) {
       for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
         const g = d.entities.get(a);
-        if (!g || g.kind === 'dimension') throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
+        if (!g || g.kind === 'dimension' || g.kind === 'insert') throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
       }
     }
   }
@@ -225,9 +237,39 @@ function readEntity(o: Record<string, unknown>, at: string): Entity {
       return { kind: o.kind, ...base, base: vec(o.base, `${at}.base`), dir: unitVec(o.dir, `${at}.dir`) };
     case 'dimension':
       return readDimension(o, base, at);
+    case 'insert': {
+      const scale = num(o.scale, `${at}.scale`);
+      if (!(scale > 0)) throw new FileError(`${at}.scale must be more than zero.`);
+      return {
+        kind: 'insert',
+        ...base,
+        block: str(o.block, `${at}.block`),
+        at: vec(o.at, `${at}.at`),
+        rotationDeg: degrees(o.rotationDeg, `${at}.rotationDeg`),
+        scale,
+        mirrored: bool(o.mirrored, `${at}.mirrored`),
+      };
+    }
     default:
       throw new FileError(`${at}: unknown kind ${JSON.stringify(o.kind)}.`);
   }
+}
+
+/** A block definition: lines, circles, arcs and points on defined layers, ids unique within it. */
+function readBlock(d: Drawing, o: Record<string, unknown>, at: string): BlockDef {
+  const name = str(o.name, `${at}.name`);
+  if (name.trim() === '') throw new FileError(`${at}.name must not be blank.`);
+  const ids = new Set<EntityId>();
+  const entities = arr(o.entities, `${at}.entities`).map((v, i) => {
+    const where = `${at}.entities[${i}]`;
+    const e = readEntity(obj(v, where), where);
+    if (!isBlockGeometry(e)) throw new FileError(`${where}: a block holds only lines, circles, arcs and points.`);
+    if (ids.has(e.id)) throw new FileError(`${where}: id "${e.id}" appears twice in the block.`);
+    if (!d.layers.has(e.layer)) throw new FileError(`${where}: layer "${e.layer}" is not defined.`);
+    ids.add(e.id);
+    return e;
+  });
+  return { name, description: str(o.description, `${at}.description`), entities };
 }
 
 function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'layer' | 'style'>, at: string): DimensionEntity {
