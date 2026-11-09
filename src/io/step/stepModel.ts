@@ -1,3 +1,4 @@
+import { type BSpline, expandKnots } from '../../geometry/bspline';
 import { type Vec3, cross3, dot3, scale3, sub3, unit3 } from '../../geometry/vec3';
 import { type StepInstance, type StepRecord, type StepValue, parsePart21 } from './part21';
 
@@ -26,15 +27,23 @@ export type StepCurve =
   | { readonly kind: 'line'; readonly point: Vec3; readonly dir: Vec3 }
   | { readonly kind: 'circle'; readonly at: Placement; readonly radius: number }
   | { readonly kind: 'ellipse'; readonly at: Placement; readonly a: number; readonly b: number }
+  | { readonly kind: 'bspline'; readonly spline: BSpline }
   | { readonly kind: 'other'; readonly type: string };
 
-/** An edge from `start` to `end` along `curve`; `sameSense`: in the curve's own direction (counter-clockwise about a circle's axis). */
-export type StepEdge = { readonly start: Vec3; readonly end: Vec3; readonly curve: StepCurve; readonly sameSense: boolean };
+/**
+ * An edge from `start` to `end` along `curve`; `sameSense`: in the curve's
+ * own direction (counter-clockwise about a circle's axis). `id` names the
+ * edge (its EDGE_CURVE), shared by the two faces it bounds; `forward`: its
+ * loop runs from `start` to `end` (the face then lies to the loop's left,
+ * seen from the side the face's normal points to).
+ */
+export type StepEdge = { readonly id: number; readonly start: Vec3; readonly end: Vec3; readonly curve: StepCurve; readonly sameSense: boolean; readonly forward: boolean };
 
 /** A face boundary: its edges, or a single vertex (a cone's apex, a sphere's pole). */
 export type StepLoop = { readonly edges: readonly StepEdge[]; readonly vertex?: Vec3 };
 
-export type StepFace = { readonly id: number; readonly surface: StepSurface; readonly loops: readonly StepLoop[] };
+/** `sameSense`: the face's normal is the surface's (outward from a cylinder's axis, along a plane's axis); otherwise reversed. */
+export type StepFace = { readonly id: number; readonly surface: StepSurface; readonly loops: readonly StepLoop[]; readonly sameSense: boolean };
 
 export type StepModel = {
   readonly faces: readonly StepFace[];
@@ -186,6 +195,7 @@ class Reader {
 
   curve(id: number): StepCurve {
     const t = this.type(id);
+    if (this.instances.get(id)?.records.some((x) => x.type === 'B_SPLINE_CURVE_WITH_KNOTS')) return { kind: 'bspline', spline: this.spline(id) };
     switch (t) {
       case 'SURFACE_CURVE':
       case 'SEAM_CURVE':
@@ -211,6 +221,25 @@ class Reader {
     }
   }
 
+  /** A B_SPLINE_CURVE_WITH_KNOTS, simple or complex (rational, with RATIONAL_B_SPLINE_CURVE weights). */
+  private spline(id: number): BSpline {
+    const inst = this.instances.get(id)!;
+    const simple = inst.records.length === 1;
+    const base = simple ? this.rec(id, 'B_SPLINE_CURVE_WITH_KNOTS').args.slice(1) : this.rec(id, 'B_SPLINE_CURVE').args;
+    const withKnots = simple ? this.rec(id, 'B_SPLINE_CURVE_WITH_KNOTS').args.slice(6) : this.rec(id, 'B_SPLINE_CURVE_WITH_KNOTS').args;
+    const degree = Reader.num(base[0], `#${id} degree`);
+    const points = Reader.list(base[1], `#${id} control_points_list`).map((v) => this.point(Reader.ref(v, `#${id} control point`)));
+    const mults = Reader.list(withKnots[0], `#${id} knot_multiplicities`).map((v) => Reader.num(v, `#${id} multiplicity`));
+    const knots = expandKnots(
+      Reader.list(withKnots[1], `#${id} knots`).map((v) => Reader.num(v, `#${id} knot`)),
+      mults,
+    );
+    if (knots.length !== points.length + degree + 1) throw new EntityError(`#${id} has ${knots.length} knots for ${points.length} points of degree ${degree}.`);
+    const rational = inst.records.find((x) => x.type === 'RATIONAL_B_SPLINE_CURVE');
+    const weights = rational && Reader.list(rational.args[0], `#${id} weights_data`).map((v) => Reader.num(v, `#${id} weight`));
+    return weights ? { degree, points, knots, weights } : { degree, points, knots };
+  }
+
   private vertex(id: number): Vec3 {
     return this.point(Reader.ref(this.rec(id, 'VERTEX_POINT').args[1], `#${id} vertex_geometry`));
   }
@@ -220,6 +249,8 @@ class Reader {
     const curveId = oriented.type === 'ORIENTED_EDGE' ? Reader.ref(oriented.args[3], `#${id} edge_element`) : id;
     const a = this.rec(curveId, 'EDGE_CURVE').args;
     return {
+      id: curveId,
+      forward: oriented.type === 'ORIENTED_EDGE' ? Reader.bool(oriented.args[4], `#${id} orientation`) : true,
       start: this.vertex(Reader.ref(a[1], `#${curveId} edge_start`)),
       end: this.vertex(Reader.ref(a[2], `#${curveId} edge_end`)),
       curve: this.curve(Reader.ref(a[3], `#${curveId} edge_geometry`)),
@@ -232,7 +263,7 @@ class Reader {
     if (r.type === 'VERTEX_LOOP') return { edges: [], vertex: this.vertex(Reader.ref(r.args[1], `#${id} loop_vertex`)) };
     if (r.type === 'POLY_LOOP') {
       const pts = Reader.list(r.args[1], `#${id} polygon`).map((v) => this.point(Reader.ref(v, `#${id} polygon point`)));
-      return { edges: pts.map((p, i) => ({ start: p, end: pts[(i + 1) % pts.length]!, curve: { kind: 'other', type: 'POLY_LOOP' }, sameSense: true })) };
+      return { edges: pts.map((p, i) => ({ id: -(id * 1000 + i), start: p, end: pts[(i + 1) % pts.length]!, curve: { kind: 'other', type: 'POLY_LOOP' }, sameSense: true, forward: true })) };
     }
     return { edges: Reader.list(r.args[1], `#${id} edge_list`).map((v) => this.edge(Reader.ref(v, `#${id} edge`))) };
   }
@@ -241,10 +272,13 @@ class Reader {
     const a = this.rec(id, 'ADVANCED_FACE', 'FACE_SURFACE').args;
     const loops = Reader.list(a[1], `#${id} bounds`).map((v) => {
       const bound = Reader.ref(v, `#${id} bound`);
-      return this.loop(Reader.ref(this.rec(bound, 'FACE_OUTER_BOUND', 'FACE_BOUND').args[1], `#${bound} bound`));
+      const b = this.rec(bound, 'FACE_OUTER_BOUND', 'FACE_BOUND').args;
+      const loop = this.loop(Reader.ref(b[1], `#${bound} bound`));
+      // A bound against its loop's direction runs every edge the other way.
+      return Reader.bool(b[2], `#${bound} orientation`) ? loop : { ...loop, edges: loop.edges.map((e) => ({ ...e, forward: !e.forward })) };
     });
-    Reader.bool(a[3], `#${id} same_sense`);
-    return { id, surface: this.surface(Reader.ref(a[2], `#${id} face_geometry`)), loops };
+    const sameSense = Reader.bool(a[3], `#${id} same_sense`);
+    return { id, surface: this.surface(Reader.ref(a[2], `#${id} face_geometry`)), loops, sameSense };
   }
 
   /** The length uncertainty (UNCERTAINTY_MEASURE_WITH_UNIT for distance), in the file's unit. */

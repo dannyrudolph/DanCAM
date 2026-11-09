@@ -107,7 +107,7 @@ describe('turned profile', () => {
     const m = readStep(pinMm);
     if (!m.ok) throw new Error(m.error);
     const cylinder = m.model.faces.find((f) => f.surface.kind === 'cylinder' && f.surface.radius === 5)!;
-    const freeform: StepFace = { id: 999, surface: { kind: 'other', type: 'B_SPLINE_SURFACE_WITH_KNOTS' }, loops: [] };
+    const freeform: StepFace = { id: 999, surface: { kind: 'other', type: 'B_SPLINE_SURFACE_WITH_KNOTS' }, loops: [], sameSense: true };
     const model: StepModel = { ...m.model, faces: [...m.model.faces, { ...cylinder, id: 998 }, freeform], unreadable: [{ id: 5, reason: 'x' }] };
     const r = turnedProfile(model, 'mm');
     if (!r.ok) throw new Error(r.error);
@@ -129,14 +129,14 @@ describe('turned profile', () => {
     // face, the circle's closing point falls a rounding error across the
     // direction it starts in.
     const at = (z: number, axisZ = 1) => ({ origin: { x: 0, y: 0, z }, axis: { x: 0, y: 0, z: axisZ }, ref: { x: 1, y: 0, z: 0 } });
-    const circle = (z: number, r: number) => ({ start: { x: r, y: 0, z }, end: { x: r, y: 0, z }, curve: { kind: 'circle' as const, at: at(z), radius: r }, sameSense: true });
+    const circle = (z: number, r: number) => ({ start: { x: r, y: 0, z }, end: { x: r, y: 0, z }, curve: { kind: 'circle' as const, at: at(z), radius: r }, sameSense: true, id: 0, forward: true });
     const model: StepModel = {
       faces: [
-        { id: 1, surface: { kind: 'plane', at: at(0, -1) }, loops: [{ edges: [circle(0, 2)] }] },
-        { id: 2, surface: { kind: 'cylinder', at: at(0), radius: 2 }, loops: [{ edges: [circle(0, 2)] }, { edges: [circle(5, 2)] }] },
-        { id: 3, surface: { kind: 'plane', at: at(5, -1) }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(5, 2)] }] },
-        { id: 4, surface: { kind: 'cylinder', at: at(5), radius: 1 }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(8, 1)] }] },
-        { id: 5, surface: { kind: 'plane', at: at(8) }, loops: [{ edges: [circle(8, 1)] }] },
+        { id: 1, surface: { kind: 'plane', at: at(0, -1) }, loops: [{ edges: [circle(0, 2)] }], sameSense: true },
+        { id: 2, surface: { kind: 'cylinder', at: at(0), radius: 2 }, loops: [{ edges: [circle(0, 2)] }, { edges: [circle(5, 2)] }], sameSense: true },
+        { id: 3, surface: { kind: 'plane', at: at(5, -1) }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(5, 2)] }], sameSense: true },
+        { id: 4, surface: { kind: 'cylinder', at: at(5), radius: 1 }, loops: [{ edges: [circle(5, 1)] }, { edges: [circle(8, 1)] }], sameSense: true },
+        { id: 5, surface: { kind: 'plane', at: at(8) }, loops: [{ edges: [circle(8, 1)] }], sameSense: true },
       ],
       unreadable: [],
       mmPerUnit: 1,
@@ -158,18 +158,18 @@ describe('turned profile', () => {
 
   it('inside the part, hidden: a stepped bore with a ball bottom, its shoulder and edges; the outside stays visible', () => {
     const at = (z: number) => ({ origin: { x: 0, y: 0, z }, axis: { x: 0, y: 0, z: 1 }, ref: { x: 1, y: 0, z: 0 } });
-    const circle = (z: number, r: number) => ({ start: { x: r, y: 0, z }, end: { x: r, y: 0, z }, curve: { kind: 'circle' as const, at: at(z), radius: r }, sameSense: true });
+    const circle = (z: number, r: number) => ({ start: { x: r, y: 0, z }, end: { x: r, y: 0, z }, curve: { kind: 'circle' as const, at: at(z), radius: r }, sameSense: true, id: 0, forward: true });
     const ring = (z: number, ...rs: number[]) => rs.map((r) => ({ edges: [circle(z, r)] }));
     // A Ø10 bar 0–10 with a Ø6 bore 4 deep from Z10, stepping down to a Ø4 bore with a full-radius ball bottom ending at Z2.
     const model: StepModel = {
       faces: [
-        { id: 1, surface: { kind: 'plane', at: at(0) }, loops: ring(0, 5) },
-        { id: 2, surface: { kind: 'cylinder', at: at(0), radius: 5 }, loops: [...ring(0, 5), ...ring(10, 5)] },
-        { id: 3, surface: { kind: 'plane', at: at(10) }, loops: ring(10, 5, 3) },
-        { id: 4, surface: { kind: 'cylinder', at: at(6), radius: 3 }, loops: [...ring(6, 3), ...ring(10, 3)] },
-        { id: 5, surface: { kind: 'plane', at: at(6) }, loops: ring(6, 3, 2) },
-        { id: 6, surface: { kind: 'cylinder', at: at(4), radius: 2 }, loops: [...ring(4, 2), ...ring(6, 2)] },
-        { id: 7, surface: { kind: 'sphere', at: at(4), radius: 2 }, loops: ring(4, 2) },
+        { id: 1, surface: { kind: 'plane', at: at(0) }, loops: ring(0, 5), sameSense: true },
+        { id: 2, surface: { kind: 'cylinder', at: at(0), radius: 5 }, loops: [...ring(0, 5), ...ring(10, 5)], sameSense: true },
+        { id: 3, surface: { kind: 'plane', at: at(10) }, loops: ring(10, 5, 3), sameSense: true },
+        { id: 4, surface: { kind: 'cylinder', at: at(6), radius: 3 }, loops: [...ring(6, 3), ...ring(10, 3)], sameSense: true },
+        { id: 5, surface: { kind: 'plane', at: at(6) }, loops: ring(6, 3, 2), sameSense: true },
+        { id: 6, surface: { kind: 'cylinder', at: at(4), radius: 2 }, loops: [...ring(4, 2), ...ring(6, 2)], sameSense: true },
+        { id: 7, surface: { kind: 'sphere', at: at(4), radius: 2 }, loops: ring(4, 2), sameSense: true },
       ],
       unreadable: [],
       mmPerUnit: 1,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import ballInch from '../../../test-fixtures/step/ball-end-inch.step?raw';
 import pinMm from '../../../test-fixtures/step/pin-mm.step?raw';
+import shaft from '../../../test-fixtures/step/shaft.step?raw';
+import { splinePoint, splineRange } from '../../geometry/bspline';
+import { length3, sub3 } from '../../geometry/vec3';
 import { parsePart21 } from './part21';
 import { type StepModel, type StepSurface, readStep } from './stepModel';
 
@@ -96,5 +99,22 @@ describe('STEP model', () => {
   it('a file without solid faces is refused', () => {
     const r = readStep(file("#1=CARTESIAN_POINT('',(0.,0.,0.));"));
     expect(r.ok ? 'read' : r.error).toBe('There are no solid faces in this file (it may hold only a mesh, wireframe or assembly structure).');
+  });
+
+  it('a closed solid: every edge bounds two faces (or one twice, a seam), run once each way; B-spline edges read, ending on their vertices', () => {
+    const m = model(shaft);
+    expect([m.faces.length, m.unreadable.length]).toEqual([19, 0]);
+    const uses = new Map<number, boolean[]>();
+    for (const f of m.faces) for (const l of f.loops) for (const e of l.edges) uses.set(e.id, [...(uses.get(e.id) ?? []), e.forward]);
+    expect([...uses.values()].every((u) => u.length === 2 && u[0] !== u[1])).toBe(true);
+    const splines = m.faces.flatMap((f) => f.loops.flatMap((l) => l.edges)).filter((e) => e.curve.kind === 'bspline');
+    expect(new Set(splines.map((e) => e.id)).size).toBe(7);
+    for (const e of splines) {
+      if (e.curve.kind !== 'bspline') continue;
+      const [t0, t1] = splineRange(e.curve.spline);
+      const ends = [splinePoint(e.curve.spline, t0), splinePoint(e.curve.spline, t1)];
+      const gap = (p: typeof e.start) => Math.min(...ends.map((q) => length3(sub3(p, q))));
+      expect(Math.max(gap(e.start), gap(e.end))).toBeLessThan(1e-6);
+    }
   });
 });

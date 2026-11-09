@@ -688,6 +688,28 @@ for the done-when and as fixtures.
    cross-hole bar's left-out message; a Python file refused.
 4. Done-when: a real Solid Edge file (spec, roadmap Phase 7).
 
+Three views (plan approved 2026-11-09, user: "yes go ahead, third-angle
+and use shaft as a test fixture"): so features that aren't round (cross
+holes, slots, flats) aren't lost. `test-fixtures/step/shaft.step` (an
+Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
+
+5. Projection: every edge of the model projected exactly onto the front,
+   top and right-end views (third-angle), and the outlines of curved faces
+   (silhouettes); seams and split-face edges dropped, smooth edges in the
+   tangent style. Lines and circles project exactly (a circle face-on as a
+   circle or arc, edge-on as a line); ellipses and B-spline edges are fitted
+   with arcs and lines and marked fitted. The reader learns edge ids,
+   edge/bound/face orientation and B-spline curves.
+6. Hidden lines: each projected curve split where material lies between it
+   and the viewer (ray against planes, cylinders, cones, spheres, tori,
+   with a point-in-face test on the surface); hidden pieces under visible
+   ones dropped.
+7. Import tool: Profile / 3 views, Turn 90°, the views laid out third-angle
+   with Z0 and Flip as now, a layer per view and one for fitted curves, one
+   undo step. Browser test.
+8. Done-when: shaft.step with its cross hole, slot and tang flat in every
+   view, checked with List and dimensions.
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
