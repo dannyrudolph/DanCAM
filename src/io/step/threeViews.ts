@@ -270,7 +270,9 @@ function clip(p: Piece3, keep: (q: Vec3) => boolean, ctx: Ctx): Piece3[] {
  */
 function snapToEnd(p: Piece3, t: number, ctx: Ctx): number {
   const q = point3(p.curve, t);
-  for (const end of [p.t0, p.t1]) if (length3(sub3(q, point3(p.curve, end))) <= ctx.clearance) return end;
+  // The end nearer along the piece: a full circle's two ends are one point, and the far one would turn the piece inside out.
+  const end = t - p.t0 <= p.t1 - t ? p.t0 : p.t1;
+  if (length3(sub3(q, point3(p.curve, end))) <= ctx.clearance) return end;
   return t;
 }
 

@@ -748,6 +748,12 @@ Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
    mode, Turn/Flip reach the callback once each, layers, undo), layout,
    the rim; browser: shaft.step as 3 views, 147 curves, the cross hole a
    R0.56 circle on `shaft top`, Undo.
+   Fixed after the user's check of the slotted head: snapping a cut to a
+   piece's end took either end within the clearance, and a full circle's
+   two ends are one point, so the head's R0.5 round came out as a full
+   circle and the R0.15 round in the wrong style. It now snaps to the end
+   nearer along the piece. Test: the head's rounds are quarter arcs,
+   visible, in the front and top views.
 8. Done-when: shaft.step with its cross hole, slot and tang flat in every
    view, checked with List and dimensions.
 

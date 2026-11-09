@@ -93,6 +93,27 @@ describe('three views', () => {
     ]);
   });
 
+  it('the head\'s rounds are quarter arcs, visible: no full circles, none in the tangent style (a full circle\'s two ends are one point)', () => {
+    const v = views(shaft);
+    const [, , right] = curvesBox(v.front);
+    const rounds = (cs: readonly ProfileCurve[]) =>
+      cs
+        .filter((c) => c.kind !== 'line' && (near(c.radius, 0.5) || near(c.radius, 0.15)) && c.center.x - right > -5)
+        .map((c) => (c.kind === 'arc' ? [c.radius, Math.sign(c.center.y), Math.round((((c.endDeg - c.startDeg) % 360) + 360) % 360), c.style ?? 'visible'] : [c.kind]))
+        .sort((p, q) => String(p).localeCompare(String(q)));
+    // From the front the slot has cut both rounds away on the top side; from above both sides show.
+    expect(rounds(v.front)).toEqual([
+      [0.15, -1, 90, 'visible'],
+      [0.5, -1, 90, 'visible'],
+    ]);
+    expect(rounds(v.top)).toEqual([
+      [0.15, -1, 90, 'visible'],
+      [0.15, 1, 90, 'visible'],
+      [0.5, -1, 90, 'visible'],
+      [0.5, 1, 90, 'visible'],
+    ]);
+  });
+
   it('Turn moves the cross hole\'s circle into the front view; Flip puts it at the far end', () => {
     const turned = views(shaft, false, 1);
     // Exactly the hole's circle (the break-out curves lie on the hole), the far one hidden under it.
