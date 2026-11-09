@@ -392,6 +392,14 @@ deferred (ray to Phase 2, autosave to Phase 6).
    text. `readsDiameter`: lathe + Ø on, a vertical linear dimension across
    Y = 0 gets Ø. Picking an edge (instead of a point) isn't offered.
 4. Baseline (Shift+B) and Continue (Shift+K) from a linear dimension.
+   **(done)** `commands/chainDimTools`: pick a linear or aligned
+   dimension (the extension line nearer the pick is the start, keeping its
+   anchor), then points until Enter, each a linear dimension along the
+   picked one's direction, own undo step, snapped points anchored.
+   Baseline: from the start, each line `lineSpacing` (.25" / 6 mm at the
+   sheet scale) further out; Continue: from the last end, same line. The
+   user wasn't sure these are needed (2026-11-09); kept, finished.
+   Also: Enter now finishes Symmetric diameter, as its prompt says.
 5. Ordinate (Shift+Z): DIMORIGIN with a marker; Z or X by drag or forced;
    X as Ø in lathe mode; common baseline; auto-jog; Align Ordinates.
 6. Center marks (Shift+E) and centerlines: associative annotations.

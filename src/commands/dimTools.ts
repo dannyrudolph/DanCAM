@@ -303,7 +303,7 @@ export function createSymmetricDimTool(): ToolDef {
       const { base, dir } = axis;
       const layer = ctx.newProps().layer;
       for (;;) {
-        const feature = yield* method.anchoredPoint({ prompt: `${name}: pick a feature (Enter to finish)` });
+        const feature = yield* method.anchoredPoint({ prompt: `${name}: pick a feature (Enter to finish)`, canFinish: true });
         if (!feature) return;
         const p1 = feature.at;
         const along = dot(sub(p1, base), dir);

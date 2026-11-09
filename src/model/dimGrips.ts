@@ -72,6 +72,11 @@ export function dimensionGrips(d: Drawing, e: DimensionEntity): Grip[] {
 /** First dimension line from the part, then the spacing between lines, in sheet units (ASME Y14.5: 10 and 6 mm). */
 const SPACING = { in: { first: 0.375, step: 0.25 }, mm: { first: 10, step: 6 } } as const;
 
+/** The space between stacked dimension lines in drawing units: .25" or 6 mm on paper, at the sheet scale. */
+export function lineSpacing(d: Drawing): number {
+  return SPACING[d.units].step / d.sheetScale;
+}
+
 /**
  * `at` moved along the dimension's normal so the line's clearance from the
  * nearer measured point lands on a standard spacing (the first line .375"

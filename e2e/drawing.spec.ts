@@ -1371,6 +1371,41 @@ test('Symmetric diameter in lathe mode: a snapped shoulder reads Ø twice its he
   await expect(prop(page, 'Text')).toHaveText('Ø1.250');
 });
 
+test('Baseline stacks dimensions from one start, a spacing apart; Enter finishes; Continue chains from the end', async ({ page }) => {
+  await page.keyboard.press('Shift+D');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await typeValues(page, '0.5', '-0.4');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '3', '1');
+  await typeValues(page, '-1', '-2'); // two points set the extents, clear of the dimension
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -1, maxX: 3, minY: -2, maxY: 1 });
+
+  await page.getByTestId('tool-dimBaseline').click();
+  let p = at(0.1, -0.4); // the dimension line, near its first extension line
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#status .status-prompt')).toHaveText('Baseline: pick the next point (Enter to finish)');
+  await typeValues(page, '2', '0'); // length 2, angle 0 from the start
+  await typeValues(page, '3', '0');
+  await page.keyboard.press('Enter'); // finished: the tool starts again
+  await expect(page.locator('#status .status-prompt')).toHaveText('Baseline: pick a linear dimension near the extension line to start from');
+  await expect(prop(page, 'entity-count')).toHaveText('5');
+
+  await page.keyboard.press('Shift+K');
+  p = at(0.9, -0.4); // near the second extension line
+  await page.mouse.click(p.x, p.y);
+  await typeValues(page, '0.5', '0');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('6');
+  p = at(1.25, -0.4); // the chained dimension, on the first one's line
+  await page.mouse.click(p.x, p.y);
+  await expect(prop(page, 'Measured')).toHaveText('0.5000');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');
