@@ -1,6 +1,9 @@
 /** `checked`, when given, shows a check mark column (on or off). */
 export type MenuItem = { readonly label: string; readonly enabled: boolean; readonly run: () => void; readonly checked?: boolean };
 
+/** A line of text heading the menu, such as the question its items answer. */
+export type MenuHeading = { readonly heading: string };
+
 /** A small right-click menu. Closes on pick, Esc or any click elsewhere. */
 export class ContextMenu {
   private readonly root: HTMLElement;
@@ -19,9 +22,15 @@ export class ContextMenu {
     return !this.root.hidden;
   }
 
-  open(x: number, y: number, items: readonly MenuItem[]): void {
+  open(x: number, y: number, items: readonly (MenuItem | MenuHeading)[]): void {
     this.root.replaceChildren(
       ...items.map((item) => {
+        if ('heading' in item) {
+          const p = document.createElement('p');
+          p.className = 'menu-heading';
+          p.textContent = item.heading;
+          return p;
+        }
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = item.label;

@@ -44,6 +44,8 @@ import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
 import { blockEditDrawing, saveBlockEdit } from '../model/blockEdit';
 import { BlocksPanel } from './blocksPanel';
+import { LibraryPanel } from './libraryPanel';
+import { IndexedDbLibrary } from '../io/libraryStore';
 import { DimStylesPanel } from './dimStylesPanel';
 import { LayersPanel } from './layersPanel';
 import { PropertiesPanel } from './propertiesPanel';
@@ -196,12 +198,37 @@ export class App {
       this.refresh();
     },
     message: (m) => this.status.showMessage(m),
+    saveToLibrary: (name, at) => this.libraryPanel.saveToLibrary(name, at),
+    updateFromLibrary: (name) => this.libraryPanel.updateFromLibrary(name),
   });
   /** Edit block: the drawing set aside while the block is open by itself, to return to on Save or Cancel. */
   private blockEdit: { readonly name: string; readonly outer: Drawing; readonly outerUndo: UndoStack; readonly outerView: vp.Viewport } | undefined;
   private readonly blockEditBar = el('block-edit');
   private readonly inquiry = new InquiryPanel(el('inquiry'));
   private readonly menu = new ContextMenu(document.body);
+  private readonly libraryPanel = new LibraryPanel(el('library'), new IndexedDbLibrary(), {
+    drawing: () => this.drawing,
+    busy: () => this.inBlockEdit(),
+    commit: (tx) => {
+      this.runner.stop();
+      this.undo.commit(tx);
+      this.status.showMessage(tx.label);
+      this.refresh();
+    },
+    message: (m) => this.status.showMessage(m),
+    insert: (name) => {
+      INSERT_TOOL.use(name);
+      this.startTool(INSERT_TOOL);
+    },
+    ask: (at, question, choices) => {
+      this.menu.open(at.left, at.bottom, [
+        { heading: question },
+        ...choices.map((c) => ({ label: c.label, enabled: true, run: c.run })),
+        { label: 'Cancel', enabled: true, run: () => {} },
+      ]);
+    },
+    changed: () => this.refresh(),
+  });
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
   private selectButton: HTMLButtonElement | undefined;
@@ -725,7 +752,8 @@ export class App {
     ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
     this.dimStylesPanel.show(this.drawing);
-    this.blocksPanel.show(this.drawing, this.blockEdit?.name);
+    this.blocksPanel.show(this.drawing, this.blockEdit?.name, this.libraryPanel.entries);
+    this.libraryPanel.show();
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value')) this.onceSnap = undefined;
     this.boxes.setRequest(req);

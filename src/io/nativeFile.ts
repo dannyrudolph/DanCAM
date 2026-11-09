@@ -5,6 +5,7 @@ import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
 import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
 import { type BlockDef, isBlockGeometry, resolveGeometry } from '../model/block';
+import type { LibraryBlock } from '../model/library';
 import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
@@ -117,6 +118,60 @@ export function parseDrawing(text: string): ParseResult {
   }
 }
 
+/**
+ * The block library file, `.cad2d-blocks.json` (spec, "Blocks", Library):
+ * for backup and for moving the library to another machine. Each block
+ * carries its units and the layers its geometry is on.
+ */
+export const LIBRARY_EXTENSION = '.cad2d-blocks.json';
+export const LIBRARY_FORMAT = 'DanCAM block library';
+export const LIBRARY_VERSION = 1;
+
+export function serializeLibrary(blocks: readonly LibraryBlock[]): string {
+  return `${JSON.stringify({ format: LIBRARY_FORMAT, schemaVersion: LIBRARY_VERSION, blocks }, null, 2)}\n`;
+}
+
+export type LibraryParse = { readonly ok: true; readonly blocks: LibraryBlock[] } | { readonly ok: false; readonly error: string };
+
+/** Reads a block library file, checking every field (as a drawing's blocks are checked), or explains why it can't. */
+export function parseLibrary(text: string): LibraryParse {
+  try {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      throw new FileError('This file is not valid JSON.');
+    }
+    const file = obj(raw, 'file');
+    if (file.format !== LIBRARY_FORMAT) throw new FileError('This is not a DanCAM block library.');
+    const version = num(file.schemaVersion, 'schemaVersion');
+    if (version > LIBRARY_VERSION) {
+      throw new FileError(`This library was saved by a newer DanCAM (file version ${version}); update DanCAM to open it.`);
+    }
+    const names = new Set<string>();
+    const blocks = arr(file.blocks, 'blocks').map((v, i) => {
+      const at = `blocks[${i}]`;
+      const o = obj(v, at);
+      if (o.units !== 'in' && o.units !== 'mm') throw new FileError(`${at}.units must be "in" or "mm".`);
+      const units: Units = o.units;
+      const d = createDrawing(units); // holds the layers, to check the geometry against
+      const layers = arr(o.layers, `${at}.layers`).map((l, j) => {
+        const layer = readLayer(l, `${at}.layers[${j}]`);
+        d.layers.set(layer.name, layer);
+        return layer;
+      });
+      const def = readBlock(d, o, at);
+      if (names.has(def.name.toLowerCase())) throw new FileError(`${at}: block "${def.name}" appears twice.`);
+      names.add(def.name.toLowerCase());
+      return { ...def, units, layers };
+    });
+    return { ok: true, blocks };
+  } catch (err) {
+    if (err instanceof FileError) return { ok: false, error: err.message };
+    throw err;
+  }
+}
+
 function readCurrent(file: Record<string, unknown>): Drawing {
   const units = file.units;
   if (units !== 'in' && units !== 'mm') throw new FileError('units must be "in" or "mm".');
@@ -125,13 +180,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
 
   arr(file.layers, 'layers').forEach((v, i) => {
     const at = `layers[${i}]`;
-    const o = obj(v, at);
-    const layer: Layer = {
-      name: str(o.name, `${at}.name`),
-      color: str(o.color, `${at}.color`),
-      visible: bool(o.visible, `${at}.visible`),
-      style: style(o.style, `${at}.style`),
-    };
+    const layer = readLayer(v, at);
     if (d.layers.has(layer.name)) throw new FileError(`${at}: layer "${layer.name}" appears twice.`);
     d.layers.set(layer.name, layer);
   });
@@ -252,6 +301,16 @@ function readEntity(o: Record<string, unknown>, at: string): Entity {
     default:
       throw new FileError(`${at}: unknown kind ${JSON.stringify(o.kind)}.`);
   }
+}
+
+function readLayer(v: unknown, at: string): Layer {
+  const o = obj(v, at);
+  return {
+    name: str(o.name, `${at}.name`),
+    color: str(o.color, `${at}.color`),
+    visible: bool(o.visible, `${at}.visible`),
+    style: style(o.style, `${at}.style`),
+  };
 }
 
 /** A block definition: lines, circles, arcs and points on defined layers, ids unique within it. */

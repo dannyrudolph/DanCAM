@@ -1980,4 +1980,108 @@ test.describe('blocks', () => {
     await page.keyboard.press('Control+z');
     await expect(preview('Boring bar')).toHaveCount(2);
   });
+
+  test('Library: a block saved from one drawing goes into a new mm drawing, converted, and outlives a reload', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await expect(page.locator('#library .blocks-empty')).toHaveText('Empty. Save a block to the library from the Blocks panel; every drawing can use it.');
+    await makeToolBlock(page);
+    const toLibrary = page.locator('#blocks li[data-block="Tool"] [data-role="to-library"]');
+    await toLibrary.click();
+    await expect(status).toHaveText('Saved Tool to the library');
+    const libRow = page.locator('#library li[data-library-block="Tool"]');
+    await expect(libRow.locator('.layer-count')).toHaveText('in');
+    await expect(libRow.locator('.block-description')).toHaveText('MGEHR holder');
+    await toLibrary.click();
+    await expect(status).toHaveText('Tool is already in the library, unchanged.');
+
+    await page.reload();
+    await expect(libRow).toBeVisible();
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible(); // a new drawing: no blocks of its own
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await expect(page.getByTestId('units')).toHaveText('mm');
+
+    await libRow.locator('.block-preview').click();
+    await expect(page.getByTestId('tool-insertBlock')).toHaveClass(/active/);
+    await expect(page.locator('#blocks li[data-block="Tool"] .block-description')).toHaveText('MGEHR holder');
+    await typeValues(page, '0', '0');
+    await page.keyboard.press('Enter'); // rotation 0
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    // Exploded, the edge is 25.4 mm long: the inch block was converted.
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 31.75, minY: -6.35, maxY: 6.35 });
+    const p = at(12.7, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+    await page.keyboard.press('Shift+U');
+    await page.keyboard.press('Escape');
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'End X')).toHaveAttribute('title', '25.4');
+  });
+
+  test('Library: clashes are asked about, Update from library, Export, and Import into another browser', async ({ page, browser }) => {
+    const status = page.locator('#status .status-prompt');
+    const menu = page.locator('.context-menu');
+    await makeToolBlock(page);
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await row.locator('[data-role="to-library"]').click();
+    await expect(page.locator('#library li[data-library-block="Tool"]')).toBeVisible();
+
+    // The drawing's Tool loses its nose: now it differs from the library's.
+    await row.locator('[data-role="edit"]').click();
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete');
+    await page.getByTestId('block-edit-save').click();
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+    await expect(row.locator('[data-role="from-library"]')).toBeVisible();
+
+    await row.locator('[data-role="to-library"]').click();
+    await expect(menu.locator('.menu-heading')).toHaveText('The library already has a different Tool.');
+    await menu.getByRole('button', { name: 'Save it as Tool 2' }).click();
+    await expect(status).toHaveText('Saved Tool to the library as Tool 2');
+    await expect(page.locator('#library li[data-library-block="Tool 2"] .block-preview svg g > *')).toHaveCount(1);
+
+    await page.locator('#library li[data-library-block="Tool"] .block-preview').click();
+    await expect(menu.locator('.menu-heading')).toHaveText("The drawing's Tool isn't the same as the library's.");
+    await menu.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('#blocks li')).toHaveCount(1); // nothing copied in
+
+    await row.locator('[data-role="from-library"]').click();
+    await expect(status).toHaveText('Update block Tool from the library');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+    await expect(row.locator('[data-role="from-library"]')).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+
+    const downloading = page.waitForEvent('download');
+    await page.getByTestId('export-library').click();
+    const file = await downloading;
+    expect(file.suggestedFilename()).toBe('DanCAM blocks.cad2d-blocks.json');
+    await expect(status).toHaveText('Exported 2 blocks');
+
+    // Another browser: its own, empty library.
+    const other = await (await browser.newContext()).newPage();
+    await other.goto(page.url());
+    await expect(other.locator('#library .blocks-empty')).toBeVisible();
+    const choosing = other.waitForEvent('filechooser');
+    await other.getByTestId('import-library').click();
+    await (await choosing).setFiles((await file.path())!);
+    await expect(other.locator('#status .status-prompt')).toHaveText('Imported 2 blocks');
+    await expect(other.locator('#library li')).toHaveCount(2);
+
+    const again = other.waitForEvent('filechooser');
+    await other.getByTestId('import-library').click();
+    await (await again).setFiles((await file.path())!);
+    await expect(other.locator('#status .status-prompt')).toHaveText('Imported 0 blocks, 2 already in the library');
+
+    await other.locator('#library li[data-library-block="Tool 2"] [data-role="delete"]').click();
+    await other.locator('.context-menu').getByRole('button', { name: 'Delete Tool 2' }).click();
+    await expect(other.locator('#library li')).toHaveCount(1);
+  });
 });

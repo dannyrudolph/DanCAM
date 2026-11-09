@@ -569,6 +569,32 @@ Spec: "Blocks".
 6. Library: IndexedDB store, Save to library, insert from the library
    (copied in), Update from library, Export/Import library file; name
    clashes asked about, never overwritten silently.
+   **(done)** `model/library` (pure): `LibraryBlock` = definition + units
+   + the layers its geometry is on (not 0); `libraryEntry`, `inUnits`
+   (converts in↔mm), `sameBlock` (description and geometry within TOL),
+   `libraryStatus` (none/same/differs), `freeName` ("Tool 2"), `copyIn`
+   (one undo step, adds missing layers; existing layers keep the
+   drawing's colours), `updateFromLibrary` (one step, dimensions on
+   instances re-measure), `planImport`/`importEntries` (new, already
+   there, clashes: replace, keep both renamed, or skip). Names match
+   without case. `io/nativeFile`: `.cad2d-blocks.json` (`serializeLibrary`,
+   `parseLibrary`, checked like a drawing's blocks). `io/libraryStore`:
+   `IndexedDbLibrary` (db "dancam", store "blocks", keyed by lower-case
+   name); checked in the browser tests, no fake-IndexedDB package.
+   `ui/libraryPanel` ("Block library" under Blocks): rows with preview,
+   units, description, delete (asks; drawings keep their copies). Row
+   click copies in (or uses the drawing's when the same; asks when
+   different: use the drawing's / update it / copy in as "X 2") and
+   starts Insert. Blocks panel rows: Save to library (asks before
+   replacing a different one, or saves as "X 2"), and Update from library
+   when the library's differs. Export downloads
+   "DanCAM blocks.cad2d-blocks.json"; Import reads one (asks once about
+   clashes). Questions use the context menu with a new heading line.
+   Copy in and the first Insert are two undo steps.
+   Browser tests: save to library, reload, new mm drawing, insert (edge
+   explodes to 25.4); clash questions, Update from library and its undo,
+   Export, Import into a second browser context (and again: nothing new),
+   delete from the library.
 7. Done-when: a tool sketch saved to the library from one drawing, used in
    another against a lathe profile (spec, roadmap Phase 6).
 

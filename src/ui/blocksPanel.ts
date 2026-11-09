@@ -4,6 +4,7 @@ import { type BlockDef, insertsOf } from '../model/block';
 import { type BlockEdit, deleteBlock, purgeBlocks, renameBlock } from '../model/blockEdit';
 import type { Drawing } from '../model/drawing';
 import { entityBBox } from '../model/entity';
+import { type LibraryBlock, libraryStatus } from '../model/library';
 import type { Transaction } from '../model/undo';
 import { ICONS } from './icons';
 
@@ -15,6 +16,10 @@ export type BlocksHost = {
   /** Applies a change (rename, delete, purge) through the undo stack. */
   commit(tx: Transaction): void;
   message(text: string): void;
+  /** Save to library (asks at `at` before replacing a different library block). */
+  saveToLibrary(name: string, at: DOMRect): void;
+  /** Update from library: redefines the block from the library's of the same name. */
+  updateFromLibrary(name: string): void;
 };
 
 /**
@@ -29,16 +34,18 @@ export class BlocksPanel {
   private drawing: Drawing | undefined;
   private editing: string | undefined;
   private renaming: string | undefined;
+  private library: readonly LibraryBlock[] = [];
 
   constructor(
     private readonly root: HTMLElement,
     private readonly host: BlocksHost,
   ) {}
 
-  /** `editing`: the block open in Edit block, if any. */
-  show(d: Drawing, editing?: string): void {
+  /** `editing`: the block open in Edit block, if any; `library`: the block library, to offer Update from library. */
+  show(d: Drawing, editing: string | undefined, library: readonly LibraryBlock[]): void {
     this.drawing = d;
     this.editing = editing;
+    this.library = library;
     if (this.renaming !== undefined) return; // don't rebuild under the user's hands
     this.render();
   }
@@ -94,10 +101,22 @@ export class BlocksPanel {
       const del = iconButton(ICONS.trash, 'Delete block (only one no instance uses)');
       del.dataset.role = 'delete';
       del.addEventListener('click', () => this.apply(deleteBlock(d, def.name)));
+      const save = iconButton(ICONS.toLibrary, 'Save to library: every drawing can use it');
+      save.dataset.role = 'to-library';
+      save.addEventListener('click', () => this.host.saveToLibrary(def.name, save.getBoundingClientRect()));
+      const actions = document.createElement('span');
+      actions.className = 'block-actions';
+      if (libraryStatus(d, def, this.library) === 'differs') {
+        const update = iconButton(ICONS.fromLibrary, 'Update from library: the library\'s block differs; take it (every instance changes)');
+        update.dataset.role = 'from-library';
+        update.addEventListener('click', () => this.host.updateFromLibrary(def.name));
+        actions.append(update);
+      }
+      actions.append(save, edit, del);
       const description = document.createElement('span');
       description.className = 'block-description';
       description.textContent = def.description;
-      li.append(preview, this.nameCell(d, def.name), count, edit, del, description);
+      li.append(preview, this.nameCell(d, def.name), count, actions, description);
       list.append(li);
     }
     this.root.replaceChildren(header, list);
@@ -149,7 +168,7 @@ export class BlocksPanel {
   }
 }
 
-function iconButton(icon: string, title: string, testId?: string): HTMLButtonElement {
+export function iconButton(icon: string, title: string, testId?: string): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'layer-icon-button';
