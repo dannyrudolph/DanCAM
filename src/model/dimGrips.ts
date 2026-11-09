@@ -69,6 +69,9 @@ export function dimensionGrips(d: Drawing, e: DimensionEntity): Grip[] {
         { key: 'p1', at: e.p1 },
         { key: 'text', at: e.at },
       ];
+    case 'centerMark':
+    case 'centerline':
+      return []; // they sit on their geometry
     case 'leader':
       return [
         { key: 'tip', at: e.tip },
@@ -142,6 +145,9 @@ export function applyDimensionGrip(d: Drawing, e: DimensionEntity, key: string, 
       if (key === 'text') return { ...e, textAt: to };
       return undefined;
     }
+    case 'centerMark':
+    case 'centerline':
+      return undefined;
     case 'ordinate':
       if (key === 'p1') return { ...withoutAnchors(e, ['p1']), p1: to } as typeof e;
       if (key === 'text') return placeOrdinate(d, { ...e, at: to });

@@ -85,6 +85,10 @@ export type RayEntity = EntityBase & {
  *   vertical leader; Z in lathe mode) or Y ('y', a horizontal leader; X in
  *   lathe mode). The leader runs from `p1` toward `at`, jogging when `at`
  *   is off its line, and the text sits just past `at`.
+ * - `centerMark`: annotation, not a measurement: a cross at `center` of a
+ *   circle or arc of `radius`, its arms running just past the curve.
+ * - `centerline`: annotation: a center line from `p1` to `p2` (midway
+ *   between two lines), drawn dash-dot a little past both ends.
  * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
  *   (the landing), a short horizontal shoulder, then `text` as typed.
  *
@@ -110,6 +114,8 @@ export type DimensionEntity = EntityBase & {
     | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
     | { readonly type: 'symmetric'; readonly p1: Vec2; readonly axisBase: Vec2; readonly axisDir: Vec2 }
     | { readonly type: 'ordinate'; readonly p1: Vec2; readonly origin: Vec2; readonly axis: 'x' | 'y' }
+    | { readonly type: 'centerMark'; readonly center: Vec2; readonly radius: number }
+    | { readonly type: 'centerline'; readonly p1: Vec2; readonly p2: Vec2 }
     | { readonly type: 'leader'; readonly tip: Vec2; readonly text: string }
   );
 
@@ -132,6 +138,10 @@ function measuredPoints(e: DimensionEntity): Vec2[] {
       return [e.p1, e.axisBase, e.at];
     case 'ordinate':
       return [e.p1, e.at];
+    case 'centerMark':
+      return [e.center];
+    case 'centerline':
+      return [e.p1, e.p2];
     case 'leader':
       return [e.tip, e.at];
   }
@@ -158,6 +168,10 @@ function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity 
       return { ...e, at, p1: f(e.p1), axisBase: f(e.axisBase) };
     case 'ordinate':
       return { ...e, at, p1: f(e.p1), origin: f(e.origin) };
+    case 'centerMark':
+      return { ...e, at, center: f(e.center) };
+    case 'centerline':
+      return { ...e, at, p1: f(e.p1), p2: f(e.p2) };
     case 'leader':
       return { ...e, at, tip: f(e.tip) };
   }
@@ -213,6 +227,7 @@ export function transformEntity(e: Entity, t: Transform): Entity {
           return { ...m, dir: transformDir(t, m.dir) };
         case 'radius':
         case 'diameter':
+        case 'centerMark':
           return { ...m, radius: transformLength(t, m.radius) };
         case 'angular':
           return { ...m, dir1: transformDir(t, m.dir1), dir2: transformDir(t, m.dir2) };
@@ -248,7 +263,7 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
     case 'dimension': {
       const m = mapDimensionPoints(e, p);
       const tol = m.tolerance ? { ...m, tolerance: scaleTolerance(m.tolerance, f) } : m;
-      return tol.type === 'radius' || tol.type === 'diameter' ? { ...tol, radius: f(tol.radius) } : tol;
+      return tol.type === 'radius' || tol.type === 'diameter' || tol.type === 'centerMark' ? { ...tol, radius: f(tol.radius) } : tol;
     }
   }
 }

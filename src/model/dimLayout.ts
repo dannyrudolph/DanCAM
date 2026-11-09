@@ -40,7 +40,14 @@ export type DimLayout = {
   /** The text's extent, without the gap around it. */
   readonly textBox: BBox;
   readonly fit: Fit;
+  /** Lines drawn dash-dot, as center lines (a centerline). */
+  readonly centerDash?: boolean;
 };
+
+/** Annotations: they measure nothing and show no text. */
+export type Annotation = Extract<DimensionEntity, { type: 'centerMark' | 'centerline' }>;
+export const isAnnotation = (e: DimensionEntity): e is Annotation => e.type === 'centerMark' || e.type === 'centerline';
+type Measuring = Exclude<DimensionEntity, { type: 'leader' | 'centerMark' | 'centerline' }>;
 
 export type Segment = readonly [Vec2, Vec2];
 export type Triangle = readonly [Vec2, Vec2, Vec2];
@@ -72,7 +79,7 @@ export function angularSector(e: Extract<DimensionEntity, { type: 'angular' }>):
 /**
  * What a dimension reads: the distance along `dir` (linear), the true
  * length (aligned), the radius or twice it, or the angle in degrees.
- * Undefined for a leader, which measures nothing.
+ * Undefined for a leader or an annotation, which measure nothing.
  */
 export function measuredValue(e: DimensionEntity): number | undefined {
   switch (e.type) {
@@ -90,6 +97,8 @@ export function measuredValue(e: DimensionEntity): number | undefined {
       return 2 * Math.abs(axisOffset(e));
     case 'ordinate':
       return Math.abs(e.axis === 'x' ? e.p1.x - e.origin.x : e.p1.y - e.origin.y);
+    case 'centerMark':
+    case 'centerline':
     case 'leader':
       return undefined;
   }
@@ -173,7 +182,7 @@ function pieceTo(lines: Segment[]): (from: Vec2, to: Vec2) => void {
 }
 
 /** The format for `e`: its style, with this dimension's overrides on top. */
-function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimStyle, altFactor: number, diameter: boolean): DimFormat {
+function formatFor(e: Measuring, style: DimStyle, altFactor: number, diameter: boolean): DimFormat {
   const text = e.textOverride === undefined ? {} : { override: e.textOverride };
   if (e.type === 'angular') return { ...angleFormat(e.precision === undefined ? style : { ...style, anglePrecision: e.precision }), ...text };
   const own: DimStyle = {
@@ -455,12 +464,38 @@ function angularParts(e: Extract<DimensionEntity, { type: 'angular' }>, style: D
   return { lines, arcs, arrows, fit, ...placeText(block, center) };
 }
 
+/**
+ * Center mark: a cross at the center, each arm half an arrow long; then,
+ * an offset gap on, a line out to an extension past the curve on each of
+ * the four sides (none when the curve is inside the cross). Centerline:
+ * from end to end, an extension past each, dash-dot.
+ */
+function annotationParts(e: Annotation, style: DimStyle): Parts & { centerDash?: boolean } {
+  const empty = { runs: [], textBox: { minX: e.at.x, maxX: e.at.x, minY: e.at.y, maxY: e.at.y }, arcs: [], arrows: [], fit: 'inside' as const };
+  if (e.type === 'centerline') {
+    const l = len(sub(e.p2, e.p1));
+    const u = l > TOL ? { x: (e.p2.x - e.p1.x) / l, y: (e.p2.y - e.p1.y) / l } : { x: 1, y: 0 };
+    return { ...empty, lines: [[add(e.p1, u, -style.extExtend), add(e.p2, u, style.extExtend)]], centerDash: true };
+  }
+  const arm = style.arrowSize / 2;
+  const from = arm + style.extOffset;
+  const to = e.radius + style.extExtend;
+  const lines: Segment[] = [];
+  const c = e.center;
+  for (const d of [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }]) {
+    lines.push([c, add(c, d, arm)]);
+    if (to > from) lines.push([add(c, d, from), add(c, d, to)]);
+  }
+  return { ...empty, lines };
+}
+
 /** The layout of `e` drawn with `style`; `altFactor` converts to the alternate unit. */
 export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: number, diameter = false): DimLayout {
   if (e.type === 'leader') {
     const text = { main: e.text };
     return { text, ...leaderParts(e, style, textBlock(text, style.textHeight)) };
   }
+  if (isAnnotation(e)) return { text: { main: '' }, ...annotationParts(e, style) };
   const value = measuredValue(e)! * (diameter && e.type === 'ordinate' ? 2 : 1);
   const text = formatDimension(value, formatFor(e, style, altFactor, diameter));
   const block = textBlock(text, style.textHeight);

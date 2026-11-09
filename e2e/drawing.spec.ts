@@ -1496,6 +1496,48 @@ test('Align ordinates puts the selected ordinates\' leader ends on one level', a
   await expect(prop(page, 'Text')).toHaveText('.500');
 });
 
+test('Center mark marks a circle and goes with it; Two lines puts a centerline between them', async ({ page }) => {
+  await page.keyboard.press('c');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '0.5');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('l');
+  await typeValues(page, '1', '-0.5');
+  await typeValues(page, '2', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('l');
+  await typeValues(page, '1', '0.5');
+  await typeValues(page, '2', '0');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -0.5, maxX: 3, minY: -0.5, maxY: 0.5 });
+  const click = async (x: number, y: number) => {
+    const p = at(x, y);
+    await page.mouse.click(p.x, p.y);
+  };
+
+  await page.keyboard.press('Shift+E');
+  await click(0, 0.5); // the circle
+  await page.locator('[data-option="method:lines"]').click();
+  await click(2, -0.5);
+  await click(2, 0.5);
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('5');
+
+  await click(0.03, 0); // the mark's cross
+  await expect(prop(page, 'Type')).toHaveText('Center mark');
+  await page.keyboard.press('Escape');
+  await click(2.4, 0); // the centerline
+  await expect(prop(page, 'Type')).toHaveText('Centerline');
+  await page.keyboard.press('Escape');
+
+  await click(0.5 * Math.SQRT1_2, 0.5 * Math.SQRT1_2); // the circle, clear of the mark's arms
+  await expect(prop(page, 'Type')).toHaveCount(0);
+  await expect(page.locator('#properties h2')).toHaveText(/^Circle /);
+  await page.keyboard.press('Delete');
+  await expect(prop(page, 'entity-count')).toHaveText('3'); // the circle and its mark
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

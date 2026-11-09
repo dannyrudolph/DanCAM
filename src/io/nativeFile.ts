@@ -265,10 +265,14 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     case 'ordinate':
       if (o.axis !== 'x' && o.axis !== 'y') throw new FileError(`${at}.axis must be "x" or "y".`);
       return { ...common, type: 'ordinate', p1: vec(o.p1, `${at}.p1`), origin: vec(o.origin, `${at}.origin`), axis: o.axis };
+    case 'centerMark':
+      return { ...common, type: 'centerMark', center: vec(o.center, `${at}.center`), radius: radius(o.radius, `${at}.radius`) };
+    case 'centerline':
+      return { ...common, type: 'centerline', ...ends() };
     case 'leader':
       return { ...common, type: 'leader', tip: vec(o.tip, `${at}.tip`), text: str(o.text, `${at}.text`) };
     default:
-      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric, ordinate or leader.`);
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric, ordinate, centerMark, centerline or leader.`);
   }
 }
 

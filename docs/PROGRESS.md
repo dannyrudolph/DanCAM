@@ -425,6 +425,15 @@ deferred (ray to Phase 2, autosave to Phase 6).
    level; each axis's set on it, packed in feature order a gap apart and
    shifted to sit on their features on average; one undo step.
 6. Center marks (Shift+E) and centerlines: associative annotations.
+   **(done)** Dimension types `centerMark` (center, radius; `anchors.curve`)
+   and `centerline` (p1, p2 midway between two lines; `anchors.lines`):
+   no value or text, no precision/tolerance/text rows, no grips. Mark: a
+   cross of half-arrow arms, an offset gap, then lines an extension past
+   the curve; centerline: dash-dot (`DimLayout.centerDash`), an extension
+   past each end. `centerlineBetween` pairs the second line's ends with
+   the first's. Tool Shift+E (`commands/centerMarkTool`): Circle or arc
+   (a second mark on one refused) or Two lines; sticky; one undo step
+   each. They follow their geometry and are deleted with it.
 7. Done-when: a real lathe part, with the user's feedback along the way.
 
 Decisions (user, 2026-11-09): no reference part needed yet (feedback as

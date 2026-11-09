@@ -13,8 +13,8 @@ import type { PropertySetter } from './propertyEdit';
 
 export type ToleranceKind = Tolerance['kind'];
 
-/** Lengths take a tolerance; angles and leaders don't. */
-export const takesTolerance = (e: DimensionEntity): boolean => e.type !== 'angular' && e.type !== 'leader';
+/** Lengths take a tolerance; angles, leaders and annotations don't. */
+export const takesTolerance = (e: DimensionEntity): boolean => e.type !== 'angular' && e.type !== 'leader' && e.type !== 'centerMark' && e.type !== 'centerline';
 
 /** The tolerance `e` shows: its own, else its style's. */
 export function effectiveTolerance(d: Drawing, e: DimensionEntity): Tolerance {

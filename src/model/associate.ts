@@ -185,9 +185,36 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
       const at = e.axis === 'x' ? { x: e.at.x + v.x, y: e.at.y } : { x: e.at.x, y: e.at.y + v.y };
       return withAnchors({ ...e, p1: r1.at, at }, setAnchor(anchors, 'p1', r1.anchor));
     }
+    case 'centerMark': {
+      if (anchors.curve === undefined) return e;
+      const c = d.entities.get(anchors.curve);
+      if (c?.kind !== 'arc' && c?.kind !== 'circle') return undefined;
+      return { ...e, center: c.center, radius: c.radius, at: c.center };
+    }
+    case 'centerline': {
+      if (!anchors.lines) return e;
+      const [l1, l2] = anchors.lines.map((id) => d.entities.get(id));
+      if (l1?.kind !== 'line' || l2?.kind !== 'line') return undefined;
+      const ends = centerlineBetween(l1, l2);
+      return ends && { ...e, ...ends, at: { x: (ends.p1.x + ends.p2.x) / 2, y: (ends.p1.y + ends.p2.y) / 2 } };
+    }
     case 'leader':
       return e;
   }
+}
+
+/**
+ * The center line midway between two lines: from the middle of their
+ * starts to the middle of their ends (the second line taken the same way
+ * as the first). Undefined when that has no length.
+ */
+export function centerlineBetween(l1: LineEntity, l2: LineEntity): { p1: Vec2; p2: Vec2 } | undefined {
+  const same = dot(sub(l1.end, l1.start), sub(l2.end, l2.start)) >= 0;
+  const [b1, b2] = same ? [l2.start, l2.end] : [l2.end, l2.start];
+  const mid = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const p1 = mid(l1.start, b1);
+  const p2 = mid(l1.end, b2);
+  return vecNearlyEqual(p1, p2) ? undefined : { p1, p2 };
 }
 
 /** True when `a` and `b` measure the same thing from the same place. */

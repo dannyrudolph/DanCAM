@@ -1,7 +1,7 @@
 import { angleDeg } from '../geometry/angle';
 import { arcEnd, arcLength, arcSweepDeg, arcStart } from '../geometry/arc';
 import { type Tolerance, flatText } from './dimFormat';
-import { dimensionLayout } from './dimLayout';
+import { dimensionLayout, isAnnotation } from './dimLayout';
 import { effectivePrecision, effectiveTolerance, takesTolerance } from './dimOverride';
 import { type Drawing, effectiveStyle } from './drawing';
 import type { Entity } from './entity';
@@ -17,15 +17,17 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       { label: 'Layer', value: e.layer },
       { label: 'Dim style', value: e.dimStyle },
       { label: 'Type', value: DIM_TYPE_LABEL[e.type] },
-      { label: 'Text', value: flatText(l.text) },
+      ...(isAnnotation(e) ? [] : [{ label: 'Text', value: flatText(l.text) }]),
       ...(l.value === undefined ? [] : [{ label: 'Measured', value: l.value, ...(e.type === 'angular' && { unit: '°' }) }]),
-      ...(e.type === 'leader' ? [] : [{ label: 'Precision', value: String(effectivePrecision(d, e)) }]),
+      ...(e.type === 'leader' || isAnnotation(e) ? [] : [{ label: 'Precision', value: String(effectivePrecision(d, e)) }]),
       ...(takesTolerance(e) ? toleranceRows(d, e) : []),
     ];
     switch (e.type) {
       case 'radius':
       case 'diameter':
         return [...head, { label: 'Center X', value: e.center.x }, { label: 'Center Y', value: e.center.y }];
+      case 'centerMark':
+        return [...head, { label: 'Center X', value: e.center.x }, { label: 'Center Y', value: e.center.y }, { label: 'Radius', value: e.radius }];
       case 'angular':
         return [...head, { label: 'Vertex X', value: e.vertex.x }, { label: 'Vertex Y', value: e.vertex.y }];
       case 'symmetric':
@@ -123,6 +125,8 @@ const DIM_TYPE_LABEL: Record<Extract<Entity, { kind: 'dimension' }>['type'], str
   angular: 'Angular',
   symmetric: 'Symmetric diameter',
   ordinate: 'Ordinate',
+  centerMark: 'Center mark',
+  centerline: 'Centerline',
   leader: 'Leader',
 };
 

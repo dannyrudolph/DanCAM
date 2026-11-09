@@ -193,7 +193,7 @@ function drawDimension(ctx: CanvasRenderingContext2D, v: Viewport, l: DimLayout,
   const clip = screenClipBox(v);
   ctx.lineWidth = DIM_LINE_PX + extraWidth;
   ctx.lineCap = 'butt';
-  ctx.setLineDash([]);
+  ctx.setLineDash(l.centerDash ? LINE_STYLES.center.dash : []);
   ctx.beginPath();
   for (const [a, b] of l.lines) {
     const seg = clipSegment(worldToScreen(v, a), worldToScreen(v, b), clip);
