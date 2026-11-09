@@ -26,6 +26,7 @@ import { pickEntity } from '../model/pick';
 import { type BoxMode, boxModeFor, selectInBox } from '../model/selection';
 import { type Transaction, UndoStack } from '../model/undo';
 import { ensureCurrentLayer } from '../model/layers';
+import { ensureCurrentDimStyle } from '../model/dimStyles';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
@@ -36,6 +37,7 @@ import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
+import { DimStylesPanel } from './dimStylesPanel';
 import { LayersPanel } from './layersPanel';
 import { PropertiesPanel } from './propertiesPanel';
 import { DEFAULT_PRECISION, StatusBar, type StatusSettings } from './statusBar';
@@ -151,6 +153,22 @@ export class App {
     setCurrent: (name) => {
       this.drawing.currentLayer = name;
       this.status.showMessage(`Current layer: ${name}`);
+      this.refresh();
+    },
+    message: (m) => this.status.showMessage(m),
+  });
+  private readonly dimStylesPanel = new DimStylesPanel(el('dimstyles'), {
+    commit: (tx, renamed) => {
+      this.runner.stop(); // as for a layer edit: a tool mid-step must not undo it
+      this.undo.commit(tx);
+      // Follow a rename before refresh's fallback could pick another style.
+      if (renamed) ensureCurrentDimStyle(this.drawing, renamed.from, renamed.to);
+      this.status.showMessage(tx.label);
+      this.refresh();
+    },
+    setCurrent: (name) => {
+      this.drawing.currentDimStyle = name;
+      this.status.showMessage(`Current dimension style: ${name}`);
       this.refresh();
     },
     message: (m) => this.status.showMessage(m),
@@ -589,7 +607,9 @@ export class App {
     this.status.showSheetScale(this.drawing.sheetScale);
     document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
+    ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
+    this.dimStylesPanel.show(this.drawing);
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value')) this.onceSnap = undefined;
     this.boxes.setRequest(req);

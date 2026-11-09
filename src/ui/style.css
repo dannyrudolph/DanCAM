@@ -200,6 +200,81 @@ input {
   padding: 8px 10px;
 }
 
+#dimstyles {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dimstyle-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 2px;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.dimstyle-row.editing {
+  background: var(--panel-2);
+}
+
+.dimstyle-row input[type='radio'] {
+  margin: 0;
+}
+
+.dimstyle-settings {
+  margin-top: 6px;
+}
+
+.dimstyle-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dimstyle-settings dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 6px 0 0;
+  align-items: center;
+}
+
+.dimstyle-settings dt {
+  color: var(--muted);
+}
+
+.dimstyle-settings dd {
+  margin: 0;
+  text-align: right;
+}
+
+.dimstyle-settings dd input[type='text'] {
+  width: 7em;
+  box-sizing: border-box;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.dimstyle-settings dd input[type='text']:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.dimstyle-settings dd select {
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
 #inquiry {
   padding: 8px 10px;
   border-top: 1px solid var(--border);

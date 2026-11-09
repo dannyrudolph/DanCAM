@@ -185,6 +185,16 @@ export function flatText(t: DimText): string {
 
 const SYMBOL_CODES: Record<string, string> = { d: '°', c: 'Ø', p: '±' };
 
+/**
+ * A tolerance of `kind`, keeping the values of `now` where they fit (± to ±,
+ * deviation to and from limits); otherwise its values start at zero.
+ */
+export function toleranceOfKind(now: Tolerance, kind: Tolerance['kind']): Tolerance {
+  if (kind === 'none') return { kind };
+  if (kind === 'symmetric') return { kind, value: now.kind === 'symmetric' ? now.value : 0 };
+  return now.kind === 'deviation' || now.kind === 'limits' ? { kind, upper: now.upper, lower: now.lower } : { kind, upper: 0, lower: 0 };
+}
+
 /** The tolerance with its values passed through `f` (for converting units). */
 export function scaleTolerance(t: Tolerance, f: (length: number) => number): Tolerance {
   if (t.kind === 'none') return t;

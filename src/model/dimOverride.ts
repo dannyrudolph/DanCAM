@@ -1,4 +1,4 @@
-import { type Tolerance, expandSymbols } from './dimFormat';
+import { type Tolerance, expandSymbols, toleranceOfKind } from './dimFormat';
 import { dimStyleOf } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
@@ -48,13 +48,7 @@ export function withPrecision(e: DimensionEntity, places: number | undefined): D
  * (± to ±, deviation to and from limits); otherwise they start at zero.
  */
 export function withToleranceKind(d: Drawing, e: DimensionEntity, kind: ToleranceKind | undefined): DimensionEntity {
-  if (kind === undefined) return withField(e, 'tolerance', undefined);
-  const now = effectiveTolerance(d, e);
-  let t: Tolerance;
-  if (kind === 'none') t = { kind };
-  else if (kind === 'symmetric') t = { kind, value: now.kind === 'symmetric' ? now.value : 0 };
-  else t = now.kind === 'deviation' || now.kind === 'limits' ? { kind, upper: now.upper, lower: now.lower } : { kind, upper: 0, lower: 0 };
-  return withField(e, 'tolerance', t);
+  return withField(e, 'tolerance', kind === undefined ? undefined : toleranceOfKind(effectiveTolerance(d, e), kind));
 }
 
 /**

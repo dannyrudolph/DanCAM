@@ -1141,6 +1141,56 @@ test('the sheet scale is chosen in the status bar or typed as Custom, and Undo t
   await expect(scale).toHaveValue('10');
 });
 
+test('the Dimension Styles panel edits a style its dimensions follow, adds, renames and refuses to delete one in use', async ({ page }) => {
+  await page.keyboard.press('Shift+D');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await typeValues(page, '0.5', '0.3');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + 3, box.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3, { steps: 6 });
+  await page.mouse.up();
+  await expect(prop(page, 'Text')).toHaveText('1.000');
+
+  const panel = page.locator('#dimstyles');
+  const row = (name: string) => panel.locator(`li[data-dim-style="${name}"]`);
+  await expect(row('INCH-3PL').locator('.layer-count')).toHaveText('1');
+  await page.getByTestId('dim-style-settings').click();
+  await panel.locator('select[data-setting="precision"]').selectOption('4');
+  await expect(prop(page, 'Text')).toHaveText('1.0000');
+  await panel.locator('input[data-setting="suffix"]').fill(' TYP');
+  await page.keyboard.press('Enter');
+  await expect(prop(page, 'Text')).toHaveText('1.0000 TYP');
+  await panel.locator('input[data-setting="textHeight"]').fill('0');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#status .status-prompt')).toHaveText('The text height must be more than zero.');
+  await expect(panel.locator('input[data-setting="textHeight"]')).toHaveValue('0.12');
+
+  await page.getByTestId('new-dim-style').click();
+  await panel.locator('input[data-role="name-input"]').fill('DETAIL');
+  await page.keyboard.press('Enter');
+  await expect(row('DETAIL')).toHaveClass(/editing/);
+  await expect(page.getByTestId('dim-style-settings')).toHaveText('Settings: DETAIL');
+  await expect(panel.locator('select[data-setting="precision"]')).toHaveValue('4'); // a copy
+
+  await row('INCH-3PL').locator('[data-role="delete"]').click();
+  await expect(page.locator('#status .status-prompt')).toHaveText('INCH-3PL is the current style; make another current first.');
+  await row('DETAIL').locator('[data-role="current"]').check();
+  await row('INCH-3PL').locator('[data-role="delete"]').click();
+  await expect(page.locator('#status .status-prompt')).toHaveText('1 dimension uses INCH-3PL.');
+
+  await row('INCH-3PL').locator('[data-role="name"]').dblclick();
+  await panel.locator('input[data-role="name-input"]').fill('PART');
+  await page.keyboard.press('Enter');
+  await expect(prop(page, 'Dim style').locator('select')).toHaveValue('PART');
+  await expect(row('PART').locator('.layer-count')).toHaveText('1');
+  await page.keyboard.press('Control+z');
+  await expect(prop(page, 'Dim style').locator('select')).toHaveValue('INCH-3PL');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

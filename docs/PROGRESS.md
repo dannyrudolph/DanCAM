@@ -258,8 +258,8 @@ points along an edge, then its new angle).
    leader's text afterwards (with the text overrides in step 6),
    multi-line notes, more than one leader segment. Shortcut chosen by
    Claude, not yet confirmed.
-6. Dimension Styles panel; per-dimension overrides; Sheet scale. Done
-   in three commits:
+6. Dimension Styles panel; per-dimension overrides; Sheet scale (done,
+   awaiting the user's review). Three commits:
    a. **Overrides (done).** Optional `precision`, `tolerance`,
       `textOverride` on any dimension but a leader (`model/dimOverride`).
       Precision sets the value's and the tolerance's places (the angle's
@@ -280,7 +280,19 @@ points along an edge, then its new angle).
       absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
       20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
       cancels). Print/PDF uses it in Phase 6.
-   c. Dimension Styles panel.
+   c. **Dimension Styles panel (done).** `model/dimStyles` (like
+      `layers`): New copies the style being edited as NAME-2, -3…; edit
+      (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
+      lower; undefined removes dual/prefix/suffix); rename moves its
+      dimensions (one step, current follows); delete refused when used,
+      current or last; `ensureCurrentDimStyle` after undo. Sidebar panel
+      under Layers: current radio, name (click: edit its settings;
+      double-click: rename), dimension count, delete; collapsible
+      Settings: sizes (exact, value parser), precision, leading/trailing
+      zeros, tolerance kind and values, tol precision, angle format and
+      precision, dual units (other unit's defaults) and precision,
+      prefix/suffix (spaces kept). Each change one undo step.
+      `toleranceOfKind` is shared with the per-dimension override.
 7. Dimension grips (line position, text, measured points).
 8. Done-when: a dimensioned reference drawing, checked text by text.
 
