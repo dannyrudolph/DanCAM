@@ -25,6 +25,8 @@ type FileV2 = {
   /** Optional: files from before layers had a current layer open on "0". */
   currentLayer?: string;
   currentDimStyle: string;
+  /** Optional: files from before it existed print at 1:1. */
+  sheetScale?: number;
   layers: Layer[];
   dimStyles: DimStyle[];
   entities: Entity[];
@@ -38,6 +40,7 @@ export function serializeDrawing(d: Drawing): string {
     nextId: d.nextId,
     currentLayer: d.currentLayer,
     currentDimStyle: d.currentDimStyle,
+    sheetScale: d.sheetScale,
     layers: [...d.layers.values()],
     dimStyles: [...d.dimStyles.values()],
     entities: [...d.entities.values()],
@@ -120,6 +123,11 @@ function readCurrent(file: Record<string, unknown>): Drawing {
   const dimStyle = str(file.currentDimStyle, 'currentDimStyle');
   if (!d.dimStyles.has(dimStyle)) throw new FileError(`currentDimStyle: style "${dimStyle}" is not defined.`);
   d.currentDimStyle = dimStyle;
+  if (file.sheetScale !== undefined) {
+    const scale = num(file.sheetScale, 'sheetScale');
+    if (!(scale > 0)) throw new FileError('sheetScale must be more than zero.');
+    d.sheetScale = scale;
+  }
 
   let maxId = 0;
   arr(file.entities, 'entities').forEach((v, i) => {

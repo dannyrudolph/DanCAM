@@ -9,6 +9,7 @@ import { type DimFormat, type DimText, formatDimension } from './dimFormat';
 import { type DimStyle, angleFormat, dimStyleOf, lengthFormat } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
+import { atSheetScale } from './sheetScale';
 import { textWidth } from './textMetrics';
 import { altUnitFactor } from './units';
 
@@ -358,9 +359,9 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
   }
 }
 
-/** `e` laid out with its style in `d`. */
+/** `e` laid out with its style in `d`, sized for the drawing's sheet scale. */
 export function dimensionLayout(d: Drawing, e: DimensionEntity): DimLayout {
-  return layoutDimension(e, dimStyleOf(d, e.dimStyle), altUnitFactor(d.units));
+  return layoutDimension(e, atSheetScale(dimStyleOf(d, e.dimStyle), d.sheetScale), altUnitFactor(d.units));
 }
 
 export function layoutBBox(l: DimLayout): BBox {

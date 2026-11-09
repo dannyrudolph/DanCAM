@@ -211,6 +211,7 @@ export class App {
         this.refresh();
       },
       (anchor) => this.openSnapMenu(anchor),
+      (scale) => this.setSheetScale(scale),
     );
     this.boxes = new InputBoxes(el('canvas-wrap'), {
       units: () => this.drawing.units,
@@ -569,6 +570,13 @@ export class App {
     );
   }
 
+  /** Sizes every dimension for printing at `scale`, as one undo step. */
+  private setSheetScale(scale: number): void {
+    const before = this.drawing.sheetScale;
+    if (scale !== before) this.undo.commit({ label: 'Sheet scale', changes: [{ op: 'sheetScale', before, after: scale }] });
+    this.refresh();
+  }
+
   // ---- UI sync ---------------------------------------------------------------
 
   /** Brings every panel in line with the runner, selection and settings, then redraws. */
@@ -578,6 +586,7 @@ export class App {
       this.zoomExtents();
     }
     this.unitsButton.textContent = this.drawing.units;
+    this.status.showSheetScale(this.drawing.sheetScale);
     document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     this.layers.show(this.drawing);

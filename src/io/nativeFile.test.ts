@@ -108,6 +108,16 @@ describe('native file', () => {
     expect(errorOf(serializeDrawing(d))).toBe('entities[0].tolerance.kind must be none, symmetric, deviation or limits.');
   });
 
+  it('round-trips the sheet scale; a file without one opens at 1:1, and a scale of zero is refused', () => {
+    const d = createDrawing('in');
+    d.sheetScale = 10;
+    expect(reopen(serializeDrawing(d)).sheetScale).toBe(10);
+    const file = JSON.parse(serializeDrawing(d));
+    delete file.sheetScale;
+    expect(reopen(JSON.stringify(file)).sheetScale).toBe(1);
+    expect(errorOf(JSON.stringify({ ...file, sheetScale: 0 }))).toBe('sheetScale must be more than zero.');
+  });
+
   it('round-trips radius, diameter and angular dimensions', () => {
     const d = createDrawing('in');
     const es: Entity[] = [

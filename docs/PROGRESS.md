@@ -272,7 +272,14 @@ points along an edge, then its new angle).
       too; it can't be emptied). Each edit one undo step. Files: optional
       fields, validated, schemaVersion stays 2. Convert units scales an
       override tolerance.
-   b. Sheet scale.
+   b. **Sheet scale (done).** `Drawing.sheetScale` (10 = 10:1, 0.5 =
+      1:2; default 1) divides a style's sheet sizes (text height, arrows,
+      offsets, gap; not tolerances) when a dimension is laid out
+      (`model/sheetScale.atSheetScale`), so a 10:1 detail prints .12"
+      text. Undoable (`sheetScale` change), saved (optional in the file;
+      absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
+      20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
+      cancels). Print/PDF uses it in Phase 6.
    c. Dimension Styles panel.
 7. Dimension grips (line position, text, measured points).
 8. Done-when: a dimensioned reference drawing, checked text by text.

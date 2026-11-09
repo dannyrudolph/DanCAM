@@ -446,6 +446,20 @@ input {
   background: #1d3a57;
 }
 
+.status-scale-input {
+  width: 5em;
+  padding: 1px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+}
+
+.status-scale-input.invalid {
+  border-color: #d9534f;
+}
+
 .status-right select {
   background: var(--panel-2);
   border: 1px solid var(--border);

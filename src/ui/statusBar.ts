@@ -1,6 +1,7 @@
 import { angleDeg } from '../geometry/angle';
 import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
+import { SHEET_SCALES, formatSheetScale, parseSheetScale } from '../model/sheetScale';
 import type { SnapKind } from '../snap/snap';
 import type { ScrollMode } from './input';
 
@@ -50,6 +51,9 @@ export class StatusBar {
   private readonly osnap: HTMLButtonElement;
   private readonly increment: HTMLSelectElement;
   private readonly precision: HTMLSelectElement;
+  private readonly sheetScale: HTMLSelectElement;
+  private readonly customScale: HTMLInputElement;
+  private shownScale = 1;
   private messageUntil = 0;
 
   constructor(
@@ -57,6 +61,8 @@ export class StatusBar {
     private readonly settings: StatusSettings,
     private readonly onSettingsChanged: () => void,
     openSnapMenu: (anchor: DOMRect) => void,
+    /** The drawing's sheet scale was chosen; the app commits it as an undo step. */
+    private readonly onSheetScale: (scale: number) => void,
   ) {
     const span = (cls: string): HTMLElement => {
       const s = document.createElement('span');
@@ -109,8 +115,60 @@ export class StatusBar {
     );
     scroll.dataset.testid = 'scroll-mode';
 
+    // Sheet scale: drawing state, not a browser setting, so it goes to the app rather than `settings`.
+    this.sheetScale = document.createElement('select');
+    this.sheetScale.title = 'Sheet scale: dimension text, arrows and gaps are sized to print at this scale';
+    this.sheetScale.tabIndex = -1;
+    this.sheetScale.dataset.testid = 'sheet-scale';
+    this.sheetScale.addEventListener('change', () => {
+      const v = this.sheetScale.value;
+      this.sheetScale.blur();
+      if (v === 'custom') {
+        this.sheetScale.hidden = true;
+        this.customScale.hidden = false;
+        this.customScale.value = formatSheetScale(this.shownScale);
+        this.customScale.focus();
+        this.customScale.select();
+        return;
+      }
+      this.onSheetScale(Number(v));
+    });
+    this.customScale = document.createElement('input');
+    this.customScale.className = 'status-scale-input';
+    this.customScale.hidden = true;
+    this.customScale.spellcheck = false;
+    this.customScale.dataset.testid = 'sheet-scale-custom';
+    this.customScale.title = 'Type a scale, such as 50:1, 1:2 or 2.5, then Enter; Esc cancels';
+    const closeCustom = (): void => {
+      this.customScale.hidden = true;
+      this.sheetScale.hidden = false;
+      this.showSheetScale(this.shownScale);
+    };
+    this.customScale.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCustom();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        const scale = parseSheetScale(this.customScale.value);
+        if (scale === undefined) {
+          this.customScale.classList.add('invalid');
+          return;
+        }
+        this.customScale.classList.remove('invalid');
+        closeCustom();
+        this.onSheetScale(scale);
+      }
+    });
+    this.customScale.addEventListener('blur', () => {
+      if (!this.customScale.hidden) closeCustom();
+    });
+    this.showSheetScale(1);
+
     const right = span('status-right');
-    right.append(scroll, this.osnap, snapTypes, this.ortho, this.polar, this.increment, this.precision);
+    right.append(this.sheetScale, this.customScale, scroll, this.osnap, snapTypes, this.ortho, this.polar, this.increment, this.precision);
     root.append(this.prompt, this.coords, this.fromBase, right);
     this.refreshToggles();
   }
@@ -131,6 +189,25 @@ export class StatusBar {
     const dp = this.settings.precision;
     this.coords.textContent = p ? formatReadout(p, dp) : '';
     this.fromBase.textContent = p && base ? formatFromBase(base, p, dp) : '';
+  }
+
+  /** Shows the drawing's sheet scale; a scale not in the list gets its own entry. */
+  showSheetScale(scale: number): void {
+    if (scale === this.shownScale && this.sheetScale.options.length > 0) {
+      this.sheetScale.value = String(scale); // after a cancelled Custom…
+      return;
+    }
+    this.shownScale = scale;
+    const scales = SHEET_SCALES.includes(scale) ? SHEET_SCALES : [...SHEET_SCALES, scale].sort((a, b) => a - b);
+    this.sheetScale.replaceChildren(
+      ...[...scales.map((s) => [String(s), `Scale ${formatSheetScale(s)}`]), ['custom', 'Custom…']].map(([v, text]) => {
+        const o = document.createElement('option');
+        o.value = v!;
+        o.textContent = text!;
+        return o;
+      }),
+    );
+    this.sheetScale.value = String(scale);
   }
 
   /** Call after settings change from elsewhere (F3, F8, F10). */

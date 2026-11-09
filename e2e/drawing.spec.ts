@@ -1122,6 +1122,25 @@ test.describe('dimension overrides in the properties panel', () => {
   });
 });
 
+test('the sheet scale is chosen in the status bar or typed as Custom, and Undo takes it back', async ({ page }) => {
+  const scale = page.getByTestId('sheet-scale');
+  await expect(scale).toHaveValue('1');
+  await scale.selectOption('10');
+  await expect(scale).toHaveValue('10');
+  await scale.selectOption('custom');
+  const custom = page.getByTestId('sheet-scale-custom');
+  await expect(custom).toBeFocused();
+  await custom.fill('1:2');
+  await page.keyboard.press('Enter');
+  await expect(scale).toHaveValue('0.5');
+  await expect(scale.locator('option:checked')).toHaveText('Scale 1:2');
+  await page.keyboard.press('Control+z');
+  await expect(scale).toHaveValue('10');
+  await scale.selectOption('custom');
+  await page.keyboard.press('Escape'); // cancels, leaving the scale alone
+  await expect(scale).toHaveValue('10');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

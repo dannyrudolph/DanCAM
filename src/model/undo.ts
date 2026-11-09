@@ -12,7 +12,9 @@ export type Change =
   /** Adds (no `before`), removes (no `after`) or edits one layer, matched by name. */
   | { readonly op: 'layer'; readonly before?: Layer; readonly after?: Layer }
   /** Adds (no `before`), removes (no `after`) or edits one dimension style, matched by name. */
-  | { readonly op: 'dimStyle'; readonly before?: DimStyle; readonly after?: DimStyle };
+  | { readonly op: 'dimStyle'; readonly before?: DimStyle; readonly after?: DimStyle }
+  /** The sheet (print) scale dimensions are sized for. */
+  | { readonly op: 'sheetScale'; readonly before: number; readonly after: number };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -29,7 +31,8 @@ function invert(c: Change): Change {
     case 'modify':
       return { op: 'modify', before: c.after, after: c.before };
     case 'units':
-      return { op: 'units', before: c.after, after: c.before };
+    case 'sheetScale':
+      return { ...c, before: c.after, after: c.before } as Change;
     case 'layer':
       return { op: 'layer', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
     case 'dimStyle':
@@ -56,6 +59,10 @@ function apply(d: Drawing, c: Change): void {
     case 'units':
       if (d.units !== c.before) throw new Error(`units: drawing is ${d.units}, expected ${c.before}`);
       d.units = c.after;
+      return;
+    case 'sheetScale':
+      if (d.sheetScale !== c.before) throw new Error(`sheetScale: drawing is ${d.sheetScale}, expected ${c.before}`);
+      d.sheetScale = c.after;
       return;
     case 'layer':
       applyLayer(d, c.before, c.after);

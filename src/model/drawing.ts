@@ -26,6 +26,8 @@ export type Drawing = {
   readonly entities: Map<EntityId, Entity>;
   /** Named dimension styles; changed only through the undo stack (`dimStyle` changes). */
   readonly dimStyles: Map<string, DimStyle>;
+  /** Print scale (10 = 10:1) dividing dimension sheet sizes; see `sheetScale.ts`. Changed through the undo stack. */
+  sheetScale: number;
   /** Style new dimensions use. A setting like `currentLayer`: saved, not undoable. */
   currentDimStyle: string;
   /**
@@ -48,6 +50,7 @@ export function createDrawing(units: Units): Drawing {
     entities: new Map(),
     dimStyles: new Map([[dimStyle.name, dimStyle]]),
     currentDimStyle: dimStyle.name,
+    sheetScale: 1,
     currentLayer: DEFAULT_LAYER,
     nextId: 1,
   };
