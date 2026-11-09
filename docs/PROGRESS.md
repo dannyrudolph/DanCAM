@@ -644,6 +644,26 @@ for the done-when and as fixtures.
    reason. Tests: a pin with chamfers, corner radii and a bore; a ball end;
    a drill point; a cross hole and a flat left out; faces split in two; an
    axis tilted in space; an inch file.
+   **(done)** `io/step/turnedProfile`: `turnedProfile(model, units)` and
+   `placeProfile(profile, {zeroAt, flip, full})`. Axis: the line the most
+   cylinders/cones/tori (and spheres) lie on, flat faces square to it
+   counting too; pointed along the model's positive direction. Points map
+   to (z, r); each face about the axis gives its generating curve over the
+   extent its boundary reaches (edges sampled along circles and ellipses,
+   so seams give a torus or sphere its full sweep): cylinder → line at R;
+   cone → line from its formula, to the apex when the boundary is one
+   circle; plane square to the axis → kept only when the axis passes
+   inside a loop (odd count: a disk from 0; even: from the innermost loop,
+   a bore), else not round (a flat's end walls); torus/sphere → the arc
+   covering every boundary angle (the circle less its widest gap); a ball
+   cap with one circle runs to the pole away from the rest of the part.
+   Collinear overlapping lines joined, repeated arcs dropped; lines run left
+   to right. Comparisons use the file's declared uncertainty (or TOL).
+   Tests: the pin exactly (10 curves, drill point apex), the tilted pin the
+   same, Z0 right/left, Flip, Full (19 curves, end face joined), the ball
+   end in an inch and an mm drawing, the cross hole and flat left out (4
+   faces), a duplicated face and freeform/unreadable counts, no axis
+   refused.
 3. Import STEP (toolbar, file group): pick a file, lathe mode on, preview
    with Z0 at Right/Left, Flip, Half/Full; Place as one undo step on a new
    layer named after the file; the left-out report. Browser test with a
