@@ -178,7 +178,7 @@ points along an edge, then its new angle).
    toolbar wraps to a second row on narrow windows (at 1024px the extra
    buttons had pushed the page wider than the window).
 
-## Phase 4 (plan approved 2026-11-08): in progress
+## Phase 4 (plan approved 2026-11-08): done 2026-11-09, awaiting the user's review
 
 1. **Formatting kernel (done).** `model/dimFormat`: `roundDecimal` rounds
    the 15-significant-digit decimal of the stored value, halves away from
@@ -307,7 +307,18 @@ points along an edge, then its new angle).
    middle (radius and side). Leader: `tip`, `text` (landing). Each drag is
    one undo step. `textAt` moves, stretches and saves with the dimension
    (optional in the file).
-8. Done-when: a dimensioned reference drawing, checked text by text.
+8. **Done-when (done).** `ui/referenceDrawing` (`/?reference`): a turned
+   pin (.500 long, Ø.125/Ø.188, .010 × 45° chamfer) and its end view at
+   10:1, built with the tools (clicks, picks, typed note) plus overrides,
+   a dual-units style (INCH-DUAL) and the sheet scale through the undo
+   stack. Nine dimensions, every type: .500 [12.7], .200 REF, .0940
+   ±.0005, .014, 45°, Ø.188 +.000/-.001, R.030, 120°, .010 X 45°. Checked
+   in `referenceDrawing.test.ts` (exact texts, .012 text = .12 printed,
+   no text over another or over the part, no dimension line, arc or arrow
+   across another's text, file round-trip) and in the browser (each text
+   clicked and read from the properties panel). Placing them found that
+   an angular dimension with its arrows outside a short arc reaches back
+   across nearby text; the reference places that one where the arrows fit.
 
 Associativity stays Phase 5; dimensions store their measured points (and
 a reference to the geometry, unused until Phase 5).

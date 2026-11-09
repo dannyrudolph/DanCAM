@@ -1359,3 +1359,36 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
     await expectProps(1, 0.1, /^Line /, line(1, 0.1875, 1, 0));
   });
 });
+
+test.describe('Phase 4 done-when: the reference drawing, checked text by text', () => {
+  test('a turned pin at 10:1 with every dimension type, overrides, a dual style and a leader reads exactly', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/?reference');
+    await expect(prop(page, 'entity-count')).toHaveText('19');
+    await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
+    await expect(page.locator('#dimstyles li[data-dim-style="INCH-DUAL"] .layer-count')).toHaveText('1');
+    await page.getByTestId('zoom-extents').click();
+    // Extents and text centers from the layout (src/ui/referenceDrawing.test.ts builds the same drawing).
+    const at = await extentsMapper(page, { minX: -0.5707068245125347, maxX: 0.6365194986072423, minY: -0.14500000000000002, maxY: 0.20600000000000002 });
+    const texts: [string, number, number][] = [
+      ['.500 [12.7]', 0.25, -0.0375],
+      ['.200 REF', 0.1, 0.1315],
+      ['.0940 ±.0005', 0.5875, 0.047],
+      ['.014', 0.0245, 0.1065],
+      ['45°', 0.0747, 0.0893],
+      ['Ø.188 +.000/-.001', -0.5245, -0.13],
+      ['R.030', -0.1395, -0.12],
+      ['120°', -0.3, 0.15],
+      ['.010 X 45°', -0.1374, 0.2],
+    ];
+    for (const [text, x, y] of texts) {
+      await page.keyboard.press('Escape');
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+      await expect(page.locator('#properties h2'), text).toHaveText(/^Dimension /);
+      await expect(prop(page, 'Text'), text).toHaveText(text);
+    }
+    expect(errors).toEqual([]);
+  });
+});
