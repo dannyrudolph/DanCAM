@@ -145,7 +145,7 @@ test('the demo drawing loads and renders without errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?demo');
-  await expect(prop(page, 'entity-count')).toHaveText('22');
+  await expect(prop(page, 'entity-count')).toHaveText('25');
   await page.mouse.move(400, 300);
   await page.mouse.wheel(0, -2000); // deep zoom
   await page.waitForTimeout(100);
@@ -157,9 +157,9 @@ test('circles, arcs, xlines and dimensions in the demo can be picked and show th
   await page.getByTestId('zoom-extents').click();
   const box = await page.locator('#canvas').boundingBox();
   if (!box) throw new Error('canvas has no box');
-  // Demo extents (xlines excluded): X from the end view's left edge to the right-face dimension's
+  // Demo extents (xlines excluded): X from the end view's diameter text to the right-face dimension's
   // text, Y from the aligned dimension's arrows to the overall-length extension lines.
-  const toScreen = await extentsMapper(page, { minX: -0.8505, maxX: 2.462618384401114, minY: -0.5037935372909058, maxY: 0.775 });
+  const toScreen = await extentsMapper(page, { minX: -1.637764623955432, maxX: 2.462618384401114, minY: -0.5037935372909058, maxY: 0.775 });
   const at = (deg: number, r: number) => toScreen(-0.6 + r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180));
 
   let p = at(45, 0.2505); // outside-diameter circle

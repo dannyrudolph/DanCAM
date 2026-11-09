@@ -64,6 +64,22 @@ export function loadDemo(d: Drawing): void {
   add({ kind: 'dimension', layer: '0', dimStyle, type: 'linear', dir: h, p1: { x: 0, y: 0.125 }, p2: { x: 0.5, y: 0.25 }, at: { x: 0.25, y: 0.45 } });
   add({ kind: 'dimension', layer: '0', dimStyle, type: 'linear', dir: vert, p1: { x: 2, y: 0 }, p2: { x: 2, y: 0.1875 }, at: { x: 2.3, y: 0.1 } });
   add({ kind: 'dimension', layer: '0', dimStyle, type: 'aligned', p1: { x: 0.5, y: 0.25 }, p2: { x: 1.5, y: 0.1875 }, at: { x: 1, y: -0.35 } });
+  // End view: the outside diameter on a leader, the bore's radius, and the bolt arc's included angle.
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'diameter', center: endView, radius: 0.2505, at: { x: -1, y: -0.4 } });
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'radius', center: endView, radius: 0.0625, at: { x: -0.35, y: -0.43 } });
+  const [c30, s30] = [Math.cos(Math.PI / 6), 0.5];
+  add({
+    kind: 'dimension',
+    layer: '0',
+    dimStyle,
+    type: 'angular',
+    vertex: endView,
+    p1: { x: -0.6 + 0.15 * c30, y: 0.075 },
+    p2: { x: -0.6 - 0.15 * c30, y: 0.075 },
+    dir1: { x: c30, y: s30 },
+    dir2: { x: -c30, y: s30 },
+    at: { x: -0.6, y: 0.6 },
+  });
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

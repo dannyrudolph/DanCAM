@@ -194,6 +194,16 @@ function drawDimension(ctx: CanvasRenderingContext2D, v: Viewport, l: DimLayout,
     ctx.lineTo(seg[1].x, seg[1].y);
   }
   ctx.stroke();
+  for (const arc of l.arcs) {
+    const pieces = arcScreenPieces(worldToScreen(v, arc.center), arc.radius * v.scale, degToRad(arc.startDeg), degToRad(arcSweepDeg(arc)), clip, ARC_ERROR_PX);
+    for (const piece of pieces) {
+      ctx.beginPath();
+      const [first, ...rest] = piece.points;
+      ctx.moveTo(first!.x, first!.y);
+      for (const p of rest) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+  }
   ctx.fillStyle = color;
   for (const t of l.arrows) {
     const [p, q, r] = t.map((w) => worldToScreen(v, w)) as [Vec2, Vec2, Vec2];

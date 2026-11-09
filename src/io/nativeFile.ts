@@ -185,18 +185,29 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     kind: 'dimension' as const,
     ...base,
     dimStyle: str(o.dimStyle, `${at}.dimStyle`),
-    p1: vec(o.p1, `${at}.p1`),
-    p2: vec(o.p2, `${at}.p2`),
     at: vec(o.at, `${at}.at`),
     ...(o.refs === undefined ? {} : { refs: arr(o.refs, `${at}.refs`).map((r, i) => str(r, `${at}.refs[${i}]`)) }),
   };
+  const ends = (): { p1: Vec2; p2: Vec2 } => ({ p1: vec(o.p1, `${at}.p1`), p2: vec(o.p2, `${at}.p2`) });
   switch (o.type) {
     case 'linear':
-      return { ...common, type: 'linear', dir: unitVec(o.dir, `${at}.dir`) };
+      return { ...common, type: 'linear', ...ends(), dir: unitVec(o.dir, `${at}.dir`) };
     case 'aligned':
-      return { ...common, type: 'aligned' };
+      return { ...common, type: 'aligned', ...ends() };
+    case 'radius':
+    case 'diameter':
+      return { ...common, type: o.type, center: vec(o.center, `${at}.center`), radius: radius(o.radius, `${at}.radius`) };
+    case 'angular':
+      return {
+        ...common,
+        type: 'angular',
+        vertex: vec(o.vertex, `${at}.vertex`),
+        ...ends(),
+        dir1: unitVec(o.dir1, `${at}.dir1`),
+        dir2: unitVec(o.dir2, `${at}.dir2`),
+      };
     default:
-      throw new FileError(`${at}.type must be "linear" or "aligned".`);
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter or angular.`);
   }
 }
 

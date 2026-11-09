@@ -36,7 +36,7 @@ describe('native file', () => {
     expect(back.units).toBe('mm');
     expect([...back.layers.values()]).toEqual([...d.layers.values()]);
     expect([...back.entities.values()]).toEqual([...d.entities.values()]);
-    expect([...back.entities.values()].filter((e) => e.kind === 'dimension')).toHaveLength(4);
+    expect([...back.entities.values()].filter((e) => e.kind === 'dimension')).toHaveLength(7);
     expect([...back.dimStyles.values()]).toEqual([...d.dimStyles.values()]);
     expect(back.currentDimStyle).toBe('MM-2PL');
     expect(back.nextId).toBe(d.nextId);
@@ -87,6 +87,20 @@ describe('native file', () => {
     expect(back.dimStyles.get('TOL')).toEqual(style);
   });
 
+  it('round-trips radius, diameter and angular dimensions', () => {
+    const d = createDrawing('in');
+    const es: Entity[] = [
+      { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: { x: 0.1, y: 0.2 }, radius: 0.015, at: { x: 1, y: 1 }, refs: ['e9'] },
+      { kind: 'dimension', id: 'e2', layer: '0', dimStyle: 'INCH-3PL', type: 'diameter', center: { x: 0, y: 0 }, radius: 0.0625, at: { x: 0, y: 0 } },
+      { kind: 'dimension', id: 'e3', layer: '0', dimStyle: 'INCH-3PL', type: 'angular', vertex: { x: 0, y: 0 }, p1: { x: 1, y: 0 }, p2: { x: 0, y: 0 }, dir1: { x: 1, y: 0 }, dir2: { x: 0.6, y: 0.8 }, at: { x: 2, y: 1 } },
+    ];
+    for (const e of es) d.entities.set(e.id, e);
+    expect([...reopen(serializeDrawing(d)).entities.values()]).toEqual(es);
+    const bad = { ...es[0], radius: 0 };
+    d.entities.set('e1', bad as Entity);
+    expect(errorOf(serializeDrawing(d))).toBe('entities[0].radius must be more than zero.');
+  });
+
   it('refuses dimensions and styles it cannot trust', () => {
     const v2 = (over: Record<string, unknown>) => {
       const file = JSON.parse(serializeDrawing(createDrawing('in')));
@@ -96,7 +110,7 @@ describe('native file', () => {
     expect(reopen(v2({ entities: [dimension] })).entities.get('e1')).toEqual(dimension);
     expect(errorOf(v2({ entities: [{ ...dimension, dimStyle: 'NOPE' }] }))).toBe('entities[0]: dimension style "NOPE" is not defined.');
     expect(errorOf(v2({ entities: [{ ...dimension, dir: { x: 2, y: 0 } }] }))).toBe('entities[0].dir must be a unit vector.');
-    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be "linear" or "aligned".');
+    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be linear, aligned, radius, diameter or angular.');
     const style = defaultDimStyle('in');
     expect(errorOf(v2({ dimStyles: [{ ...style, precision: 9 }] }))).toBe('dimStyles[0].precision must be a whole number from 0 to 8.');
     expect(errorOf(v2({ dimStyles: [{ ...style, textHeight: 0 }] }))).toBe('dimStyles[0].textHeight must be more than zero.');

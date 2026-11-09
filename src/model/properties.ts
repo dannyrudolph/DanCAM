@@ -12,17 +12,28 @@ export type Row = { label: string; value: number | string; unit?: string };
 export function rowsFor(d: Drawing, e: Entity): Row[] {
   if (e.kind === 'dimension') {
     const l = dimensionLayout(d, e);
-    return [
+    const head: Row[] = [
       { label: 'Layer', value: e.layer },
       { label: 'Dim style', value: e.dimStyle },
-      { label: 'Type', value: e.type === 'linear' ? 'Linear' : 'Aligned' },
+      { label: 'Type', value: DIM_TYPE_LABEL[e.type] },
       { label: 'Text', value: flatText(l.text) },
-      { label: 'Measured', value: l.value },
-      { label: 'Point 1 X', value: e.p1.x },
-      { label: 'Point 1 Y', value: e.p1.y },
-      { label: 'Point 2 X', value: e.p2.x },
-      { label: 'Point 2 Y', value: e.p2.y },
+      { label: 'Measured', value: l.value, ...(e.type === 'angular' && { unit: '°' }) },
     ];
+    switch (e.type) {
+      case 'radius':
+      case 'diameter':
+        return [...head, { label: 'Center X', value: e.center.x }, { label: 'Center Y', value: e.center.y }];
+      case 'angular':
+        return [...head, { label: 'Vertex X', value: e.vertex.x }, { label: 'Vertex Y', value: e.vertex.y }];
+      default:
+        return [
+          ...head,
+          { label: 'Point 1 X', value: e.p1.x },
+          { label: 'Point 1 Y', value: e.p1.y },
+          { label: 'Point 2 X', value: e.p2.x },
+          { label: 'Point 2 Y', value: e.p2.y },
+        ];
+    }
   }
   const style = effectiveStyle(d, e);
   const common: Row[] = [
@@ -84,6 +95,14 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       ];
   }
 }
+
+const DIM_TYPE_LABEL: Record<Extract<Entity, { kind: 'dimension' }>['type'], string> = {
+  linear: 'Linear',
+  aligned: 'Aligned',
+  radius: 'Radius',
+  diameter: 'Diameter',
+  angular: 'Angular',
+};
 
 export const KIND_LABEL: Record<Entity['kind'], string> = {
   point: 'Point',

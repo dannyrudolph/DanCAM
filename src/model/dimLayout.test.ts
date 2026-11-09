@@ -155,3 +155,80 @@ describe('picking a layout', () => {
     expect(layoutTouchesBox(l, { minX: 0.5, maxX: 0.6, minY: 0.3, maxY: 0.4 })).toBe(false);
   });
 });
+
+describe('layoutDimension, radius and diameter', () => {
+  const radial = (type: 'radius' | 'diameter', radius: number, at: Vec2): DimensionEntity => ({ kind: 'dimension', id: 'd', layer: '0', dimStyle: INCH.name, type, center: v(0, 0), radius, at });
+
+  it('outside the circle: a leader along the line through the center, arrow on the circle pointing in, a shoulder to the text', () => {
+    const l = layout(radial('radius', 0.5, v(1, 1)));
+    expect(l.value).toBe(0.5);
+    expect(l.text.main).toBe('R.500');
+    const tip = v(0.5 * Math.SQRT1_2, 0.5 * Math.SQRT1_2);
+    expect(r(l.lines)).toEqual(r([[tip, v(1, 1)], [v(1, 1), v(1.12, 1)]]));
+    expect(r(l.arrows[0]![0])).toEqual(r(tip));
+    expect(r(l.arrows[0]![1].x)).toBeGreaterThan(r(tip.x) as number); // its tail is outside the circle
+    expect(r(l.runs[0]!.at)).toEqual(r(v(1.12 + 0.0625, 0.94)));
+  });
+
+  it('with the text to the left, the shoulder and text go left', () => {
+    const l = layout(radial('radius', 0.5, v(-1, 1)));
+    expect(r(l.lines[1])).toEqual(r([v(-1, 1), v(-1.12, 1)]));
+    expect(r(l.textBox.maxX)).toBe(r(-1.12 - 0.0625));
+  });
+
+  it('a diameter with its text inside runs the whole way across, arrows out at both ends, broken by the text', () => {
+    const l = layout(radial('diameter', 1, v(0, 0)));
+    expect(l.value).toBe(2);
+    expect(l.text.main).toBe('Ø2.000');
+    const half = textWidth('Ø2.000', 0.12) / 2 + 0.0625;
+    expect(r(l.lines)).toEqual(r([[v(-1, 0), v(-half, 0)], [v(half, 0), v(1, 0)]]));
+    expect(r(l.arrows.map((a) => a[0]))).toEqual(r([v(1, 0), v(-1, 0)]));
+  });
+
+  it('a radius inside runs from the center to the circle', () => {
+    const l = layout(radial('radius', 1, v(0.5, 0)));
+    const half = textWidth('R1.000', 0.12) / 2 + 0.0625;
+    expect(r(l.lines)).toEqual(r([[v(0, 0), v(0.5 - half, 0)], [v(0.5 + half, 0), v(1, 0)]]));
+    expect(l.arrows).toHaveLength(1);
+  });
+});
+
+describe('layoutDimension, angular', () => {
+  const angular = (at: Vec2, dir2 = V, p2 = v(0, 1)): DimensionEntity => ({ kind: 'dimension', id: 'd', layer: '0', dimStyle: INCH.name, type: 'angular', vertex: v(0, 0), p1: v(1, 0), p2, dir1: H, dir2, at });
+
+  it('measures the angle between the arms on the side of the placement point, with the arc broken by the text', () => {
+    const l = layout(angular(v(Math.SQRT2, Math.SQRT2)));
+    expect(l.value).toBe(90);
+    expect(l.text.main).toBe('90°');
+    expect(l.fit).toBe('inside');
+    // Extension lines run from .0625 past each line's end to .125 past the arc (radius 2).
+    expect(r(l.lines)).toEqual(r([[v(1.0625, 0), v(2.125, 0)], [v(0, 1.0625), v(0, 2.125)]]));
+    // Upright text crossed at 45°: its height (.12 + two .0625 gaps) governs, so √2 × .1225 of arc on radius 2.
+    const gapDeg = ((0.1225 * Math.SQRT2) / 2) * (180 / Math.PI);
+    expect(l.arcs.map((a) => [r(a.radius), r(a.startDeg), r(a.endDeg)])).toEqual([
+      [2, 0, r(45 - gapDeg)],
+      [2, r(45 + gapDeg), 90],
+    ]);
+    expect(r(l.arrows.map((a) => a[0]))).toEqual(r([v(2, 0), v(0, 2)]));
+  });
+
+  it('on the far side it reads the reflex angle', () => {
+    const l = layout(angular(v(-1, -1)));
+    expect(l.value).toBe(270);
+    expect(l.arcs[0]!.startDeg).toBe(90);
+  });
+
+  it('a small angle close in puts the arrows and text outside the arc', () => {
+    const [c, s] = [Math.cos(Math.PI / 36), Math.sin(Math.PI / 36)]; // 5°
+    const l = layout(angular(v(0.3, 0.01), v(c, s), v(c, s)));
+    expect(l.value).toBeCloseTo(5, 12);
+    expect(l.fit).toBe('outside');
+    expect(l.arcs).toHaveLength(1);
+  });
+
+  it('text upright in D°M\'S when the style asks', () => {
+    const style: DimStyle = { ...INCH, angleFormat: 'dms', anglePrecision: 1 };
+    const [c, s] = [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6)]; // 30°
+    expect(layout(angular(v(2, 0.5), v(c, s), v(c, s)), style).text.main).toBe("30°0'");
+  });
+});

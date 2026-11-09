@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { measuredValue } from '../model/dimLayout';
 import type { DimensionEntity } from '../model/entity';
-import { createAlignedDimTool, createLinearDimTool, linearDirFor } from './dimTools';
+import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLinearDimTool, createRadiusDimTool, linearDirFor } from './dimTools';
 import { setup } from './toolHarness';
 
 const v = (x: number, y: number) => ({ x, y });
@@ -109,5 +109,96 @@ describe('Aligned dimension tool', () => {
     t.click(-0.8, 0.6);
     expect(dims(t)[0]).toMatchObject({ type: 'aligned', p1: v(0, 0), p2: v(3, 4), at: v(-0.8, 0.6) });
     expect(measuredValue(dims(t)[0]!)).toBe(5);
+  });
+});
+
+describe('Radius and Diameter tools', () => {
+  it('Radius: pick an arc, then where the text goes; it keeps the arc\'s exact center and radius', () => {
+    const t = setup();
+    t.add({ kind: 'arc', id: 'A', layer: '0', center: v(0.1, 0.2), radius: 0.015, startDeg: 0, endDeg: 90 });
+    t.runner.start(createRadiusDimTool());
+    expect(t.runner.request?.prompt).toBe('Radius: pick an arc or circle');
+    t.pick('A', 0.115, 0.2);
+    expect(t.preview(v(0.3, 0.4))).toMatchObject([{ type: 'radius', center: v(0.1, 0.2), radius: 0.015 }]);
+    t.click(0.3, 0.4);
+    expect(dims(t)).toEqual([{ kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: v(0.1, 0.2), radius: 0.015, at: v(0.3, 0.4), refs: ['A'] }]);
+    expect(t.runner.request?.prompt).toBe('Radius: pick an arc or circle');
+  });
+
+  it('Diameter on a circle reads twice the radius', () => {
+    const t = setup();
+    t.add({ kind: 'circle', id: 'C', layer: '0', center: v(0, 0), radius: 0.0625 });
+    t.runner.start(createDiameterDimTool());
+    t.pick('C', 0.0625, 0);
+    t.click(0.3, 0.3);
+    expect(dims(t)[0]).toMatchObject({ type: 'diameter', radius: 0.0625 });
+    expect(measuredValue(dims(t)[0]!)).toBe(0.125);
+  });
+});
+
+describe('Angular tool', () => {
+  const lines = (t: ReturnType<typeof setup>) => {
+    t.add({ kind: 'line', id: 'H', layer: '0', start: v(0, 0), end: v(2, 0) });
+    t.add({ kind: 'line', id: 'D', layer: '0', start: v(0, 0), end: v(1, 1) });
+  };
+
+  it('two lines: the angle in the quadrant the cursor is in', () => {
+    const t = setup();
+    lines(t);
+    t.runner.start(createAngularDimTool());
+    t.pick('H', 1, 0);
+    t.pick('D', 0.5, 0.5);
+    t.click(1.5, 0.3);
+    expect(measuredValue(dims(t)[0]!)).toBeCloseTo(45, 12);
+    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), p1: v(2, 0), p2: v(1, 1), dir1: H, refs: ['H', 'D'] });
+    t.pick('H', 1, 0);
+    t.pick('D', 0.5, 0.5);
+    t.click(-1, 0.3); // left of the vertex: between -X and the 45° line
+    expect(measuredValue(dims(t)[1]!)).toBeCloseTo(135, 12);
+    // The horizontal line doesn't reach left of the vertex: its extension line starts there.
+    expect(dims(t)[1]).toMatchObject({ p1: v(0, 0), dir1: v(-1, 0) });
+  });
+
+  it('refuses parallel lines', () => {
+    const t = setup();
+    t.add({ kind: 'line', id: 'A', layer: '0', start: v(0, 0), end: v(1, 0) });
+    t.add({ kind: 'line', id: 'B', layer: '0', start: v(0, 1), end: v(1, 1) });
+    t.runner.start(createAngularDimTool());
+    t.pick('A', 0.5, 0);
+    t.pick('B', 0.5, 1);
+    expect(t.messages).toEqual(['Those lines are parallel; there is no angle between them.']);
+    expect(dims(t)).toEqual([]);
+  });
+
+  it('an arc: its included angle, or the rest of the turn when placed on the other side', () => {
+    const t = setup();
+    t.add({ kind: 'arc', id: 'A', layer: '0', center: v(0, 0), radius: 1, startDeg: 30, endDeg: 150 });
+    const tool = createAngularDimTool();
+    t.runner.start(tool);
+    t.option('method:arc');
+    t.pick('A', 0, 1);
+    t.click(0, 1.3);
+    t.pick('A', 0, 1);
+    t.click(0, -1.3);
+    const [inside, other] = dims(t).map(measuredValue);
+    expect(inside).toBeCloseTo(120, 12); // the arc's angles go through cos/sin and back: a few ULPs, far below display
+    expect(other).toBeCloseTo(240, 12);
+    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), refs: ['A'] });
+  });
+
+  it('a vertex and two points; the far side reads the reflex angle; a side point on the vertex is refused', () => {
+    const t = setup();
+    t.runner.start(createAngularDimTool());
+    t.option('method:vertex');
+    t.click(0, 0);
+    t.click(1, 0);
+    t.click(0, 1);
+    t.click(-1, -1);
+    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), p1: v(1, 0), p2: v(0, 1), dir1: H, dir2: V });
+    expect(measuredValue(dims(t)[0]!)).toBe(270);
+    t.click(0, 0);
+    t.click(0, 0);
+    t.click(1, 1);
+    expect(t.messages).toEqual(['A side point is on the vertex; there is no angle to measure.']);
   });
 });

@@ -61,20 +61,59 @@ export type RayEntity = EntityBase & {
 
 /**
  * A dimension: a readout of the points it measures, never an input (CAD-1).
- * `p1` and `p2` are the measured points; the dimension line passes through
- * `at`. A linear dimension measures along `dir` (a unit vector: (1, 0)
- * horizontal, (0, 1) vertical, other angles after a rotate); an aligned one
- * along p1 → p2. `refs` names the measured geometry, unused until
- * associativity (Phase 5). The line style is ignored: dimensions draw thin.
+ * `at` places it: a point on the dimension line or arc, or where the text
+ * goes for radius and diameter. `refs` names the measured geometry, unused
+ * until associativity (Phase 5). The line style is ignored: dimensions
+ * draw thin. By `type`:
+ * - `linear`: the distance from `p1` to `p2` along `dir` (a unit vector:
+ *   (1, 0) horizontal, (0, 1) vertical, other angles after a rotate).
+ * - `aligned`: the true distance from `p1` to `p2`.
+ * - `radius`, `diameter`: of the circle at `center` with `radius`.
+ * - `angular`: the angle at `vertex` between the arms along the unit
+ *   vectors `dir1` and `dir2`, on the side where `at` is (so it can read
+ *   the reflex angle). `p1` and `p2` are where each arm's extension line
+ *   starts (the end of the measured geometry; the vertex when there is none).
  */
 export type DimensionEntity = EntityBase & {
   readonly kind: 'dimension';
   readonly dimStyle: string;
-  readonly p1: Vec2;
-  readonly p2: Vec2;
   readonly at: Vec2;
   readonly refs?: readonly EntityId[];
-} & ({ readonly type: 'linear'; readonly dir: Vec2 } | { readonly type: 'aligned' });
+} & (
+    | { readonly type: 'linear'; readonly p1: Vec2; readonly p2: Vec2; readonly dir: Vec2 }
+    | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
+    | { readonly type: 'radius' | 'diameter'; readonly center: Vec2; readonly radius: number }
+    | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
+  );
+
+/** A dimension's defining points: what it measures, and `at`. */
+export function dimensionPoints(e: DimensionEntity): Vec2[] {
+  switch (e.type) {
+    case 'linear':
+    case 'aligned':
+      return [e.p1, e.p2, e.at];
+    case 'radius':
+    case 'diameter':
+      return [e.center, e.at];
+    case 'angular':
+      return [e.vertex, e.p1, e.p2, e.at];
+  }
+}
+
+/** The dimension with each defining point passed through `f`; directions and radius unchanged. */
+export function mapDimensionPoints(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity {
+  const at = f(e.at);
+  switch (e.type) {
+    case 'linear':
+    case 'aligned':
+      return { ...e, at, p1: f(e.p1), p2: f(e.p2) };
+    case 'radius':
+    case 'diameter':
+      return { ...e, at, center: f(e.center) };
+    case 'angular':
+      return { ...e, at, vertex: f(e.vertex), p1: f(e.p1), p2: f(e.p2) };
+  }
+}
 
 export type Entity = PointEntity | LineEntity | CircleEntity | ArcEntity | XlineEntity | RayEntity | DimensionEntity;
 
@@ -100,7 +139,7 @@ export function entityBBox(e: Entity): BBox {
     case 'ray':
       return EMPTY_BBOX;
     case 'dimension':
-      return fromPoints([e.p1, e.p2, e.at]);
+      return fromPoints(dimensionPoints(e));
   }
 }
 
@@ -120,8 +159,18 @@ export function transformEntity(e: Entity, t: Transform): Entity {
     case 'ray':
       return { ...e, base: p(e.base), dir: transformDir(t, e.dir) };
     case 'dimension': {
-      const pts = { p1: p(e.p1), p2: p(e.p2), at: p(e.at) };
-      return e.type === 'linear' ? { ...e, ...pts, dir: transformDir(t, e.dir) } : { ...e, ...pts };
+      const m = mapDimensionPoints(e, p);
+      switch (m.type) {
+        case 'linear':
+          return { ...m, dir: transformDir(t, m.dir) };
+        case 'radius':
+        case 'diameter':
+          return { ...m, radius: transformLength(t, m.radius) };
+        case 'angular':
+          return { ...m, dir1: transformDir(t, m.dir1), dir2: transformDir(t, m.dir2) };
+        default:
+          return m;
+      }
     }
   }
 }
@@ -146,8 +195,10 @@ export function scaleEntity(e: Entity, f: (length: number) => number): Entity {
     case 'xline':
     case 'ray':
       return { ...e, base: p(e.base) };
-    case 'dimension':
-      return { ...e, p1: p(e.p1), p2: p(e.p2), at: p(e.at) };
+    case 'dimension': {
+      const m = mapDimensionPoints(e, p);
+      return m.type === 'radius' || m.type === 'diameter' ? { ...m, radius: f(m.radius) } : m;
+    }
   }
 }
 

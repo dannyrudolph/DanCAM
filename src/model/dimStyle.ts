@@ -85,6 +85,15 @@ export function lengthFormat(style: DimStyle, altFactor: number): DimFormat {
   };
 }
 
+/**
+ * The format for an angle measured with `style`: its angle precision and
+ * format (decimal degrees or D°M'S). Tolerances and dual units are lengths,
+ * so they don't apply.
+ */
+export function angleFormat(style: DimStyle): DimFormat {
+  return { precision: style.anglePrecision, zeros: style.zeros, tolerance: { kind: 'none' }, tolPrecision: style.tolPrecision, angle: style.angleFormat };
+}
+
 /** The style with every size and tolerance passed through `f`, for converting units. */
 export function scaleDimStyle(s: DimStyle, f: (length: number) => number): DimStyle {
   const t = s.tolerance;

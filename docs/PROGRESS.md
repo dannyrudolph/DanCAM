@@ -220,7 +220,26 @@ points along an edge, then its new angle).
    Same two points refused; Enter at placement drops it. Toolbar: a
    Dimensions group before Inquiry. Shortcuts chosen by Claude, not yet
    confirmed by the user.
-4. Radius, Diameter, Angular (two lines / arc / vertex + 2 points).
+4. **Radius (Shift+R), Diameter (Shift+O), Angular (Shift+G) (done).**
+   Entity: `p1`/`p2` moved into the types that use them; radius and
+   diameter store `center` + `radius` exactly (copied from the arc or
+   circle, never rebuilt from a point); angular stores `vertex`, unit arm
+   directions `dir1`/`dir2`, and `p1`/`p2` where each extension line
+   starts. `dimensionPoints` / `mapDimensionPoints` drive bbox, transform
+   and Stretch. Layout: radial text outside the circle on a leader aimed
+   at the center, arrow on the circle, horizontal shoulder (left or right
+   by side); inside on the radius / full diameter line, broken by the
+   text. Angular: `angularSector` = the side of the arms where `at` is
+   (reflex on the far side); arc through `at` broken by upright text, the
+   same four fit cases, extension lines past each arm's geometry; text
+   from `angleFormat` (anglePrecision, decimal or D°M'S; no tolerance or
+   dual). Prefixes R and Ø. Tools: Radius/Diameter pick an arc or circle,
+   then the text point; Angular methods Two lines (quadrant by cursor,
+   `angleBetweenLines`; parallel refused), Arc, Vertex + 2 points; all
+   previewed, sticky, refs kept. Toolbar icons; demo end view has Ø, R and
+   120° dims. Arc-derived angles carry a few ULPs (120.00000000000003)
+   from cos/sin → atan2; below any display precision. Shortcuts chosen by
+   Claude, not yet confirmed.
 5. Leader / note (text typed in a box at the cursor).
 6. Dimension Styles panel; per-dimension precision / tolerance / text
    overrides; Sheet scale setting (status bar) multiplying sheet sizes.

@@ -3,7 +3,7 @@ import { curveTouchesBox } from '../geometry/curve';
 import { stretchCurve } from '../geometry/stretch';
 import { type Vec2, sub } from '../geometry/vec';
 import type { Drawing } from '../model/drawing';
-import { type Entity, entityCurve, entityFromCurve } from '../model/entity';
+import { type Entity, dimensionPoints, entityCurve, entityFromCurve, mapDimensionPoints } from '../model/entity';
 import { point } from './editTools';
 import type { ToolDef, ToolGen } from './tool';
 import { PREVIEW_ID } from './toolSteps';
@@ -23,14 +23,14 @@ function windowLines(b: BBox, layer: string): Entity[] {
 
 /**
  * The entity stretched by `delta`, or undefined when nothing of it is inside
- * the window. A dimension's measured points and dimension-line point move
- * one by one, as in AutoCAD.
+ * the window. A dimension's defining points (measured points, center,
+ * vertex, placement) move one by one, as in AutoCAD.
  */
 function stretched(e: Entity, box: BBox, delta: Vec2): Entity | undefined {
   const inside = (p: Vec2): boolean => p.x >= box.minX && p.x <= box.maxX && p.y >= box.minY && p.y <= box.maxY;
   const mv = (p: Vec2): Vec2 => (inside(p) ? { x: p.x + delta.x, y: p.y + delta.y } : p);
   if (e.kind === 'point') return inside(e.at) ? { ...e, at: mv(e.at) } : undefined;
-  if (e.kind === 'dimension') return [e.p1, e.p2, e.at].some(inside) ? { ...e, p1: mv(e.p1), p2: mv(e.p2), at: mv(e.at) } : undefined;
+  if (e.kind === 'dimension') return dimensionPoints(e).some(inside) ? mapDimensionPoints(e, mv) : undefined;
   const c = entityCurve(e)!;
   const s = stretchCurve(c, box, delta);
   return s && entityFromCurve(e, s);
