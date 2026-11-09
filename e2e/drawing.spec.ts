@@ -1689,3 +1689,38 @@ test.describe('Phase 4 done-when: the reference drawing, checked text by text', 
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by text', () => {
+  test('lathe mode with Ø on: symmetric diameters, Z ordinates on one baseline, an X ordinate as a diameter and the notes read exactly', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/?lathe');
+    await expect(prop(page, 'entity-count')).toHaveText('23');
+    await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
+    await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('zoom-extents').click();
+    // Extents and text centers from the layout (src/ui/latheReference.test.ts builds the same drawing).
+    const at = await extentsMapper(page, { minX: -0.45649999999999996, maxX: 0.8517764623955432, minY: -0.1065, maxY: 0.14975000000000002 });
+    const texts: [string, number, number][] = [
+      ['Ø.125', 0.14, 0.03125],
+      ['Ø.188', 0.51, 0.047],
+      ['Ø.156', 0.829, 0.078],
+      ['.000', 0, 0.14375],
+      ['.250', 0.25, 0.14375],
+      ['.400', 0.4, 0.14375],
+      ['.600', 0.6, 0.14375],
+      ['.750', 0.75, 0.14375],
+      ['Ø.030 THRU', 0.5665, -0.05],
+      ['.010 X 45°', -0.1574, 0.09],
+    ];
+    for (const [text, x, y] of texts) {
+      await page.keyboard.press('Escape');
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+      await expect(page.locator('#properties h2'), text).toHaveText(/^Dimension /);
+      await expect(prop(page, 'Text'), text).toHaveText(text);
+    }
+    expect(errors).toEqual([]);
+  });
+});

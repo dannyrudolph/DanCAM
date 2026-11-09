@@ -435,6 +435,18 @@ deferred (ray to Phase 2, autosave to Phase 6).
    (a second mark on one refused) or Two lines; sticky; one undo step
    each. They follow their geometry and are deleted with it.
 7. Done-when: a real lathe part, with the user's feedback along the way.
+   **(built; awaiting the user's feedback)** `?lathe` loads
+   `ui/latheReference`: a turned pin, upper half on the axis, at 10:1,
+   Lathe and Ø on, built through the real tools with snapped (anchored)
+   points: .010 × 45° chamfer, Ø.125 nose, Ø.188 body, Ø.156 neck, Ø.030
+   cross hole at Z .400, end view. Symmetric Ø.125 and Ø.188, an X
+   ordinate Ø.156, Z ordinates .000/.250/.400/.600/.750 on one baseline,
+   a centerline through the hole, a center mark on the end view, two
+   leaders. Tests (`latheReference.test.ts`): texts, one baseline, no
+   overlaps or crossings, stretching the back .05 makes .650/.800 while
+   the diameters stay (one undo restores), file round trip; e2e "Phase 5
+   done-when" clicks each text. The hole ordinate (.400) is typed, so it
+   doesn't follow the hole.
 
 Decisions (user, 2026-11-09): no reference part needed yet (feedback as
 we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
