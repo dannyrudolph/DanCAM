@@ -343,6 +343,32 @@ circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
 deferred (ray to Phase 2, autosave to Phase 6).
 
+## Phase 5 (plan approved 2026-11-09): in progress
+
+1. Lathe mode and diameter entry: a per-drawing Lathe toggle (saved)
+   labels the axes Z (horizontal) and X (vertical) and supplies a
+   centerline at Y = 0; Diameter shows and takes X as Ø (stored values
+   unchanged; halving is exact) in the input boxes, status readout,
+   properties panel and inquiry results.
+2. Associativity: snaps report what they hit (entity + feature);
+   dimensions anchor each measured point (replaces `refs`; file v2 → v3);
+   a geometry change re-measures its dimensions inside the same
+   transaction, so one undo restores both.
+3. Symmetric diameter (Shift+M): the lathe centerline (or a picked one),
+   then features one after another; Ø + twice the distance; Half (default)
+   or Full per style. In lathe mode a linear dimension across the
+   centerline gets Ø automatically.
+4. Baseline (Shift+B) and Continue (Shift+K) from a linear dimension.
+5. Ordinate (Shift+Z): DIMORIGIN with a marker; Z or X by drag or forced;
+   X as Ø in lathe mode; common baseline; auto-jog; Align Ordinates.
+6. Center marks (Shift+E) and centerlines: associative annotations.
+7. Done-when: a real lathe part, with the user's feedback along the way.
+
+Decisions (user, 2026-11-09): no reference part needed yet (feedback as
+we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
+defaults to Half; a dimension is deleted when the geometry it measures is
+deleted; shortcuts as above.
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
