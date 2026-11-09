@@ -1,6 +1,6 @@
 import { angleDeg, normDeg } from '../geometry/angle';
 import { type Vec2, distance, sub } from '../geometry/vec';
-import { type AfterCreate, blockNameError, createBlock, isBlockGeometry } from '../model/block';
+import { type AfterCreate, blockNameError, createBlock, explodeInserts, isBlockGeometry } from '../model/block';
 import type { Drawing } from '../model/drawing';
 import type { EntityId, InsertEntity } from '../model/entity';
 import { objects } from './editTools';
@@ -192,3 +192,25 @@ export function createInsertTool(): InsertTool {
     },
   };
 }
+
+/**
+ * Explode (Shift+U): the selected instances (or ones picked now) become
+ * plain lines, circles, arcs and points, in one undo step. Other objects
+ * are left as they are.
+ */
+export const explodeTool: ToolDef = {
+  id: 'explode',
+  label: 'Explode',
+  shortcut: 'shift+u',
+  repeat: false,
+  *run(ctx): ToolGen {
+    const es = yield* objects(ctx, 'Explode');
+    if (!es) return;
+    const inserts = es.filter((e): e is InsertEntity => e.kind === 'insert');
+    if (inserts.length === 0) {
+      ctx.message('Only block instances can be exploded, and none are selected.');
+      return;
+    }
+    ctx.undo.commit(explodeInserts(ctx.drawing, inserts));
+  },
+};

@@ -107,3 +107,16 @@ export function createBlock(
   }
   return { label: `Create block ${name}`, changes };
 }
+
+/**
+ * Explode as one undo step: each instance replaced by its geometry as
+ * plain objects, where and on the layers it is drawn, with new ids.
+ */
+export function explodeInserts(d: Drawing, inserts: readonly InsertEntity[]): Transaction {
+  const changes: Change[] = [];
+  for (const ins of inserts) {
+    changes.push({ op: 'remove', entity: ins });
+    for (const part of instanceEntities(d, ins)) changes.push({ op: 'add', entity: { ...part, id: newEntityId(d) } });
+  }
+  return { label: 'Explode', changes };
+}

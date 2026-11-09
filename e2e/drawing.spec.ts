@@ -1798,7 +1798,7 @@ test.describe('blocks', () => {
     await expect(page.locator('#properties h2')).toHaveText(/^Block e\d+$/);
     await expect(prop(page, 'Block')).toHaveText('Tool');
     await expect(prop(page, 'Description')).toHaveText('MGEHR holder');
-    await expect(prop(page, 'Mirrored')).toHaveText('No');
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('no');
 
     await page.keyboard.press('Control+z');
     await expect(prop(page, 'entity-count')).toHaveText('2');
@@ -1833,6 +1833,37 @@ test.describe('blocks', () => {
     const p = at(2, 0.5);
     await page.mouse.click(p.x, p.y);
     await expect(prop(page, 'Rotation')).toHaveText(/^90/);
-    await expect(prop(page, 'Mirrored')).toHaveText('Yes');
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('yes');
+  });
+
+  test('an instance edited in the properties panel, then exploded back into plain objects (Shift+U)', async ({ page }) => {
+    await makeToolBlock(page);
+    const { at, probe } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+
+    // Turned 90° about its insertion point: the edge now runs up the Y axis.
+    await prop(page, 'Rotation').click();
+    await page.keyboard.type('90');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'Rotation')).toHaveText(/^90/);
+    await expect.poll(() => probe(0, 0.15)).toBe('ink');
+    await expect.poll(() => probe(0.5, 0)).toBe('paper');
+
+    await prop(page, 'Scale').click();
+    await page.keyboard.type('0');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText("Scale can't be 0: the scale needs to be more than zero.");
+    await prop(page, 'Mirrored').locator('select').selectOption('yes');
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('yes');
+
+    await page.keyboard.press('Shift+U');
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks li[data-block="Tool"] .layer-count')).toHaveText('0');
+    await page.keyboard.press('Escape');
+    const q = at(0, 0.15); // the edge, now a plain line
+    await page.mouse.click(q.x, q.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
   });
 });

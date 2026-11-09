@@ -513,6 +513,18 @@ Spec: "Blocks".
 3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
    Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
    Z/X, rotation, scale, mirrored), List; Explode (Shift+U).
+   **(done)** The edit tools needed no change (step 1's `transformEntity`
+   and `withNewIds` already handle instances); tests pin Move, Copy,
+   Rotate, Mirror (a left-hand copy: flipped, 180 − rotation), Scale,
+   Erase and polar Array (items turned a step each). Properties: X/Y
+   (Z/X in lathe mode), Rotation (angle, normalised) and Scale (new
+   `factor` quantity, plain number, more than zero) are editable; Mirrored
+   is a Yes/No dropdown (`withMirrored`: flipped about its own X axis
+   through the insertion point); Block and Description read-only. List
+   reports the same rows. `explodeTool` (Shift+U, one-shot):
+   `block.explodeInserts` replaces each selected instance by its parts as
+   drawn (layer-0 parts on its layer and style), new ids, one undo step;
+   other objects left alone.
 4. Snaps and associativity inside instances: snaps on instance geometry,
    anchors that name instance + inner entity, Trim/Extend boundaries.
 5. Edit block (Save/Cancel, updates every instance in one undo step),

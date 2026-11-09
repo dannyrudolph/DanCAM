@@ -1,6 +1,6 @@
 import { createArcTool } from '../commands/arcTool';
 import { createArrayTool } from '../commands/arrayTool';
-import { createBlockTool, createInsertTool } from '../commands/blockTools';
+import { createBlockTool, createInsertTool, explodeTool } from '../commands/blockTools';
 import { createCircleTool } from '../commands/circleTool';
 import { createChamferTool, createFilletTool } from '../commands/cornerTools';
 import { createBaselineDimTool, createContinueDimTool } from '../commands/chainDimTools';
@@ -72,7 +72,7 @@ export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFil
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
 /** Shared so the Blocks panel can point it at a block before starting it. */
 const INSERT_TOOL = createInsertTool();
-export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool(), INSERT_TOOL];
+export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool(), INSERT_TOOL, explodeTool];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...BLOCK_TOOLS, ...INQUIRY_TOOLS];
 

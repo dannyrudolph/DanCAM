@@ -1,4 +1,4 @@
-import { parseAngle, parseLength } from '../commands/valueExpr';
+import { parseAngle, parseFactor, parseLength } from '../commands/valueExpr';
 import type { Drawing, Units } from '../model/drawing';
 import { editableText, toleranceSetter, withDimStyle, withPrecision, withText, withToleranceKind, type ToleranceKind } from '../model/dimOverride';
 import { dimStyleOf } from '../model/dimStyle';
@@ -6,7 +6,7 @@ import type { DimensionEntity, Entity } from '../model/entity';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { axisView, viewLabel } from '../model/latheView';
 import { KIND_LABEL, type Row, TOLERANCE_LABEL, rowsFor } from '../model/properties';
-import { type PropertySetter, propertySetter, withLayer, withStyle } from '../model/propertyEdit';
+import { type PropertySetter, propertySetter, withLayer, withMirrored, withStyle } from '../model/propertyEdit';
 import type { Transaction } from '../model/undo';
 import { formatNumber } from './statusBar';
 
@@ -69,6 +69,13 @@ export class PropertiesPanel {
     for (const r of rowsFor(d, e)) {
       if (r.label === 'Layer' || r.label === 'Style') continue; // dropdowns, done above
       if (e.kind === 'dimension' && this.addDimensionRow(d, table, e, r)) continue;
+      if (e.kind === 'insert' && r.label === 'Mirrored') {
+        const mirrored = this.select([['no', 'No'], ['yes', 'Yes']], e.mirrored ? 'yes' : 'no', (v) =>
+          this.host.commit({ label: 'Edit Mirrored', changes: [{ op: 'modify', before: e, after: withMirrored(e, v === 'yes') }] }),
+        );
+        this.addRow(table, r.label, '', r.label).replaceChildren(mirrored);
+        continue;
+      }
       if (typeof r.value === 'string') {
         this.addRow(table, r.label, r.value);
         continue;
@@ -103,7 +110,7 @@ export class PropertiesPanel {
         const text = input.value.trim();
         dd.textContent = shown;
         if (!apply || text === shown.replace(/°$/, '')) return; // unchanged: never re-store a rounded value
-        const r = setter.quantity === 'angle' ? parseAngle(text) : parseLength(text, this.host.units());
+        const r = setter.quantity === 'angle' ? parseAngle(text) : setter.quantity === 'factor' ? parseFactor(text) : parseLength(text, this.host.units());
         if (!r.ok) {
           this.host.message(`${label}: ${r.error}`);
           return;

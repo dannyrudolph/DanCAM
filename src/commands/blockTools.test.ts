@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Entity } from '../model/entity';
 import { blockPreviewSvg } from '../ui/blocksPanel';
-import { createBlockTool, createInsertTool } from './blockTools';
+import { createArrayTool } from './arrayTool';
+import { createBlockTool, createInsertTool, explodeTool } from './blockTools';
+import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from './editTools';
+import { listTool } from './inquiryTools';
+import { propertySetter, withMirrored } from '../model/propertyEdit';
+import type { InsertEntity } from '../model/entity';
 import { setup } from './toolHarness';
 
 const v = (x: number, y: number) => ({ x, y });
@@ -174,5 +179,121 @@ describe('Blocks panel preview', () => {
       '<svg viewBox="-0.62 -0.62 1.74 1.24" fill="none" stroke="currentColor"><g transform="scale(1,-1)">' +
         '<line x1="0" y1="0" x2="1" y2="0"/><path d="M0.5 0 A0.5 0.5 0 1 1 0 -0.5"/></g></svg>',
     );
+  });
+});
+
+describe('an instance edited as one object', () => {
+  const base: InsertEntity = { kind: 'insert', id: 'I', layer: 'Part', style: 'hidden', block: 'Tool', at: v(2, 1), rotationDeg: 30, scale: 1, mirrored: false };
+  function withInstance() {
+    const t = setup();
+    t.drawing.blocks.set('Tool', {
+      name: 'Tool',
+      description: 'holder',
+      entities: [
+        { kind: 'line', id: 'b1', layer: '0', start: v(0, 0), end: v(1, 0) },
+        { kind: 'circle', id: 'b2', layer: 'Keep', style: 'center', center: v(1, 0), radius: 0.25 },
+      ],
+    });
+    t.add(base);
+    t.select('I');
+    return t;
+  }
+  const inserts = (t: ReturnType<typeof setup>) => t.entities().filter((e): e is InsertEntity => e.kind === 'insert');
+
+  it('Move, Copy, Rotate, Mirror and Scale move its insertion point and turn, flip or size it whole', () => {
+    let t = withInstance();
+    t.runner.start(moveTool);
+    t.click(0, 0);
+    t.click(1, -1);
+    expect(inserts(t)).toEqual([{ ...base, at: v(3, 0) }]);
+
+    t = withInstance();
+    t.runner.start(copyTool);
+    t.click(0, 0);
+    t.click(0, 2);
+    expect(inserts(t).map((e) => [e.id, e.at])).toEqual([['I', v(2, 1)], ['e1', v(2, 3)]]);
+
+    t = withInstance();
+    t.runner.start(rotateTool);
+    t.click(0, 0);
+    t.value(90);
+    expect(inserts(t)[0]).toMatchObject({ rotationDeg: 120 });
+    expect(inserts(t)[0]!.at.x).toBeCloseTo(-1, 12);
+    expect(inserts(t)[0]!.at.y).toBeCloseTo(2, 12);
+
+    t = withInstance();
+    t.runner.start(createMirrorTool());
+    t.click(0, 0);
+    t.option('erase'); // offered with the second point
+    t.click(0, 1); // the Y axis: a left-hand copy
+    expect(inserts(t)).toEqual([{ ...base, id: expect.any(String), at: v(-2, 1), rotationDeg: 150, mirrored: true }]);
+
+    t = withInstance();
+    t.runner.start(scaleTool);
+    t.click(0, 0);
+    t.value(2);
+    expect(inserts(t)).toEqual([{ ...base, at: v(4, 2), scale: 2 }]);
+
+    t = withInstance();
+    t.runner.start(eraseTool);
+    expect(t.entities()).toEqual([]);
+  });
+
+  it('a polar Array turning its items gives copies turned a step further each', () => {
+    const t = withInstance();
+    t.runner.start(createArrayTool());
+    t.option('polar');
+    t.click(0, 0);
+    t.value(4);
+    t.value(360);
+    expect(inserts(t).map((e) => e.rotationDeg)).toEqual([30, 120, 210, 300]);
+    expect(inserts(t)[2]!.at.x).toBeCloseTo(-2, 12);
+    expect(inserts(t)[2]!.at.y).toBeCloseTo(-1, 12);
+  });
+
+  it('the properties panel edits its position, rotation and scale (a plain number, more than zero) and mirrors it', () => {
+    expect(propertySetter(base, 'X')!.set(5)).toEqual({ ...base, at: v(5, 1) });
+    expect(propertySetter(base, 'Y')!.quantity).toBe('length');
+    const rot = propertySetter(base, 'Rotation')!;
+    expect(rot.quantity).toBe('angle');
+    expect(rot.set(450)).toEqual({ ...base, rotationDeg: 90 });
+    const scale = propertySetter(base, 'Scale')!;
+    expect(scale.quantity).toBe('factor');
+    expect(scale.set(0.5)).toEqual({ ...base, scale: 0.5 });
+    expect(scale.set(0)).toBeUndefined();
+    expect(scale.refusal).toBe('the scale needs to be more than zero');
+    expect(propertySetter(base, 'Block')).toBeUndefined();
+    expect(withMirrored(base, true)).toEqual({ ...base, mirrored: true });
+  });
+
+  it('List reports it like the properties panel', () => {
+    const t = withInstance();
+    t.runner.start(listTool);
+    t.pick('I', 2, 1);
+    expect(t.reports[0]!.title).toBe('List: Block I');
+    expect(t.reports[0]!.rows.map((r) => r.label)).toEqual(['Layer', 'Style', 'Block', 'Description', 'X', 'Y', 'Rotation', 'Scale', 'Mirrored']);
+  });
+
+  it('Explode: its geometry as plain objects where it is drawn (layer 0 parts on its layer and style), new ids, one undo step', () => {
+    const t = withInstance();
+    t.runner.start(explodeTool);
+    const out = t.entities();
+    expect(out.map((e) => [e.id, e.kind, e.layer, e.style])).toEqual([['e1', 'line', 'Part', 'hidden'], ['e2', 'circle', 'Keep', 'center']]);
+    const line = out[0] as Extract<Entity, { kind: 'line' }>;
+    expect(line.start).toEqual(v(2, 1));
+    expect(line.end.x).toBeCloseTo(2 + Math.cos(Math.PI / 6), 12);
+    expect(line.end.y).toBeCloseTo(1.5, 12);
+    expect(t.undo.undoLabel).toBe('Explode');
+    t.undo.undo();
+    expect(t.entities()).toEqual([base]);
+  });
+
+  it('Explode leaves other objects alone, and says so when there is no instance to explode', () => {
+    const t = withInstance();
+    t.add(edge);
+    t.select('A');
+    t.runner.start(explodeTool);
+    expect(t.messages).toEqual(['Only block instances can be exploded, and none are selected.']);
+    expect(t.entities()).toEqual([base, edge]);
   });
 });

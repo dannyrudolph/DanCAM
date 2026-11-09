@@ -5,8 +5,8 @@ import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import type { Entity } from './entity';
 import type { LineStyleName } from './lineStyle';
 
-/** How a typed value is read: lengths take unit suffixes, angles are degrees. */
-export type Quantity = 'length' | 'angle';
+/** How a typed value is read: lengths take unit suffixes, angles are degrees, factors are plain numbers. */
+export type Quantity = 'length' | 'angle' | 'factor';
 
 /**
  * Sets one property from a typed value. Returns undefined when the value
@@ -127,7 +127,24 @@ export function propertySetter(e: Entity, label: string): PropertySetter | undef
           });
       }
       return undefined;
+    case 'insert':
+      switch (label) {
+        case 'X':
+          return length((v) => ({ ...e, at: { x: v, y: e.at.y } }));
+        case 'Y':
+          return length((v) => ({ ...e, at: { x: e.at.x, y: v } }));
+        case 'Rotation':
+          return angle((v) => ({ ...e, rotationDeg: normDeg(v) }));
+        case 'Scale':
+          return { quantity: 'factor', set: (v) => (positive(v) ? { ...e, scale: v } : undefined), refusal: 'the scale needs to be more than zero' };
+      }
+      return undefined;
   }
+}
+
+/** The instance mirrored or not, about its own X axis through its insertion point. */
+export function withMirrored(e: Extract<Entity, { kind: 'insert' }>, mirrored: boolean): Entity {
+  return { ...e, mirrored };
 }
 
 export function withLayer(e: Entity, layer: string): Entity {
