@@ -73,6 +73,8 @@ export type RayEntity = EntityBase & {
  *   vectors `dir1` and `dir2`, on the side where `at` is (so it can read
  *   the reflex angle). `p1` and `p2` are where each arm's extension line
  *   starts (the end of the measured geometry; the vertex when there is none).
+ * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
+ *   (the landing), a short horizontal shoulder, then `text` as typed.
  */
 export type DimensionEntity = EntityBase & {
   readonly kind: 'dimension';
@@ -84,6 +86,7 @@ export type DimensionEntity = EntityBase & {
     | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
     | { readonly type: 'radius' | 'diameter'; readonly center: Vec2; readonly radius: number }
     | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
+    | { readonly type: 'leader'; readonly tip: Vec2; readonly text: string }
   );
 
 /** A dimension's defining points: what it measures, and `at`. */
@@ -97,6 +100,8 @@ export function dimensionPoints(e: DimensionEntity): Vec2[] {
       return [e.center, e.at];
     case 'angular':
       return [e.vertex, e.p1, e.p2, e.at];
+    case 'leader':
+      return [e.tip, e.at];
   }
 }
 
@@ -112,6 +117,8 @@ export function mapDimensionPoints(e: DimensionEntity, f: (p: Vec2) => Vec2): Di
       return { ...e, at, center: f(e.center) };
     case 'angular':
       return { ...e, at, vertex: f(e.vertex), p1: f(e.p1), p2: f(e.p2) };
+    case 'leader':
+      return { ...e, at, tip: f(e.tip) };
   }
 }
 

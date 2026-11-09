@@ -31,6 +31,7 @@ export function setup(style?: 'hidden') {
   const click = (x: number, y: number): void => runner.send({ kind: 'point', at: { x, y } });
   const value = (v: number, at: Vec2 = { x: 0, y: 0 }): void => runner.send({ kind: 'value', value: v, at });
   const pick = (id: EntityId, x: number, y: number, shift = false): void => runner.send({ kind: 'entity', id, at: { x, y }, shift });
+  const text = (t: string): void => runner.send({ kind: 'text', text: t });
   const finish = (): void => runner.send({ kind: 'finish' });
   const option = (key: string): void => runner.send({ kind: 'option', key });
   const add = (e: Entity): void => void drawing.entities.set(e.id, e);
@@ -47,11 +48,12 @@ export function setup(style?: 'hidden') {
     previewTarget = id;
     previewShift = shift;
   };
-  /** The waiting step's preview for a cursor point (point steps), value (value steps) or hovered entity. */
-  const preview = (p: Vec2, v?: number): readonly Entity[] => {
+  /** The waiting step's preview for a cursor point (point steps), value (value steps), typed text (text steps) or hovered entity. */
+  const preview = (p: Vec2, v?: number, typed?: string): readonly Entity[] => {
     const req = runner.request;
     if (req?.kind === 'point') return req.preview?.(p) ?? [];
     if (req?.kind === 'value') return req.preview?.(v ?? req.fromCursor?.(p) ?? 0, p) ?? [];
+    if (req?.kind === 'text') return req.preview?.(typed ?? '') ?? [];
     if (req?.kind === 'entity') {
       const hit = entities().find((e) => req.accepts(e) && e.id === previewTarget);
       return hit ? (req.preview?.(hit.id, p, previewShift) ?? []) : [];
@@ -59,5 +61,5 @@ export function setup(style?: 'hidden') {
     return [];
   };
   const selectionDone = (...ids: string[]): void => runner.send({ kind: 'selection', ids });
-  return { drawing, undo, messages, reports, ctx, runner, click, value, pick, finish, option, add, entities, last, lines, preview, hover, select, selectionDone };
+  return { drawing, undo, messages, reports, ctx, runner, click, value, text, pick, finish, option, add, entities, last, lines, preview, hover, select, selectionDone };
 }

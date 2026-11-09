@@ -8,7 +8,7 @@ import type { LineStyleName } from '../model/lineStyle';
  * turned profile on its centerline, with a 0.0005" step on the largest diameter
  * for checking deep zoom, a hidden bore and a tangent edge to show the line
  * styles, plus an end view to the left with circles, a bolt-circle arc and
- * a vertical construction line, and a few dimensions. Loaded as initial state, like opening a file, so it is not on the
+ * a vertical construction line, and a few dimensions and a leader. Loaded as initial state, like opening a file, so it is not on the
  * undo stack.
  */
 export function loadDemo(d: Drawing): void {
@@ -80,6 +80,8 @@ export function loadDemo(d: Drawing): void {
     dir2: { x: -c30, y: s30 },
     at: { x: -0.6, y: 0.6 },
   });
+  // A note on a leader at the right-hand corner.
+  add({ kind: 'dimension', layer: '0', dimStyle, type: 'leader', tip: { x: 2, y: 0.1875 }, at: { x: 2.35, y: 0.45 }, text: '.005 X 45°' });
 }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;

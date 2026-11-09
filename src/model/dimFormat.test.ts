@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { type DimFormat, INCH_ZEROS, MM_ZEROS, flatText, formatDecimal, formatDimension, formatDms, roundDecimal } from './dimFormat';
+import { type DimFormat, INCH_ZEROS, MM_ZEROS, flatText, formatDecimal, formatDimension, expandSymbols, formatDms, roundDecimal } from './dimFormat';
 
 const inch3: DimFormat = { precision: 3, zeros: INCH_ZEROS, tolerance: { kind: 'none' }, tolPrecision: 3 };
 const mm2: DimFormat = { precision: 2, zeros: MM_ZEROS, tolerance: { kind: 'none' }, tolPrecision: 2 };
@@ -130,5 +130,13 @@ describe('formatDms', () => {
 
   it('keeps the sign of a negative angle', () => {
     expect(formatDms(-10.25, 1)).toBe("-10°15'");
+  });
+});
+
+describe('expandSymbols', () => {
+  it('turns %%d, %%c and %%p into °, Ø and ± in either case, and leaves other text alone', () => {
+    expect(expandSymbols('.010 X 45%%d')).toBe('.010 X 45°');
+    expect(expandSymbols('%%C.125 THRU %%p.002 %%D')).toBe('Ø.125 THRU ±.002 °');
+    expect(expandSymbols('100% %%x 2X')).toBe('100% %%x 2X');
   });
 });

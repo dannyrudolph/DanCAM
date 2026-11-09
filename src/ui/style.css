@@ -494,6 +494,10 @@ input {
   font-size: 12px;
 }
 
+.input-field input.input-text {
+  width: 18em;
+}
+
 .input-field:focus-within {
   border-color: var(--accent);
 }

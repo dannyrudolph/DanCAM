@@ -145,7 +145,7 @@ test('the demo drawing loads and renders without errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/?demo');
-  await expect(prop(page, 'entity-count')).toHaveText('25');
+  await expect(prop(page, 'entity-count')).toHaveText('26');
   await page.mouse.move(400, 300);
   await page.mouse.wheel(0, -2000); // deep zoom
   await page.waitForTimeout(100);
@@ -157,9 +157,9 @@ test('circles, arcs, xlines and dimensions in the demo can be picked and show th
   await page.getByTestId('zoom-extents').click();
   const box = await page.locator('#canvas').boundingBox();
   if (!box) throw new Error('canvas has no box');
-  // Demo extents (xlines excluded): X from the end view's diameter text to the right-face dimension's
+  // Demo extents (xlines excluded): X from the end view's diameter text to the corner leader's
   // text, Y from the aligned dimension's arrows to the overall-length extension lines.
-  const toScreen = await extentsMapper(page, { minX: -1.637764623955432, maxX: 2.462618384401114, minY: -0.5037935372909058, maxY: 0.775 });
+  const toScreen = await extentsMapper(page, { minX: -1.637764623955432, maxX: 3.314839832869081, minY: -0.5037935372909058, maxY: 0.775 });
   const at = (deg: number, r: number) => toScreen(-0.6 + r * Math.cos((deg * Math.PI) / 180), r * Math.sin((deg * Math.PI) / 180));
 
   let p = at(45, 0.2505); // outside-diameter circle
@@ -1082,6 +1082,48 @@ test.describe('dimensions', () => {
     const zeroText = at(0.5, 0.41);
     await page.mouse.click(zeroText.x, zeroText.y);
     await expect(prop(page, 'Text')).toHaveText('.000');
+  });
+});
+
+test.describe('leader', () => {
+  test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
+    await page.keyboard.press('Shift+N');
+    await expect(page.getByTestId('tool-dimLeader')).toHaveClass(/active/);
+    await typeValues(page, '0', '0'); // arrow point
+    await typeValues(page, '1', '0.5'); // landing, as ΔX, ΔY from the arrow point
+    await expect(page.locator('#status .status-prompt')).toHaveText('Leader: type the note, then press Enter (%%d °, %%c Ø, %%p ±)');
+    const note = page.locator('.input-boxes input[data-field="text"]');
+    await expect(note).toBeFocused();
+    await page.keyboard.type('.010 X 45%%d LC');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+    await expect(page.getByTestId('tool-dimLeader')).toHaveClass(/active/); // sticky: L and C above did not start Line or Circle
+
+    // Its text and points in the properties panel.
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    // A window over the whole canvas: Zoom Extents left the leader, text and all, inside it.
+    await page.mouse.move(box.x + 3, box.y + 3);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+    await expect(prop(page, 'Type')).toHaveText('Leader');
+    await expect(prop(page, 'Text')).toHaveText('.010 X 45° LC');
+    await expect(prop(page, 'Measured')).toHaveCount(0);
+    await expect(prop(page, 'Landing X')).toHaveText('1.0000');
+  });
+
+  test('Esc at the note leaves the tool without adding anything', async ({ page }) => {
+    await page.keyboard.press('Shift+N');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '1');
+    await page.keyboard.type('2X');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.options-tool')).toHaveText('Select');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
   });
 });
 

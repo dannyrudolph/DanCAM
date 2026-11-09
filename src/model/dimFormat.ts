@@ -182,3 +182,13 @@ export function flatText(t: DimText): string {
   if (t.alt) parts.push(t.alt);
   return parts.join(' ');
 }
+
+const SYMBOL_CODES: Record<string, string> = { d: '°', c: 'Ø', p: '±' };
+
+/**
+ * Note text as typed, with AutoCAD's symbol codes replaced: %%d is °, %%c
+ * is Ø, %%p is ±, in either case. Other text is kept as it is.
+ */
+export function expandSymbols(text: string): string {
+  return text.replace(/%%([dcp])/gi, (_, c: string) => SYMBOL_CODES[c.toLowerCase()]!);
+}

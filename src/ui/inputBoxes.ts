@@ -13,8 +13,8 @@ import type { Vec2 } from '../geometry/vec';
 import type { Units } from '../model/drawing';
 import { formatNumber } from './statusBar';
 
-/** A point's fields, or the single box of a value request. */
-type BoxKey = FieldKey | 'value';
+/** A point's fields, the single box of a value request, or the text box of a text request. */
+type BoxKey = FieldKey | 'value' | 'text';
 
 const LABELS: Record<FieldKey, string> = { x: 'X', y: 'Y', dx: 'ΔX', dy: 'ΔY', length: 'L', angle: '∠' };
 const MODE_LABELS: Record<EntryMode, string> = { polar: 'L∠', delta: 'ΔXY', absolute: 'XY' };
@@ -40,7 +40,8 @@ type Field = { key: BoxKey; input: HTMLInputElement; dirty: boolean };
 /**
  * The input boxes that follow the cursor while a tool asks for a point or a
  * value. Typing a value and pressing Tab locks it; locked values constrain the
- * point. An entity pick has no boxes.
+ * point. An entity pick has no boxes. A text step has one box, at the text's
+ * place rather than the cursor, holding the focus; it is never locked.
  */
 export class InputBoxes {
   private readonly root: HTMLElement;
@@ -95,6 +96,11 @@ export class InputBoxes {
     return resolvePoint(cursor, this.request?.base, this.effectiveMode(), this.provisionalLocks(), tracking, snap);
   }
 
+  /** What is typed in a text step's box; empty for any other step. */
+  textValue(): string {
+    return this.fields.find((f) => f.key === 'text')?.input.value ?? '';
+  }
+
   /** The value a click or Enter would give a value request now: typed, else from the cursor. */
   resolveValue(cursor: Vec2): number | undefined {
     if (this.request?.kind !== 'value') return undefined;
@@ -118,6 +124,7 @@ export class InputBoxes {
       this.root.style.transform = `translate(${cursorScreen.x + OFFSET_PX}px, ${cursorScreen.y + OFFSET_PX}px)`;
     }
     for (const f of this.fields) {
+      if (f.key === 'text') continue; // only ever what was typed
       const locked = this.locks[f.key];
       f.input.classList.toggle('locked', locked !== undefined);
       if (f.dirty) continue; // never overwrite what the user is typing
@@ -136,6 +143,15 @@ export class InputBoxes {
    * while the canvas has focus. Returns false when there are no boxes.
    */
   startTyping(ch: string): boolean {
+    if (this.request?.kind === 'text') {
+      const f = this.fields[0];
+      if (!f) return false;
+      this.focusText(f);
+      f.input.value += ch;
+      f.dirty = true;
+      this.host.changed();
+      return true;
+    }
     const target = this.fields.find((f) => this.locks[f.key] === undefined) ?? this.fields[0];
     if (!target) return false;
     this.root.hidden = false; // a hidden input can't take focus
@@ -149,14 +165,27 @@ export class InputBoxes {
   focusFirst(): boolean {
     const f = this.fields[0];
     if (!f) return false;
+    if (f.key === 'text') {
+      this.focusText(f);
+      return true;
+    }
     this.root.hidden = false;
     f.input.focus();
     f.input.select();
     return true;
   }
 
-  /** What Enter should do, after locking any value still being typed. */
+  /** Focuses a text box with the caret after what is typed, keeping it. */
+  private focusText(f: Field): void {
+    this.root.hidden = false;
+    f.input.focus();
+    const end = f.input.value.length;
+    f.input.setSelectionRange(end, end);
+  }
+
+  /** What Enter should do, after locking any value still being typed. A text step always places. */
   enterAction(): EnterAction {
+    if (this.request?.kind === 'text') return 'place';
     for (const f of this.fields) {
       if (f.dirty && !this.lockField(f)) return 'none';
     }
@@ -165,6 +194,7 @@ export class InputBoxes {
   }
 
   private liveValue(key: BoxKey, p: Vec2): number | undefined {
+    if (key === 'text') return undefined;
     if (key !== 'value') return fieldValue(key, p, this.request?.base);
     return this.request?.kind === 'value' ? this.request.fromCursor?.(p) : undefined;
   }
@@ -183,7 +213,7 @@ export class InputBoxes {
   private provisionalLocks(): Locks & { value?: number } {
     const locks: Locks & { value?: number } = { ...this.locks };
     for (const f of this.fields) {
-      if (!f.dirty) continue;
+      if (!f.dirty || f.key === 'text') continue;
       const r = this.parse(f);
       if (r.ok) locks[f.key] = r.value;
     }
@@ -231,14 +261,21 @@ export class InputBoxes {
       return;
     }
     const keys: readonly BoxKey[] =
-      this.request.kind === 'point' ? fieldsFor(this.request.base, this.effectiveMode()) : this.request.kind === 'value' ? ['value'] : [];
+      this.request.kind === 'point'
+        ? fieldsFor(this.request.base, this.effectiveMode())
+        : this.request.kind === 'value'
+          ? ['value']
+          : this.request.kind === 'text'
+            ? ['text']
+            : [];
     const req = this.request;
     for (const key of keys) {
       const label = document.createElement('label');
       label.className = 'input-field';
       const name = document.createElement('span');
-      name.textContent = key === 'value' ? (req.kind === 'value' ? req.label : '') : LABELS[key];
+      name.textContent = key === 'text' ? 'Note' : key === 'value' ? (req.kind === 'value' ? req.label : '') : LABELS[key];
       const input = document.createElement('input');
+      if (key === 'text') input.className = 'input-text';
       input.autocomplete = 'off';
       input.spellcheck = false;
       input.dataset.field = key;
@@ -248,7 +285,7 @@ export class InputBoxes {
         input.classList.remove('invalid');
         this.host.changed();
       });
-      input.addEventListener('focus', () => input.select());
+      if (key !== 'text') input.addEventListener('focus', () => input.select());
       input.addEventListener('keydown', (e) => this.onKey(e, field));
       label.append(name, input);
       this.root.append(label);
@@ -258,12 +295,16 @@ export class InputBoxes {
       this.modeButton.textContent = MODE_LABELS[this.mode];
       this.root.append(this.modeButton);
     }
+    // A note is typed straight away: the box takes the focus, so keys don't start tools.
+    const text = this.fields.find((f) => f.key === 'text');
+    if (text) this.focusText(text);
   }
 
   private onKey(e: KeyboardEvent, f: Field): void {
     if (e.key === 'Tab') {
       e.preventDefault();
       e.stopPropagation();
+      if (f.key === 'text') return; // nothing to lock or move to
       if (f.dirty && !this.lockField(f)) return;
       const i = this.fields.indexOf(f);
       const next = this.fields[(i + (e.shiftKey ? this.fields.length - 1 : 1)) % this.fields.length];

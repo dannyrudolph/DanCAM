@@ -206,8 +206,10 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
         dir1: unitVec(o.dir1, `${at}.dir1`),
         dir2: unitVec(o.dir2, `${at}.dir2`),
       };
+    case 'leader':
+      return { ...common, type: 'leader', tip: vec(o.tip, `${at}.tip`), text: str(o.text, `${at}.text`) };
     default:
-      throw new FileError(`${at}.type must be linear, aligned, radius, diameter or angular.`);
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular or leader.`);
   }
 }
 

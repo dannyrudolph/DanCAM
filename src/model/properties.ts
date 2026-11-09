@@ -17,7 +17,7 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       { label: 'Dim style', value: e.dimStyle },
       { label: 'Type', value: DIM_TYPE_LABEL[e.type] },
       { label: 'Text', value: flatText(l.text) },
-      { label: 'Measured', value: l.value, ...(e.type === 'angular' && { unit: '°' }) },
+      ...(l.value === undefined ? [] : [{ label: 'Measured', value: l.value, ...(e.type === 'angular' && { unit: '°' }) }]),
     ];
     switch (e.type) {
       case 'radius':
@@ -25,6 +25,8 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
         return [...head, { label: 'Center X', value: e.center.x }, { label: 'Center Y', value: e.center.y }];
       case 'angular':
         return [...head, { label: 'Vertex X', value: e.vertex.x }, { label: 'Vertex Y', value: e.vertex.y }];
+      case 'leader':
+        return [...head, { label: 'Arrow X', value: e.tip.x }, { label: 'Arrow Y', value: e.tip.y }, { label: 'Landing X', value: e.at.x }, { label: 'Landing Y', value: e.at.y }];
       default:
         return [
           ...head,
@@ -102,6 +104,7 @@ const DIM_TYPE_LABEL: Record<Extract<Entity, { kind: 'dimension' }>['type'], str
   radius: 'Radius',
   diameter: 'Diameter',
   angular: 'Angular',
+  leader: 'Leader',
 };
 
 export const KIND_LABEL: Record<Entity['kind'], string> = {

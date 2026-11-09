@@ -3,6 +3,7 @@ import { arcEnd, arcStart } from '../geometry/arc';
 import { lineLine } from '../geometry/intersect';
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, cross, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
+import { expandSymbols } from '../model/dimFormat';
 import type { DimensionEntity, EntityId, LineEntity } from '../model/entity';
 import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption } from './tool';
 import { MethodChoice, PREVIEW_ID, addEntity } from './toolSteps';
@@ -272,6 +273,72 @@ export function createAngularDimTool(): ToolDef {
           return;
         }
         yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, []));
+      }
+    },
+  };
+}
+
+/**
+ * Leader / note: the arrow point (snaps apply), then the landing, where
+ * the shoulder and text go, then the text, typed in a box there and
+ * previewed as it is typed. %%d, %%c and %%p give °, Ø and ±. Enter adds
+ * the leader as one undo step; empty text adds nothing. Sticky.
+ */
+export function createLeaderTool(): ToolDef {
+  const name = 'Leader';
+  return {
+    id: 'dimLeader',
+    label: 'Leader / note',
+    shortcut: 'shift+n',
+    *run(ctx): ToolGen {
+      const layer = ctx.newProps().layer;
+      const leader = (id: EntityId, tip: Vec2, at: Vec2, text: string): DimensionEntity => ({
+        kind: 'dimension',
+        id,
+        layer,
+        dimStyle: ctx.drawing.currentDimStyle,
+        type: 'leader',
+        tip,
+        at,
+        text,
+      });
+      let tip: Vec2 | undefined;
+      let at: Vec2 | undefined;
+      while (!tip) {
+        const input = yield { kind: 'point', prompt: `${name}: pick where the arrow points` };
+        if (input.kind === 'finish') return;
+        if (input.kind === 'point') tip = input.at;
+      }
+      const from = tip;
+      while (!at) {
+        const input = yield {
+          kind: 'point',
+          prompt: `${name}: pick where the text goes`,
+          base: from,
+          preview: (p) => (vecNearlyEqual(p, from) ? [] : [leader(PREVIEW_ID, from, p, 'Text')]),
+        };
+        if (input.kind === 'finish') return;
+        if (input.kind !== 'point') continue;
+        if (vecNearlyEqual(input.at, from)) ctx.message('The text needs to go away from the arrow point.');
+        else at = input.at;
+      }
+      const landing = at;
+      for (;;) {
+        const input = yield {
+          kind: 'text',
+          prompt: `${name}: type the note, then press Enter (%%d °, %%c Ø, %%p ±)`,
+          at: landing,
+          preview: (text) => [leader(PREVIEW_ID, from, landing, expandSymbols(text))],
+        };
+        if (input.kind === 'finish') return;
+        if (input.kind !== 'text') continue;
+        const text = expandSymbols(input.text).trim();
+        if (text === '') {
+          ctx.message('Type the note first; Esc leaves without one.');
+          continue;
+        }
+        addEntity(ctx, 'Leader', (id) => leader(id, from, landing, text));
+        return;
       }
     },
   };

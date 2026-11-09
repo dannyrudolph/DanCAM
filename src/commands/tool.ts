@@ -86,7 +86,23 @@ export type SelectionRequest = {
   readonly canFinish?: boolean;
 };
 
-export type Request = PointRequest | ValueRequest | EntityRequest | SelectionRequest;
+/**
+ * A step that asks for a line of text (a note). A text box opens at `at`
+ * with the focus in it; Enter answers with what was typed.
+ */
+export type TextRequest = {
+  readonly kind: 'text';
+  readonly prompt: string;
+  /** Where the box goes, in drawing units: where the text will be. */
+  readonly at: Vec2;
+  /** Preview for the text typed so far. */
+  readonly preview?: (text: string) => readonly Entity[];
+  readonly base?: never;
+  readonly options?: readonly ToolOption[];
+  readonly canFinish?: boolean;
+};
+
+export type Request = PointRequest | ValueRequest | EntityRequest | SelectionRequest | TextRequest;
 
 export type ToolInput =
   /** `deferred` is set only for a step that `acceptsDeferred`; `at` is then where the curve was clicked. */
@@ -96,6 +112,7 @@ export type ToolInput =
   /** `at` is where the entity was clicked; `shift` is true for a Shift-click. */
   | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2; readonly shift?: boolean }
   | { readonly kind: 'selection'; readonly ids: readonly EntityId[] }
+  | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'option'; readonly key: string }
   | { readonly kind: 'finish' };
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { measuredValue } from '../model/dimLayout';
 import type { DimensionEntity } from '../model/entity';
-import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLinearDimTool, createRadiusDimTool, linearDirFor } from './dimTools';
+import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLeaderTool, createLinearDimTool, createRadiusDimTool, linearDirFor } from './dimTools';
 import { setup } from './toolHarness';
 
 const v = (x: number, y: number) => ({ x, y });
@@ -200,5 +200,51 @@ describe('Angular tool', () => {
     t.click(0, 0);
     t.click(1, 1);
     expect(t.messages).toEqual(['A side point is on the vertex; there is no angle to measure.']);
+  });
+});
+
+describe('Leader tool', () => {
+  it('arrow point, landing, then the typed note: previewed as it is typed, symbol codes expanded, one undo step, then it starts again', () => {
+    const t = setup();
+    t.runner.start(createLeaderTool());
+    expect(t.runner.request?.prompt).toBe('Leader: pick where the arrow points');
+    t.click(2, 0.1875);
+    expect(t.runner.request).toMatchObject({ kind: 'point', base: v(2, 0.1875) });
+    expect(t.preview(v(2.35, 0.45))).toMatchObject([{ id: 'preview', type: 'leader', tip: v(2, 0.1875), at: v(2.35, 0.45), text: 'Text' }]);
+    t.click(2.35, 0.45);
+    expect(t.runner.request).toMatchObject({ kind: 'text', at: v(2.35, 0.45) });
+    expect(t.preview(v(9, 9), undefined, '.005 X 45%%d')).toMatchObject([{ type: 'leader', text: '.005 X 45°' }]);
+    t.text('  .005 X 45%%d 2X ');
+    expect(dims(t)).toEqual([
+      { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'leader', tip: v(2, 0.1875), at: v(2.35, 0.45), text: '.005 X 45° 2X' },
+    ]);
+    expect(measuredValue(dims(t)[0]!)).toBeUndefined();
+    expect(t.runner.request?.prompt).toBe('Leader: pick where the arrow points');
+    t.undo.undo();
+    expect(dims(t)).toEqual([]);
+  });
+
+  it('refuses a landing on the arrow point and an empty note, and keeps asking', () => {
+    const t = setup();
+    t.runner.start(createLeaderTool());
+    t.click(1, 1);
+    t.click(1, 1);
+    expect(t.messages).toEqual(['The text needs to go away from the arrow point.']);
+    expect(t.runner.request).toMatchObject({ kind: 'point', base: v(1, 1) });
+    t.click(1.5, 1.5);
+    t.text('   ');
+    expect(t.messages.at(-1)).toBe('Type the note first; Esc leaves without one.');
+    expect(t.runner.request?.kind).toBe('text');
+    expect(dims(t)).toEqual([]);
+  });
+
+  it('Esc at the text step adds nothing', () => {
+    const t = setup();
+    t.runner.start(createLeaderTool());
+    t.click(0, 0);
+    t.click(1, 1);
+    t.runner.stop();
+    expect(dims(t)).toEqual([]);
+    expect(t.undo.undoLabel).toBeUndefined();
   });
 });

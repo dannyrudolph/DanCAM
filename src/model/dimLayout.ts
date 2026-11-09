@@ -26,8 +26,8 @@ import { altUnitFactor } from './units';
  * radius (or diameter) line itself.
  */
 export type DimLayout = {
-  /** The measured distance (or angle, in degrees), unrounded. */
-  readonly value: number;
+  /** The measured distance (or angle, in degrees), unrounded; absent for a leader, which measures nothing. */
+  readonly value?: number;
   readonly text: DimText;
   /** Extension lines, dimension-line pieces and leaders. */
   readonly lines: readonly Segment[];
@@ -71,8 +71,9 @@ export function angularSector(e: Extract<DimensionEntity, { type: 'angular' }>):
 /**
  * What a dimension reads: the distance along `dir` (linear), the true
  * length (aligned), the radius or twice it, or the angle in degrees.
+ * Undefined for a leader, which measures nothing.
  */
-export function measuredValue(e: DimensionEntity): number {
+export function measuredValue(e: DimensionEntity): number | undefined {
   switch (e.type) {
     case 'linear':
       return Math.abs(dot(sub(e.p2, e.p1), e.dir));
@@ -84,6 +85,8 @@ export function measuredValue(e: DimensionEntity): number {
       return 2 * e.radius;
     case 'angular':
       return angularSector(e).sweep;
+    case 'leader':
+      return undefined;
   }
 }
 
@@ -148,7 +151,7 @@ function pieceTo(lines: Segment[]): (from: Vec2, to: Vec2) => void {
   };
 }
 
-function formatFor(e: DimensionEntity, style: DimStyle, altFactor: number): DimFormat {
+function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimStyle, altFactor: number): DimFormat {
   if (e.type === 'angular') return angleFormat(style);
   const f = lengthFormat(style, altFactor);
   if (e.type === 'radius') return { ...f, prefix: `R${f.prefix ?? ''}` };
@@ -245,6 +248,27 @@ function radialParts(e: Extract<DimensionEntity, { type: 'radius' | 'diameter' }
   return { lines, arcs: [], arrows, fit: 'inside', ...placeText(block, e.at) };
 }
 
+/**
+ * Leader: the arrow at the tip, pointing along the leader; a line from the
+ * tip to the landing `at`; a horizontal shoulder one arrow long, pointing
+ * away from the tip (to the right when the leader is vertical); the text
+ * past it, centered on the shoulder.
+ */
+function leaderParts(e: Extract<DimensionEntity, { type: 'leader' }>, style: DimStyle, block: Block): Parts {
+  const a = style.arrowSize;
+  const d = sub(e.tip, e.at);
+  const dist = len(d);
+  const u = dist > TOL ? { x: d.x / dist, y: d.y / dist } : { x: -1, y: 0 };
+  const side = e.at.x >= e.tip.x ? 1 : -1;
+  const shoulder = { x: e.at.x + side * a, y: e.at.y };
+  const lines: Segment[] = [];
+  const piece = pieceTo(lines);
+  piece(e.at, e.tip);
+  piece(e.at, shoulder);
+  const center = { x: shoulder.x + side * (style.textGap + block.width / 2), y: e.at.y };
+  return { lines, arcs: [], arrows: [arrow(e.tip, u, a)], fit: 'outside', ...placeText(block, center) };
+}
+
 /** Angular: extension lines along the arms out to an arc through `at`, centered on the vertex. */
 function angularParts(e: Extract<DimensionEntity, { type: 'angular' }>, style: DimStyle, block: Block): Parts {
   const v = e.vertex;
@@ -308,7 +332,11 @@ function angularParts(e: Extract<DimensionEntity, { type: 'angular' }>, style: D
 
 /** The layout of `e` drawn with `style`; `altFactor` converts to the alternate unit. */
 export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: number): DimLayout {
-  const value = measuredValue(e);
+  if (e.type === 'leader') {
+    const text = { main: e.text };
+    return { text, ...leaderParts(e, style, textBlock(text, style.textHeight)) };
+  }
+  const value = measuredValue(e)!;
   const text = formatDimension(value, formatFor(e, style, altFactor));
   const block = textBlock(text, style.textHeight);
   switch (e.type) {

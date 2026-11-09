@@ -2,7 +2,7 @@ import { createArcTool } from '../commands/arcTool';
 import { createArrayTool } from '../commands/arrayTool';
 import { createCircleTool } from '../commands/circleTool';
 import { createChamferTool, createFilletTool } from '../commands/cornerTools';
-import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLinearDimTool, createRadiusDimTool } from '../commands/dimTools';
+import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLeaderTool, createLinearDimTool, createRadiusDimTool } from '../commands/dimTools';
 import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from '../commands/editTools';
 import { gripTool } from '../commands/gripTool';
 import { angleTool, distTool, idTool, listTool } from '../commands/inquiryTools';
@@ -61,7 +61,7 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
 export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
 export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool(), createOffsetTool(), createBreakTool(), joinTool, createLengthenTool(), createArrayTool(), stretchTool];
-export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool()];
+export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createLeaderTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...INQUIRY_TOOLS];
 
@@ -355,7 +355,7 @@ export class App {
     if (this.menu.isOpen) this.menu.close();
     else if (this.panMode) this.setPanMode(false);
     else if (this.onceSnap) this.onceSnap = undefined;
-    else if (this.boxes.hasLocks || this.boxes.focused) this.boxes.clearLocks();
+    else if ((this.boxes.hasLocks || this.boxes.focused) && this.runner.request?.kind !== 'text') this.boxes.clearLocks();
     else if (this.runner.tool) this.runner.stop();
     else this.selected.clear();
     this.refresh();
@@ -395,6 +395,8 @@ export class App {
       }
       this.onceSnap = undefined;
       this.send({ kind: 'value', value, at });
+    } else if (req.kind === 'text') {
+      this.send({ kind: 'text', text: this.boxes.textValue() });
     } else if (req.kind === 'entity') {
       const id = this.pickAt(cursor, req.accepts);
       if (id) this.send({ kind: 'entity', id, at: cursor, shift });
@@ -657,6 +659,10 @@ export class App {
         if (e) preview = req.preview ? req.preview(e.id, cursor, this.shiftHeld) : [e];
       }
     }
+    if (req?.kind === 'text') {
+      snap = undefined;
+      preview = req.preview?.(this.boxes.textValue()) ?? [];
+    }
     render(this.g, this.view, this.drawing, {
         preview,
         selected: this.selected,
@@ -670,7 +676,8 @@ export class App {
       }, window.devicePixelRatio || 1);
     this.canvas.dataset.snap = snap?.kind ?? '';
     this.status.setCursor(next ?? snap?.at ?? cursor, req?.base);
-    this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : (snap?.at ?? cursor));
+    if (req?.kind === 'text') this.boxes.update(vp.worldToScreen(this.view, req.at), req.at);
+    else this.boxes.update(this.cursorScreen, req?.kind === 'point' ? next : (snap?.at ?? cursor));
   }
 
   private fitCanvas(): void {
@@ -808,11 +815,16 @@ export class App {
     return [
       {
         label: 'Enter',
-        enabled: req.kind === 'selection' ? this.selected.size > 0 : this.boxes.hasLocks || req.canFinish === true,
+        enabled:
+          req.kind === 'selection'
+            ? this.selected.size > 0
+            : req.kind === 'text'
+              ? this.boxes.textValue().trim() !== ''
+              : this.boxes.hasLocks || req.canFinish === true,
         run: () => this.enter(this.boxes.enterAction()),
       },
       { label: 'Cancel', enabled: true, run: () => this.escape() },
-      ...(req.kind === 'entity' || req.kind === 'selection' ? [] : [{ label: 'Snap once…', enabled: true, run: () => this.openSnapOnceMenu(x, y) }]),
+      ...(req.kind === 'entity' || req.kind === 'selection' || req.kind === 'text' ? [] : [{ label: 'Snap once…', enabled: true, run: () => this.openSnapOnceMenu(x, y) }]),
       ...(req.options ?? []).map((o) => ({ label: o.label, enabled: o.enabled, run: () => this.send({ kind: 'option', key: o.key }) })),
     ];
   }
@@ -834,7 +846,9 @@ export class App {
       },
       click: (screen, shift) => {
         this.cursorScreen = screen;
-        if (this.runner.request && this.runner.request.kind !== 'selection') {
+        if (this.runner.request?.kind === 'text') {
+          this.boxes.focusFirst(); // a click doesn't end the note; Enter does
+        } else if (this.runner.request && this.runner.request.kind !== 'selection') {
           this.place(shift);
         } else {
           this.clickSelect(this.pickAt(this.cursorWorld()), shift);
@@ -930,6 +944,11 @@ export class App {
       return;
     }
     if (inField) return; // the input boxes handle their own Tab, Enter and Esc
+    if (this.runner.request?.kind === 'text' && !mod && !e.altKey && e.key.length === 1) {
+      e.preventDefault(); // the note's box lost the focus: the key goes into it, not to a tool
+      this.boxes.startTyping(e.key);
+      return;
+    }
 
     if (e.key === ' ') {
       e.preventDefault(); // no page scroll

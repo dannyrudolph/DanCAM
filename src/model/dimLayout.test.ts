@@ -193,6 +193,35 @@ describe('layoutDimension, radius and diameter', () => {
   });
 });
 
+describe('layoutDimension, leader', () => {
+  const leader = (tip: Vec2, at: Vec2, text = '2X'): DimensionEntity => ({ kind: 'dimension', id: 'd', layer: '0', dimStyle: INCH.name, type: 'leader', tip, at, text });
+
+  it('the arrow at the tip along the leader, a shoulder away from it, then the text as typed, centered on the shoulder', () => {
+    const l = layout(leader(v(0, 0), v(0.3, 0.4), '.010 X 45°'));
+    expect(l.value).toBeUndefined();
+    expect(l.text).toEqual({ main: '.010 X 45°' });
+    expect(r(l.lines)).toEqual(r([[v(0.3, 0.4), v(0, 0)], [v(0.3, 0.4), v(0.42, 0.4)]]));
+    // Tip at the point, tail back up the leader (3:4:5 direction), .12 long.
+    expect(r(l.arrows)).toEqual(r([[v(0, 0), v(0.072 + 0.016, 0.096 - 0.012), v(0.072 - 0.016, 0.096 + 0.012)]]));
+    expect(r(l.runs[0]!.at)).toEqual(r(v(0.42 + 0.0625, 0.34)));
+    expect(r(l.textBox)).toEqual(r({ minX: 0.4825, maxX: 0.4825 + textWidth('.010 X 45°', 0.12), minY: 0.34, maxY: 0.46 }));
+    expect(l.fit).toBe('outside');
+  });
+
+  it('with the landing left of the tip, the shoulder and text go left', () => {
+    const l = layout(leader(v(0, 0), v(-0.3, 0.4)));
+    expect(r(l.lines[1])).toEqual(r([v(-0.3, 0.4), v(-0.42, 0.4)]));
+    expect(r(l.textBox.maxX)).toBe(r(-0.42 - 0.0625));
+  });
+
+  it('a vertical leader puts its text to the right; mirrored, the text stays upright and readable', () => {
+    expect(r(layout(leader(v(0, 0), v(0, 1))).lines[1])).toEqual(r([v(0, 1), v(0.12, 1)]));
+    const mirrored = transformEntity(leader(v(0, 0), v(0.3, 0.4)), { kind: 'mirror', a: v(0, 0), deg: 90 }) as DimensionEntity;
+    expect(r(layout(mirrored).lines[1])).toEqual(r([v(-0.3, 0.4), v(-0.42, 0.4)]));
+    expect(layout(mirrored).text.main).toBe('2X');
+  });
+});
+
 describe('layoutDimension, angular', () => {
   const angular = (at: Vec2, dir2 = V, p2 = v(0, 1)): DimensionEntity => ({ kind: 'dimension', id: 'd', layer: '0', dimStyle: INCH.name, type: 'angular', vertex: v(0, 0), p1: v(1, 0), p2, dir1: H, dir2, at });
 

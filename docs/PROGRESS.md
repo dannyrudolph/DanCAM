@@ -240,7 +240,24 @@ points along an edge, then its new angle).
    120° dims. Arc-derived angles carry a few ULPs (120.00000000000003)
    from cos/sin → atan2; below any display precision. Shortcuts chosen by
    Claude, not yet confirmed.
-5. Leader / note (text typed in a box at the cursor).
+5. **Leader / note, Shift+N (done).** A dimension of `type: 'leader'`
+   (so it shares the dimension style, layout, pick, selection, Stretch,
+   transforms and file code): `tip` (the arrow), `at` (the landing),
+   `text` exactly as typed. No measured value (`measuredValue` and the
+   layout's `value` are undefined; no Measured row). Layout: arrow at the
+   tip along the leader, horizontal shoulder one arrow long pointing away
+   from the tip (right when vertical), upright text past it, centered on
+   the shoulder; a mirror keeps the text readable. Tool: arrow point
+   (snaps), landing (refused on the tip), then a new `text` request: a
+   "Note" box at the landing takes the focus, so letters are text, not
+   shortcuts; the preview follows the typing; Enter adds it (empty text
+   refused), a click on the canvas refocuses the box, Esc leaves with
+   nothing added. `expandSymbols`: %%d °, %%c Ø, %%p ± (either case). One
+   line only. No file migration (a new type; schemaVersion stays 2). Demo:
+   a ".005 X 45°" note at the right-hand corner. Not yet: editing a
+   leader's text afterwards (with the text overrides in step 6),
+   multi-line notes, more than one leader segment. Shortcut chosen by
+   Claude, not yet confirmed.
 6. Dimension Styles panel; per-dimension precision / tolerance / text
    overrides; Sheet scale setting (status bar) multiplying sheet sizes.
 7. Dimension grips (line position, text, measured points).
