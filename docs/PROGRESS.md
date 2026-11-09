@@ -110,7 +110,7 @@ Read with `docs/SPEC.md`, `AGENTS.md` and `git log`.
 Also in Phase 2, at the user's request: Rotate's Reference option (two
 points along an edge, then its new angle).
 
-## Phase 3 (plan approved 2026-11-08): done 2026-11-08, awaiting the user's review
+## Phase 3 (plan approved 2026-11-08): done, reviewed by the user 2026-11-08
 
 1. **Trim/extend kernel (done).** `geometry/trim.trimCurve` (removed piece +
    kept pieces; new ends are the cut points; cuts within TOL of an end or of
@@ -178,8 +178,31 @@ points along an edge, then its new angle).
    toolbar wraps to a second row on narrow windows (at 1024px the extra
    buttons had pushed the page wider than the window).
 
-**Next:** Phase 4, after the user's go-ahead (CAD-7). Re-read the spec's
-"Dimensioning" section and propose a plan first.
+## Phase 4 (plan approved 2026-11-08): in progress
+
+1. Formatting kernel `model/dimFormat`: precision 0–8, ASME zero rules
+   (inch `.250`, mm `0.25` trailing suppressed), tolerances (symmetric,
+   deviation, limits), dual units, decimal degrees / D°M'S, prefix/suffix,
+   `<>` overrides; decimal (not binary) rounding.
+2. Model, file v2 (migration), `model/dimLayout`, rendering (text,
+   arrows, extension lines, ASME horizontal text breaking the line, fit
+   rules), pick/select/transform, properties rows.
+3. Linear (H/V by drag or forced) and Aligned tools, placement preview.
+4. Radius, Diameter, Angular (two lines / arc / vertex + 2 points).
+5. Leader / note (text typed in a box at the cursor).
+6. Dimension Styles panel; per-dimension precision / tolerance / text
+   overrides; Sheet scale setting (status bar) multiplying sheet sizes.
+7. Dimension grips (line position, text, measured points).
+8. Done-when: a dimensioned reference drawing, checked text by text.
+
+Associativity stays Phase 5; dimensions store their measured points (and
+a reference to the geometry, unused until Phase 5).
+
+Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
+user will give feedback on a working version; done-when uses our own
+reference drawing); ASME unidirectional text; leader text typed in a box
+at the cursor is fine (CAD-9 exception for notes); plain sans font for
+now, stroke font question at Phase 6.
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
