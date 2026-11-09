@@ -293,7 +293,20 @@ points along an edge, then its new angle).
       precision, dual units (other unit's defaults) and precision,
       prefix/suffix (spaces kept). Each change one undo step.
       `toleranceOfKind` is shared with the per-dimension override.
-7. Dimension grips (line position, text, measured points).
+7. **Dimension grips (done).** `model/dimGrips`; `gripsFor` and
+   `applyGrip` take the drawing for dimensions. Linear/aligned: `p1`, `p2`
+   (move a measured point; snaps apply; drops `refs`; not onto the other
+   point), `line1`/`line2` at the dimension line's ends (move the line),
+   `text` (new optional `textAt`: the text sits on the line where it
+   projects, the line running out to it; dropped within half a text height
+   of the middle it centers again; the line moves with it). Line and text
+   drags snap the line's clearance from the nearer measured point to ASME
+   spacing (.375" then every .25"; 10 then 6 mm; divided by the sheet
+   scale) within half a text height; no snap when the line runs between
+   the points. Radius/diameter: `text`. Angular: `arc` at the arc's
+   middle (radius and side). Leader: `tip`, `text` (landing). Each drag is
+   one undo step. `textAt` moves, stretches and saves with the dimension
+   (optional in the file).
 8. Done-when: a dimensioned reference drawing, checked text by text.
 
 Associativity stays Phase 5; dimensions store their measured points (and

@@ -90,6 +90,8 @@ export type DimensionEntity = EntityBase & {
   readonly precision?: number;
   readonly tolerance?: Tolerance;
   readonly textOverride?: string;
+  /** Linear and aligned: where the text was dragged to; it sits on the dimension line there. Absent: placed by fit. */
+  readonly textAt?: Vec2;
 } & (
     | { readonly type: 'linear'; readonly p1: Vec2; readonly p2: Vec2; readonly dir: Vec2 }
     | { readonly type: 'aligned'; readonly p1: Vec2; readonly p2: Vec2 }
@@ -100,6 +102,10 @@ export type DimensionEntity = EntityBase & {
 
 /** A dimension's defining points: what it measures, and `at`. */
 export function dimensionPoints(e: DimensionEntity): Vec2[] {
+  return [...measuredPoints(e), ...(e.textAt ? [e.textAt] : [])];
+}
+
+function measuredPoints(e: DimensionEntity): Vec2[] {
   switch (e.type) {
     case 'linear':
     case 'aligned':
@@ -116,6 +122,11 @@ export function dimensionPoints(e: DimensionEntity): Vec2[] {
 
 /** The dimension with each defining point passed through `f`; directions and radius unchanged. */
 export function mapDimensionPoints(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity {
+  const m = mapMeasured(e, f);
+  return e.textAt ? { ...m, textAt: f(e.textAt) } : m;
+}
+
+function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity {
   const at = f(e.at);
   switch (e.type) {
     case 'linear':

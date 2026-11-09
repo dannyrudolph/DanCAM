@@ -198,6 +198,7 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     ...(o.precision === undefined ? {} : { precision: places(o.precision, `${at}.precision`) }),
     ...(o.tolerance === undefined ? {} : { tolerance: tolerance(o.tolerance, `${at}.tolerance`) }),
     ...(o.textOverride === undefined ? {} : { textOverride: str(o.textOverride, `${at}.textOverride`) }),
+    ...(o.textAt === undefined ? {} : { textAt: vec(o.textAt, `${at}.textAt`) }),
   };
   const ends = (): { p1: Vec2; p2: Vec2 } => ({ p1: vec(o.p1, `${at}.p1`), p2: vec(o.p2, `${at}.p2`) });
   switch (o.type) {

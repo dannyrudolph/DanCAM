@@ -23,12 +23,12 @@ export function gripTool(id: EntityId, grip: Grip): ToolDef {
         prompt: 'Grip: drop at the new point',
         base: grip.at,
         preview: (p) => {
-          const after = applyGrip(before, grip.key, grip.at, p);
+          const after = applyGrip(before, grip.key, grip.at, p, ctx.drawing);
           return after ? [after] : [];
         },
       };
       if (input.kind !== 'point') return;
-      const after = applyGrip(before, grip.key, grip.at, input.at);
+      const after = applyGrip(before, grip.key, grip.at, input.at, ctx.drawing);
       if (!after) {
         ctx.message("That would leave the object with no size; it wasn't changed.");
         return;

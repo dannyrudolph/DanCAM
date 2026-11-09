@@ -442,7 +442,7 @@ export class App {
     const out: { id: EntityId; grip: Grip }[] = [];
     for (const id of this.selected) {
       const e = this.drawing.entities.get(id);
-      if (e) for (const grip of gripsFor(e)) out.push({ id, grip });
+      if (e) for (const grip of gripsFor(e, this.drawing)) out.push({ id, grip });
     }
     return out;
   }

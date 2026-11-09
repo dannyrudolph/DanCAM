@@ -1191,6 +1191,56 @@ test('the Dimension Styles panel edits a style its dimensions follow, adds, rena
   await expect(prop(page, 'Dim style').locator('select')).toHaveValue('INCH-3PL');
 });
 
+test('dimension grips: a measured point snaps onto a line end; the text slides out past it and the line snaps to .375', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '2', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '2', '2'); // with the line, makes the extents 2 × 2
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Shift+D');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '0');
+  await typeValues(page, '0.5', '0.3');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('F10'); // polar off, so the text drops exactly where it is let go
+  await page.getByTestId('zoom-extents').click();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const scale = Math.min(box.width, box.height) * 0.45;
+  const c = await canvasCenter(page);
+  const at = (x: number, y: number) => ({ x: c.x + (x - 1) * scale, y: c.y - (y - 1) * scale });
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
+    await page.mouse.move(to.x, to.y);
+  };
+
+  let p = at(0.5, 0.3);
+  await page.mouse.click(p.x, p.y);
+  await expect(prop(page, 'Measured')).toHaveText('1.0000');
+  await drag(at(1, 0), { x: at(2, 0).x - 4, y: at(2, 0).y + 3 });
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await page.mouse.up();
+  await expect(prop(page, 'Measured')).toHaveText('2.0000');
+
+  await drag(at(1, 0.3), at(2.6, 0.42)); // the text, now centered over the longer span, out past its end
+  await page.mouse.up();
+  await page.keyboard.press('Escape');
+  p = at(1, 0.3);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText('Drawing'); // nothing left where it was
+  p = at(2.6, 0.375); // past the extension line: only the moved text is here
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Escape');
+  p = at(1, 0.3);
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Dimension /); // undone: back in the middle
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

@@ -167,13 +167,26 @@ function formatFor(e: Exclude<DimensionEntity, { type: 'leader' }>, style: DimSt
   return f;
 }
 
-/** Linear and aligned: extension lines to a straight dimension line through `at`. */
-function linearParts(e: Extract<DimensionEntity, { type: 'linear' | 'aligned' }>, style: DimStyle, block: Block): Parts {
+/**
+ * Linear and aligned: the unit vector `u` the dimension measures along, the
+ * normal `n` (u turned a quarter left), and where the dimension line
+ * through `at` meets each extension line.
+ */
+export function dimLine(e: Extract<DimensionEntity, { type: 'linear' | 'aligned' }>): { u: Vec2; n: Vec2; a1: Vec2; a2: Vec2 } {
   let u = e.type === 'linear' ? e.dir : sub(e.p2, e.p1);
   if (e.type === 'aligned') u = len(u) > TOL ? { x: u.x / len(u), y: u.y / len(u) } : { x: 1, y: 0 };
   const n = { x: -u.y, y: u.x };
-  const a1 = add(e.p1, n, dot(sub(e.at, e.p1), n));
-  const a2 = add(e.p2, n, dot(sub(e.at, e.p2), n));
+  return { u, n, a1: add(e.p1, n, dot(sub(e.at, e.p1), n)), a2: add(e.p2, n, dot(sub(e.at, e.p2), n)) };
+}
+
+/**
+ * Linear and aligned: extension lines to a straight dimension line through
+ * `at`. With `textAt` (the text moved by its grip) the text sits on the line
+ * where `textAt` projects onto it, the line running out to reach it; the
+ * arrows are inside unless the extension lines are closer than two arrows.
+ */
+function linearParts(e: Extract<DimensionEntity, { type: 'linear' | 'aligned' }>, style: DimStyle, block: Block): Parts {
+  const { u, a1, a2 } = dimLine(e);
 
   const lines: Segment[] = [];
   for (const [p, a] of [[e.p1, a1], [e.p2, a2]] as const) {
@@ -188,8 +201,24 @@ function linearParts(e: Extract<DimensionEntity, { type: 'linear' | 'aligned' }>
   const w = span > TOL ? { x: (a2.x - a1.x) / span, y: (a2.y - a1.y) / span } : u;
   const half = halfChord(block, style.textGap, w);
   const arrowLen = style.arrowSize;
-  const fit = fitFor(span, half, arrowLen);
   const piece = pieceTo(lines);
+  if (e.textAt) {
+    const t = dot(sub(e.textAt, a1), w);
+    const arrowsIn = span >= 2 * arrowLen;
+    const textIn = t - half >= -TOL && t + half <= span + TOL;
+    let lo = Math.min(0, t - half);
+    let hi = Math.max(span, t + half);
+    if (!arrowsIn) {
+      lo = Math.min(lo, -2 * arrowLen);
+      hi = Math.max(hi, span + 2 * arrowLen);
+    }
+    piece(add(a1, w, lo), add(a1, w, t - half));
+    piece(add(a1, w, t + half), add(a1, w, hi));
+    const arrows = arrowsIn ? [arrow(a1, neg(w), arrowLen), arrow(a2, w, arrowLen)] : [arrow(a1, w, arrowLen), arrow(a2, neg(w), arrowLen)];
+    const fit: Fit = arrowsIn ? (textIn ? 'inside' : 'textOutside') : textIn ? 'arrowsOutside' : 'outside';
+    return { lines, arcs: [], arrows, fit, ...placeText(block, add(a1, w, t)) };
+  }
+  const fit = fitFor(span, half, arrowLen);
   const arrows: Triangle[] = [];
   if (fit === 'inside' || fit === 'textOutside') {
     arrows.push(arrow(a1, neg(w), arrowLen), arrow(a2, w, arrowLen));

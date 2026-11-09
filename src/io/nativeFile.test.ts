@@ -97,9 +97,9 @@ describe('native file', () => {
     expect(errorOf(serializeDrawing(d))).toBe('entities[0].text must be text.');
   });
 
-  it('round-trips a dimension\'s precision, tolerance and text overrides, and refuses bad ones', () => {
+  it('round-trips a dimension\'s precision, tolerance and text overrides and moved text, and refuses bad ones', () => {
     const d = createDrawing('in');
-    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0, y: 1 }, precision: 4, tolerance: { kind: 'limits', upper: 0.0005, lower: -0.0005 }, textOverride: '<> TYP' };
+    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0, y: 1 }, precision: 4, tolerance: { kind: 'limits', upper: 0.0005, lower: -0.0005 }, textOverride: '<> TYP', textAt: { x: 1.5, y: 1 } };
     d.entities.set(e.id, e);
     expect([...reopen(serializeDrawing(d)).entities.values()]).toEqual([e]);
     d.entities.set('e1', { ...e, precision: 9 });

@@ -2,6 +2,8 @@ import { arc3P, arcEnd, arcMid, arcStart } from '../geometry/arc';
 import { angleFrom, pointAtDeg } from '../geometry/circle';
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance, vecNearlyEqual } from '../geometry/vec';
+import { applyDimensionGrip, dimensionGrips } from './dimGrips';
+import type { Drawing } from './drawing';
 import type { Entity } from './entity';
 
 /**
@@ -12,10 +14,12 @@ import type { Entity } from './entity';
  *   xline or ray base).
  * - `quad0` … `quad270`: a circle's quadrants set its radius.
  * - `mid` on an arc: the arc passes through the dragged point, keeping both ends.
+ * - a dimension's grips: see `dimGrips.ts`.
  */
 export type Grip = { readonly key: string; readonly at: Vec2 };
 
-export function gripsFor(e: Entity): Grip[] {
+/** The grips of `e`. A dimension's need the drawing (its style and the sheet scale); without it, it has none. */
+export function gripsFor(e: Entity, d?: Drawing): Grip[] {
   switch (e.kind) {
     case 'point':
       return [{ key: 'move', at: e.at }];
@@ -41,7 +45,7 @@ export function gripsFor(e: Entity): Grip[] {
     case 'ray':
       return [{ key: 'move', at: e.base }];
     case 'dimension':
-      return []; // dimension grips come in Phase 4 step 7
+      return d ? dimensionGrips(d, e) : [];
   }
 }
 
@@ -53,7 +57,8 @@ const shift = (p: Vec2, d: Vec2): Vec2 => ({ x: p.x + d.x, y: p.y + d.y });
  * zero radius, an arc whose three points are collinear, or an arc end
  * dragged onto the center.
  */
-export function applyGrip(e: Entity, key: string, from: Vec2, to: Vec2): Entity | undefined {
+export function applyGrip(e: Entity, key: string, from: Vec2, to: Vec2, drawing?: Drawing): Entity | undefined {
+  if (e.kind === 'dimension') return drawing && applyDimensionGrip(drawing, e, key, to);
   const d = { x: to.x - from.x, y: to.y - from.y };
   if (key === 'move') {
     switch (e.kind) {
@@ -67,8 +72,6 @@ export function applyGrip(e: Entity, key: string, from: Vec2, to: Vec2): Entity 
       case 'xline':
       case 'ray':
         return { ...e, base: shift(e.base, d) };
-      case 'dimension':
-        return undefined;
     }
   }
   switch (e.kind) {
