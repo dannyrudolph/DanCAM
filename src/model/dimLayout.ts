@@ -88,6 +88,8 @@ export function measuredValue(e: DimensionEntity): number | undefined {
       return angularSector(e).sweep;
     case 'symmetric':
       return 2 * Math.abs(axisOffset(e));
+    case 'ordinate':
+      return Math.abs(e.axis === 'x' ? e.p1.x - e.origin.x : e.p1.y - e.origin.y);
     case 'leader':
       return undefined;
   }
@@ -302,6 +304,39 @@ function symmetricParts(e: Extract<DimensionEntity, { type: 'symmetric' }>, styl
 }
 
 /**
+ * Ordinate: a leader from the feature (after the extension offset) square
+ * to the measured axis, out to `at`; when `at` is off that line the leader
+ * jogs across in its last two arrow lengths. No arrow. The text sits past
+ * the leader's end, a text gap away.
+ */
+function ordinateParts(e: Extract<DimensionEntity, { type: 'ordinate' }>, style: DimStyle, block: Block): Parts {
+  const along = e.axis === 'x' ? { x: 0, y: 1 } : { x: 1, y: 0 };
+  const across = e.axis === 'x' ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  const k = dot(sub(e.at, e.p1), along);
+  const dir = k < 0 ? neg(along) : along;
+  const reach = Math.abs(k);
+  const off = dot(sub(e.at, e.p1), across);
+  const lines: Segment[] = [];
+  const piece = pieceTo(lines);
+  const start = add(e.p1, dir, Math.min(style.extOffset, reach));
+  const end = add(add(e.p1, dir, reach), across, off);
+  if (Math.abs(off) <= TOL) {
+    piece(start, end);
+  } else {
+    const jog = 2 * style.arrowSize;
+    const k1 = Math.max(Math.min(style.extOffset, reach), reach - 2 * jog);
+    const k2 = Math.max(k1, reach - jog);
+    const a = add(e.p1, dir, k1);
+    const b = add(add(e.p1, dir, k2), across, off);
+    piece(start, a);
+    piece(a, b);
+    piece(b, end);
+  }
+  const clear = style.textGap + (e.axis === 'x' ? block.height : block.width) / 2;
+  return { lines, arcs: [], arrows: [], fit: 'inside', ...placeText(block, add(end, dir, clear)) };
+}
+
+/**
  * Radius and diameter. With `at` outside the circle: a leader from the
  * text's shoulder to the circle along the line through the center, its
  * arrow on the circle pointing at the center. Inside: the radius line from
@@ -426,7 +461,7 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
     const text = { main: e.text };
     return { text, ...leaderParts(e, style, textBlock(text, style.textHeight)) };
   }
-  const value = measuredValue(e)!;
+  const value = measuredValue(e)! * (diameter && e.type === 'ordinate' ? 2 : 1);
   const text = formatDimension(value, formatFor(e, style, altFactor, diameter));
   const block = textBlock(text, style.textHeight);
   switch (e.type) {
@@ -440,16 +475,21 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
       return { value, text, ...angularParts(e, style, block) };
     case 'symmetric':
       return { value, text, ...symmetricParts(e, style, block) };
+    case 'ordinate':
+      return { value, text, ...ordinateParts(e, style, block) };
   }
 }
 
 /**
- * True for a linear dimension that reads a diameter in lathe view with Ø
- * on: square to the centerline (Y = 0) and measured from one side of it to
- * the other (spec, "Symmetric diameter").
+ * True for a dimension that reads a diameter in lathe view with Ø on: a
+ * linear one square to the centerline (Y = 0) and measured from one side
+ * of it to the other (spec, "Symmetric diameter"), or an X (radial)
+ * ordinate, which then shows twice its distance (spec, "Ordinate").
  */
 export function readsDiameter(d: Drawing, e: DimensionEntity): boolean {
-  if (!d.lathe || !d.diameterMode || e.type !== 'linear' || Math.abs(e.dir.x) > TOL) return false;
+  if (!d.lathe || !d.diameterMode) return false;
+  if (e.type === 'ordinate') return e.axis === 'y';
+  if (e.type !== 'linear' || Math.abs(e.dir.x) > TOL) return false;
   return (e.p1.y > TOL && e.p2.y < -TOL) || (e.p1.y < -TOL && e.p2.y > TOL);
 }
 

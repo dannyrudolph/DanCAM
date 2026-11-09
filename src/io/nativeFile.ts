@@ -32,6 +32,8 @@ type FileV3 = {
   currentDimStyle: string;
   /** Optional: files from before it existed print at 1:1. */
   sheetScale?: number;
+  /** Optional: absent is (0, 0). */
+  dimOrigin?: Vec2;
   /** Optional: absent is off. */
   lathe?: boolean;
   diameterMode?: boolean;
@@ -49,6 +51,7 @@ export function serializeDrawing(d: Drawing): string {
     currentLayer: d.currentLayer,
     currentDimStyle: d.currentDimStyle,
     sheetScale: d.sheetScale,
+    dimOrigin: d.dimOrigin,
     lathe: d.lathe,
     diameterMode: d.diameterMode,
     layers: [...d.layers.values()],
@@ -144,6 +147,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     if (!(scale > 0)) throw new FileError('sheetScale must be more than zero.');
     d.sheetScale = scale;
   }
+  if (file.dimOrigin !== undefined) d.dimOrigin = vec(file.dimOrigin, 'dimOrigin');
   if (file.lathe !== undefined) d.lathe = bool(file.lathe, 'lathe');
   if (file.diameterMode !== undefined) d.diameterMode = bool(file.diameterMode, 'diameterMode');
 
@@ -258,10 +262,13 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
       };
     case 'symmetric':
       return { ...common, type: 'symmetric', p1: vec(o.p1, `${at}.p1`), axisBase: vec(o.axisBase, `${at}.axisBase`), axisDir: unitVec(o.axisDir, `${at}.axisDir`) };
+    case 'ordinate':
+      if (o.axis !== 'x' && o.axis !== 'y') throw new FileError(`${at}.axis must be "x" or "y".`);
+      return { ...common, type: 'ordinate', p1: vec(o.p1, `${at}.p1`), origin: vec(o.origin, `${at}.origin`), axis: o.axis };
     case 'leader':
       return { ...common, type: 'leader', tip: vec(o.tip, `${at}.tip`), text: str(o.text, `${at}.text`) };
     default:
-      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric or leader.`);
+      throw new FileError(`${at}.type must be linear, aligned, radius, diameter, angular, symmetric, ordinate or leader.`);
   }
 }
 

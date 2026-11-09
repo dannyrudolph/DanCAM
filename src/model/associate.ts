@@ -177,6 +177,14 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
       const moved = axisMoved && vecNearlyEqual(sub(foot, e.axisBase), v) ? shifted(e, v) : e;
       return withAnchors({ ...moved, p1: r1.at, axisBase: foot, axisDir }, setAnchor(anchors, 'p1', r1.anchor));
     }
+    case 'ordinate': {
+      const r1 = follow(d, anchors.p1, e.p1);
+      if (r1 === GONE) return undefined;
+      // The leader's end keeps level with the feature along the measured axis, so it doesn't jog.
+      const v = sub(r1.at, e.p1);
+      const at = e.axis === 'x' ? { x: e.at.x + v.x, y: e.at.y } : { x: e.at.x, y: e.at.y + v.y };
+      return withAnchors({ ...e, p1: r1.at, at }, setAnchor(anchors, 'p1', r1.anchor));
+    }
     case 'leader':
       return e;
   }
@@ -212,6 +220,15 @@ function dependsOn(e: DimensionEntity, ids: ReadonlySet<EntityId>): boolean {
   return anchors !== undefined && KEYS.some((k) => dimAnchorIds(anchors, k).some((id) => ids.has(id)));
 }
 
+/** Ordinates that measured from `before` measure from `after`. */
+function originFollowUp(d: Drawing, before: Vec2, after: Vec2): Change[] {
+  const out: Change[] = [];
+  for (const e of d.entities.values()) {
+    if (e.kind === 'dimension' && e.type === 'ordinate' && vecNearlyEqual(e.origin, before)) out.push({ op: 'modify', before: e, after: { ...e, origin: after } });
+  }
+  return out;
+}
+
 /**
  * The changes that keep dimensions on their geometry after `changes` have
  * been applied to `d`: modify for a re-measured dimension (or one whose
@@ -220,14 +237,15 @@ function dependsOn(e: DimensionEntity, ids: ReadonlySet<EntityId>): boolean {
 export function dimensionFollowUp(d: Drawing, changes: readonly Change[]): Change[] {
   const geometry = new Set<EntityId>();
   const dimensions = new Set<EntityId>();
+  const out: Change[] = [];
   for (const c of changes) {
+    if (c.op === 'dimOrigin') out.push(...originFollowUp(d, c.before, c.after));
     const e = c.op === 'add' || c.op === 'remove' ? c.entity : c.op === 'modify' ? c.after : undefined;
     if (!e) continue;
     if (e.kind !== 'dimension') geometry.add(e.id);
     else if (c.op !== 'remove') dimensions.add(e.id);
   }
-  if (geometry.size === 0 && dimensions.size === 0) return [];
-  const out: Change[] = [];
+  if (geometry.size === 0 && dimensions.size === 0) return out;
   for (const e of d.entities.values()) {
     if (e.kind !== 'dimension' || !e.anchors) continue;
     const next = dimensions.has(e.id) ? keepMatching(d, e) : dependsOn(e, geometry) ? remeasure(d, e) : e;

@@ -29,6 +29,7 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
       case 'angular':
         return [...head, { label: 'Vertex X', value: e.vertex.x }, { label: 'Vertex Y', value: e.vertex.y }];
       case 'symmetric':
+      case 'ordinate':
         return [...head, { label: 'Point X', value: e.p1.x }, { label: 'Point Y', value: e.p1.y }];
       case 'leader':
         return [...head, { label: 'Arrow X', value: e.tip.x }, { label: 'Arrow Y', value: e.tip.y }, { label: 'Landing X', value: e.at.x }, { label: 'Landing Y', value: e.at.y }];
@@ -121,6 +122,7 @@ const DIM_TYPE_LABEL: Record<Extract<Entity, { kind: 'dimension' }>['type'], str
   diameter: 'Diameter',
   angular: 'Angular',
   symmetric: 'Symmetric diameter',
+  ordinate: 'Ordinate',
   leader: 'Leader',
 };
 

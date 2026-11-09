@@ -1,4 +1,5 @@
 import { dimensionFollowUp } from './associate';
+import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import type { DimStyle } from './dimStyle';
 import type { Drawing, Layer, Units } from './drawing';
 import type { Entity } from './entity';
@@ -15,7 +16,9 @@ export type Change =
   /** Adds (no `before`), removes (no `after`) or edits one dimension style, matched by name. */
   | { readonly op: 'dimStyle'; readonly before?: DimStyle; readonly after?: DimStyle }
   /** The sheet (print) scale dimensions are sized for. */
-  | { readonly op: 'sheetScale'; readonly before: number; readonly after: number };
+  | { readonly op: 'sheetScale'; readonly before: number; readonly after: number }
+  /** The ordinate origin (its ordinates follow in the same transaction, see `associate`). */
+  | { readonly op: 'dimOrigin'; readonly before: Vec2; readonly after: Vec2 };
 
 /** A user-level operation: undone and redone as one step. */
 export type Transaction = {
@@ -33,6 +36,7 @@ function invert(c: Change): Change {
       return { op: 'modify', before: c.after, after: c.before };
     case 'units':
     case 'sheetScale':
+    case 'dimOrigin':
       return { ...c, before: c.after, after: c.before } as Change;
     case 'layer':
       return { op: 'layer', ...(c.after && { before: c.after }), ...(c.before && { after: c.before }) };
@@ -64,6 +68,10 @@ function apply(d: Drawing, c: Change): void {
     case 'sheetScale':
       if (d.sheetScale !== c.before) throw new Error(`sheetScale: drawing is ${d.sheetScale}, expected ${c.before}`);
       d.sheetScale = c.after;
+      return;
+    case 'dimOrigin':
+      if (!vecNearlyEqual(d.dimOrigin, c.before)) throw new Error('dimOrigin: drawing origin is not the expected one');
+      d.dimOrigin = c.after;
       return;
     case 'layer':
       applyLayer(d, c.before, c.after);

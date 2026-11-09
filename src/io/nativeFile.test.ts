@@ -219,7 +219,7 @@ describe('native file', () => {
     expect(reopen(v2({ entities: [dimension] })).entities.get('e1')).toEqual(dimension);
     expect(errorOf(v2({ entities: [{ ...dimension, dimStyle: 'NOPE' }] }))).toBe('entities[0]: dimension style "NOPE" is not defined.');
     expect(errorOf(v2({ entities: [{ ...dimension, dir: { x: 2, y: 0 } }] }))).toBe('entities[0].dir must be a unit vector.');
-    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be linear, aligned, radius, diameter, angular, symmetric or leader.');
+    expect(errorOf(v2({ entities: [{ ...dimension, type: 'radial' }] }))).toBe('entities[0].type must be linear, aligned, radius, diameter, angular, symmetric, ordinate or leader.');
     const style = defaultDimStyle('in');
     expect(errorOf(v2({ dimStyles: [{ ...style, precision: 9 }] }))).toBe('dimStyles[0].precision must be a whole number from 0 to 8.');
     expect(errorOf(v2({ dimStyles: [{ ...style, textHeight: 0 }] }))).toBe('dimStyles[0].textHeight must be more than zero.');

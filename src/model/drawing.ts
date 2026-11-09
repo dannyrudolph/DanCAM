@@ -1,3 +1,4 @@
+import type { Vec2 } from '../geometry/vec';
 import { type BBox, EMPTY_BBOX, union } from '../geometry/bbox';
 import { dimensionBBox } from './dimLayout';
 import { type DimStyle, defaultDimStyle } from './dimStyle';
@@ -28,6 +29,8 @@ export type Drawing = {
   readonly dimStyles: Map<string, DimStyle>;
   /** Print scale (10 = 10:1) dividing dimension sheet sizes; see `sheetScale.ts`. Changed through the undo stack. */
   sheetScale: number;
+  /** Where ordinate dimensions measure from (spec, "Ordinate"); (0, 0) until set. Changed through the undo stack. */
+  dimOrigin: Vec2;
   /** Lathe mode: axes named Z and X, a centerline at Y = 0 (see `latheView.ts`). Saved, not undoable. */
   lathe: boolean;
   /** In lathe mode, vertical values shown and typed as diameters. Saved, not undoable. */
@@ -55,6 +58,7 @@ export function createDrawing(units: Units): Drawing {
     dimStyles: new Map([[dimStyle.name, dimStyle]]),
     currentDimStyle: dimStyle.name,
     sheetScale: 1,
+    dimOrigin: { x: 0, y: 0 },
     lathe: false,
     diameterMode: false,
     currentLayer: DEFAULT_LAYER,

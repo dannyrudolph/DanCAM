@@ -81,6 +81,10 @@ export type RayEntity = EntityBase & {
  *   `axisBase` is `p1`'s foot on the axis when placed. The dimension line
  *   is square to the axis where `at` is along it (spec, "Symmetric
  *   diameter"); its style draws one side (Half) or both (Full).
+ * - `ordinate`: `p1`'s distance from `origin` along X (`axis` 'x', a
+ *   vertical leader; Z in lathe mode) or Y ('y', a horizontal leader; X in
+ *   lathe mode). The leader runs from `p1` toward `at`, jogging when `at`
+ *   is off its line, and the text sits just past `at`.
  * - `leader`: a note, not a measurement. An arrow at `tip`, a line to `at`
  *   (the landing), a short horizontal shoulder, then `text` as typed.
  *
@@ -105,6 +109,7 @@ export type DimensionEntity = EntityBase & {
     | { readonly type: 'radius' | 'diameter'; readonly center: Vec2; readonly radius: number }
     | { readonly type: 'angular'; readonly vertex: Vec2; readonly p1: Vec2; readonly p2: Vec2; readonly dir1: Vec2; readonly dir2: Vec2 }
     | { readonly type: 'symmetric'; readonly p1: Vec2; readonly axisBase: Vec2; readonly axisDir: Vec2 }
+    | { readonly type: 'ordinate'; readonly p1: Vec2; readonly origin: Vec2; readonly axis: 'x' | 'y' }
     | { readonly type: 'leader'; readonly tip: Vec2; readonly text: string }
   );
 
@@ -125,6 +130,8 @@ function measuredPoints(e: DimensionEntity): Vec2[] {
       return [e.vertex, e.p1, e.p2, e.at];
     case 'symmetric':
       return [e.p1, e.axisBase, e.at];
+    case 'ordinate':
+      return [e.p1, e.at];
     case 'leader':
       return [e.tip, e.at];
   }
@@ -149,6 +156,8 @@ function mapMeasured(e: DimensionEntity, f: (p: Vec2) => Vec2): DimensionEntity 
       return { ...e, at, vertex: f(e.vertex), p1: f(e.p1), p2: f(e.p2) };
     case 'symmetric':
       return { ...e, at, p1: f(e.p1), axisBase: f(e.axisBase) };
+    case 'ordinate':
+      return { ...e, at, p1: f(e.p1), origin: f(e.origin) };
     case 'leader':
       return { ...e, at, tip: f(e.tip) };
   }

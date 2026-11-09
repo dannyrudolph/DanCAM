@@ -402,6 +402,20 @@ deferred (ray to Phase 2, autosave to Phase 6).
    Also: Enter now finishes Symmetric diameter, as its prompt says.
 5. Ordinate (Shift+Z): DIMORIGIN with a marker; Z or X by drag or forced;
    X as Ø in lathe mode; common baseline; auto-jog; Align Ordinates.
+   Split (user, 2026-11-09): 5a the tool, origin and Ø; 5b the common
+   baseline, auto-jog and Align Ordinates.
+   **5a (done)** `Drawing.dimOrigin` ((0, 0) default, saved, `dimOrigin`
+   undo record, scaled by Convert units); marker (circle and cross) once
+   set or used. Dimension type `ordinate` (`p1`, `origin` copied, `axis`
+   x|y, `at` = leader end); value |Δ| from the origin; leader from the
+   feature (extension offset) square to the axis, jogging in its last two
+   arrow lengths when `at` is off its line, text past the end. Tool
+   Shift+Z (`commands/ordinateTool`): feature + text pairs until Enter;
+   Auto / Z / X (X / Y outside lathe) kept for the session; Set origin
+   (its ordinates follow in the same undo step via `associate`). With
+   lathe + Ø, X ordinates read Ø twice. A snapped feature is anchored; the
+   text keeps level with it along the measured axis. Grips p1, text. The
+   origin itself isn't anchored to geometry.
 6. Center marks (Shift+E) and centerlines: associative annotations.
 7. Done-when: a real lathe part, with the user's feedback along the way.
 

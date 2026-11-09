@@ -3,6 +3,7 @@ import { createArrayTool } from '../commands/arrayTool';
 import { createCircleTool } from '../commands/circleTool';
 import { createChamferTool, createFilletTool } from '../commands/cornerTools';
 import { createBaselineDimTool, createContinueDimTool } from '../commands/chainDimTools';
+import { createOrdinateDimTool } from '../commands/ordinateTool';
 import { createAlignedDimTool, createAngularDimTool, createDiameterDimTool, createLeaderTool, createLinearDimTool, createRadiusDimTool, createSymmetricDimTool } from '../commands/dimTools';
 import { copyTool, createMirrorTool, eraseTool, moveTool, rotateTool, scaleTool } from '../commands/editTools';
 import { gripTool } from '../commands/gripTool';
@@ -65,7 +66,7 @@ function initialView(units: Units, widthPx: number, heightPx: number): vp.Viewpo
 export const DRAW_TOOLS: readonly ToolDef[] = [lineTool, createCircleTool(), createArcTool(), createXlineTool(), rayTool, pointTool];
 export const EDIT_TOOLS: readonly ToolDef[] = [eraseTool, moveTool, copyTool, rotateTool, createMirrorTool(), scaleTool];
 export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFilletTool(), createChamferTool(), createOffsetTool(), createBreakTool(), joinTool, createLengthenTool(), createArrayTool(), stretchTool];
-export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createLeaderTool()];
+export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), createLeaderTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...INQUIRY_TOOLS];
 

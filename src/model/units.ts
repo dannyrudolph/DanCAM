@@ -15,7 +15,8 @@ export const UNIT_LABEL: Readonly<Record<Units, string>> = { in: 'inch', mm: 'mm
 /**
  * Converts the drawing to `to`: every entity is scaled so its real size is
  * unchanged (inch → mm multiplies by 25.4, mm → inch divides), and so are the
- * dimension styles' sizes and tolerances, so text prints the same size.
+ * dimension styles' sizes and tolerances, so text prints the same size,
+ * and the ordinate origin.
  * Undefined when the drawing already uses `to`.
  */
 export function convertUnits(d: Drawing, to: Units): Transaction | undefined {
@@ -28,6 +29,8 @@ export function convertUnits(d: Drawing, to: Units): Transaction | undefined {
   for (const s of d.dimStyles.values()) {
     changes.push({ op: 'dimStyle', before: s, after: scaleDimStyle(s, scale) });
   }
+  const o = d.dimOrigin;
+  if (o.x !== 0 || o.y !== 0) changes.push({ op: 'dimOrigin', before: o, after: { x: scale(o.x), y: scale(o.y) } });
   return { label: `Convert to ${UNIT_LABEL[to]}`, changes };
 }
 

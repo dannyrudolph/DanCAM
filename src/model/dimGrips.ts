@@ -21,6 +21,7 @@ import type { Grip } from './grips';
  * - symmetric: `p1` moves the feature point; `line1`, where the dimension
  *   line meets its extension line, moves the line along the axis; `text`
  *   moves the text along the line.
+ * - ordinate: `p1` moves the feature point, `text` the leader's end.
  * - leader: `tip` moves the arrow point, `text` the landing.
  */
 
@@ -61,6 +62,11 @@ export function dimensionGrips(d: Drawing, e: DimensionEntity): Grip[] {
         { key: 'text', at: mid({ x: t.minX, y: t.minY }, { x: t.maxX, y: t.maxY }) },
       ];
     }
+    case 'ordinate':
+      return [
+        { key: 'p1', at: e.p1 },
+        { key: 'text', at: e.at },
+      ];
     case 'leader':
       return [
         { key: 'tip', at: e.tip },
@@ -134,6 +140,10 @@ export function applyDimensionGrip(d: Drawing, e: DimensionEntity, key: string, 
       if (key === 'text') return { ...e, textAt: to };
       return undefined;
     }
+    case 'ordinate':
+      if (key === 'p1') return { ...withoutAnchors(e, ['p1']), p1: to } as typeof e;
+      if (key === 'text') return { ...e, at: to };
+      return undefined;
     case 'leader':
       if (key === 'tip') return vecNearlyEqual(to, e.at) ? undefined : { ...e, tip: to };
       if (key === 'text') return vecNearlyEqual(to, e.tip) ? undefined : { ...e, at: to };

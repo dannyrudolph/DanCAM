@@ -1406,6 +1406,54 @@ test('Baseline stacks dimensions from one start, a spacing apart; Enter finishes
   await expect(prop(page, 'Measured')).toHaveText('0.5000');
 });
 
+test('Ordinate in lathe mode: Z by a vertical leader, X as Ø by a sideways one; Set origin moves them all', async ({ page }) => {
+  await page.getByTestId('lathe').click();
+  await page.getByTestId('diameter').click();
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0.25'); // Z 0, Ø .25
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '2', '-1');
+  await typeValues(page, '-1', '1.5'); // two points set the extents
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -1, maxX: 2, minY: -0.5, maxY: 0.75 });
+  const option = (name: string) => page.locator('.option-button', { hasText: name });
+
+  await page.keyboard.press('Shift+Z');
+  await expect(option('Z ordinate')).toBeVisible();
+  let p = at(1, 0.125);
+  await page.mouse.move(p.x - 2, p.y + 2);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await page.mouse.click(p.x - 2, p.y + 2);
+  p = at(1, 0.6); // straight up: a Z ordinate
+  await page.mouse.click(p.x, p.y);
+  p = at(1, 0.125);
+  await page.mouse.click(p.x - 2, p.y + 2);
+  p = at(1.6, 0.125); // sideways: an X ordinate, read as a diameter
+  await page.mouse.click(p.x, p.y);
+  await option('Set origin').click();
+  p = at(0.5, 0.125); // the line's midpoint
+  await page.mouse.move(p.x, p.y + 2);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid');
+  await page.mouse.click(p.x, p.y + 2);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('5');
+
+  p = at(1, 0.4); // on the Z ordinate's leader
+  await page.mouse.click(p.x, p.y);
+  await expect(prop(page, 'Type')).toHaveText('Ordinate');
+  await expect(prop(page, 'Text')).toHaveText('.500'); // from Z .5 now
+  await page.keyboard.press('Control+z'); // the origin back
+  await expect(prop(page, 'Text')).toHaveText('1.000');
+  await page.keyboard.press('Escape');
+  p = at(1.3, 0.125); // on the X ordinate's leader
+  await page.mouse.click(p.x, p.y);
+  await expect(prop(page, 'Text')).toHaveText('Ø.250');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

@@ -27,6 +27,7 @@ const COLORS = {
   grip: '#0969da',
   /** Lathe mode's centerline at Y = 0: part of the view, not the drawing. */
   latheAxis: '#8c959f',
+  origin: '#0969da',
   hotGrip: '#d1242f',
   gripEdge: '#ffffff',
   windowEdge: '#0969da',
@@ -87,6 +88,7 @@ export function render(
     drawEntity(ctx, v, drawing, axis, LINE_STYLES.center, COLORS.latheAxis, 0);
   }
   drawEntities(ctx, v, drawing, overlay.selected);
+  if (showsOrigin(drawing)) drawOriginMark(ctx, worldToScreen(v, drawing.dimOrigin));
   for (const e of overlay.preview) {
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
@@ -231,6 +233,28 @@ function drawDimension(ctx: CanvasRenderingContext2D, v: Viewport, l: DimLayout,
     ctx.font = `${px}px ${TEXT_FONT}`;
     ctx.fillText(run.text, at.x, at.y);
   }
+}
+
+/** The ordinate origin is marked once it has been set or an ordinate uses it. */
+function showsOrigin(d: Drawing): boolean {
+  if (d.dimOrigin.x !== 0 || d.dimOrigin.y !== 0) return true;
+  for (const e of d.entities.values()) if (e.kind === 'dimension' && e.type === 'ordinate') return true;
+  return false;
+}
+
+/** A circle with a cross through it, the datum symbol, a fixed size on screen. */
+function drawOriginMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
+  const r = 6;
+  ctx.strokeStyle = COLORS.origin;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(s.x, s.y, r, 0, 2 * Math.PI);
+  ctx.moveTo(s.x - 2 * r, s.y);
+  ctx.lineTo(s.x + 2 * r, s.y);
+  ctx.moveTo(s.x, s.y - 2 * r);
+  ctx.lineTo(s.x, s.y + 2 * r);
+  ctx.stroke();
 }
 
 function drawCursorMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
