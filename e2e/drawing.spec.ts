@@ -2125,7 +2125,10 @@ test.describe('Import STEP', () => {
   async function importFile(page: Page, path: string) {
     const choosing = page.waitForEvent('filechooser');
     await page.getByTestId('import-step').click();
-    await (await choosing).setFiles(path);
+    const chooser = await choosing;
+    // No type filter: Safari greys out .step files when the Mac has no type registered for them.
+    expect(await chooser.element().getAttribute('accept')).toBeNull();
+    await chooser.setFiles(path);
   }
 
   test('a turned part from a STEP file is laid along Z with Z0 at its right end, on a layer named after the file', async ({ page }) => {

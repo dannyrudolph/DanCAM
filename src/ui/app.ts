@@ -428,7 +428,7 @@ export class App {
   /** Import STEP (spec, "STEP import"): reads the file, turns lathe mode on, and starts placing its profile. */
   private async importStep(): Promise<void> {
     if (this.inBlockEdit()) return;
-    const file = await pickTextFile('.step,.stp,.STEP,.STP');
+    const file = await pickTextFile(''); // any file: Safari won't let a .step be picked when the Mac has no type for it; anything else is refused when read
     if (!file) return;
     const model = readStep(file.text);
     const profile = model.ok ? turnedProfile(model.model, this.drawing.units) : model;

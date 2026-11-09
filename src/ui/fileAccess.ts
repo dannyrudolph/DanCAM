@@ -90,7 +90,13 @@ export class DrawingFile {
   }
 }
 
-/** Asks for a text file with a file input (`accept`: extensions, comma-separated); undefined when cancelled. */
+/**
+ * Asks for a text file with a file input (`accept`: extensions,
+ * comma-separated, or '' for any file); undefined when cancelled. Use ''
+ * for a type the computer may not know: Safari greys out files whose
+ * extension has no registered type (.step on a Mac without a CAD program),
+ * so they can't be picked at all.
+ */
 export async function pickTextFile(accept: string): Promise<{ name: string; text: string } | undefined> {
   const file = await pickWithInput(accept);
   return file && { name: file.name, text: await file.text() };
@@ -100,7 +106,7 @@ function pickWithInput(accept = `${FILE_EXTENSION},.json`): Promise<File | undef
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = accept;
+    if (accept !== '') input.accept = accept;
     input.addEventListener('change', () => resolve(input.files?.[0]));
     input.addEventListener('cancel', () => resolve(undefined));
     input.click();
