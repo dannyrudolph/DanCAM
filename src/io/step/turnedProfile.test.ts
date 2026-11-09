@@ -22,7 +22,7 @@ function shape(curves: readonly ProfileCurve[]): string[] {
   const p = (q: { x: number; y: number }): string => `(${n(q.x)}, ${n(q.y)})`;
   const deg = (d: number): string => n(((d % 360) + 360) % 360);
   const style = (c: ProfileCurve): string => (c.style ? ` ${c.style}` : '');
-  return curves.map((c) => (c.kind === 'line' ? `line ${p(c.start)}-${p(c.end)}` : `arc ${p(c.center)} R${n(c.radius)} ${deg(c.startDeg)}→${deg(c.endDeg)}`) + style(c)).sort();
+  return curves.map((c) => (c.kind === 'line' ? `line ${p(c.start)}-${p(c.end)}` : c.kind === 'circle' ? `circle ${p(c.center)} R${n(c.radius)}` : `arc ${p(c.center)} R${n(c.radius)} ${deg(c.startDeg)}→${deg(c.endDeg)}`) + style(c)).sort();
 }
 
 const TIP = 32 - 1.5 / Math.tan((59 * Math.PI) / 180); // where the 118° drill point closes

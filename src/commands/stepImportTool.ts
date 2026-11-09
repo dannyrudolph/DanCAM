@@ -31,7 +31,10 @@ export function layerNameFor(fileName: string): string {
 export function profileEntities(curves: readonly ProfileCurve[], layer: string, id: () => EntityId): Entity[] {
   return curves.map((c): Entity => {
     const props = { id: id(), layer, ...(c.style ? { style: c.style } : {}) };
-    return c.kind === 'line' ? { kind: 'line', ...props, start: c.start, end: c.end } : { kind: 'arc', ...props, center: c.center, radius: c.radius, startDeg: c.startDeg, endDeg: c.endDeg };
+    if (c.kind === 'line') return { kind: 'line', ...props, start: c.start, end: c.end };
+    if (c.kind === 'circle') return { kind: 'circle', ...props, center: c.center, radius: c.radius };
+    const deg = (d: number): number => ((d % 360) + 360) % 360;
+    return { kind: 'arc', ...props, center: c.center, radius: c.radius, startDeg: deg(c.startDeg), endDeg: deg(c.endDeg) };
   });
 }
 

@@ -14,10 +14,14 @@ import type { Vec2 } from '../geometry/vec';
  */
 export type ProfileStyle = 'hidden' | 'tangent';
 
+/** `fitted`: lines and arcs following an edge that projects to an ellipse or spline, within the fit tolerance rather than exact. */
+type CurveMarks = { readonly style?: ProfileStyle; readonly fitted?: true };
+
 export type ProfileCurve =
-  | { readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2; readonly style?: ProfileStyle }
+  | ({ readonly kind: 'line'; readonly start: Vec2; readonly end: Vec2 } & CurveMarks)
   /** Counter-clockwise from startDeg to endDeg. */
-  | { readonly kind: 'arc'; readonly center: Vec2; readonly radius: number; readonly startDeg: number; readonly endDeg: number; readonly style?: ProfileStyle };
+  | ({ readonly kind: 'arc'; readonly center: Vec2; readonly radius: number; readonly startDeg: number; readonly endDeg: number } & CurveMarks)
+  | ({ readonly kind: 'circle'; readonly center: Vec2; readonly radius: number } & CurveMarks);
 
 export type LeftOut = {
   /** Faces of the solid that aren't round about the axis: cross holes, flats, slots, hex. */
@@ -51,7 +55,7 @@ export function zExtent(curves: readonly ProfileCurve[]): [number, number] {
   let lo = Infinity;
   let hi = -Infinity;
   for (const c of curves) {
-    for (const z of c.kind === 'line' ? [c.start.x, c.end.x] : arcZs(c)) {
+    for (const z of c.kind === 'line' ? [c.start.x, c.end.x] : c.kind === 'circle' ? [c.center.x - c.radius, c.center.x + c.radius] : arcZs(c)) {
       lo = Math.min(lo, z);
       hi = Math.max(hi, z);
     }
@@ -82,13 +86,41 @@ function moveCurve(c: ProfileCurve, dz: number): ProfileCurve {
 /** End for end: Z negated; an arc keeps running counter-clockwise. */
 function flipCurve(c: ProfileCurve): ProfileCurve {
   const f = (p: Vec2): Vec2 => ({ x: -p.x, y: p.y });
-  return c.kind === 'line' ? { ...c, start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: 180 - c.endDeg, endDeg: 180 - c.startDeg };
+  if (c.kind === 'line') return { ...c, start: f(c.start), end: f(c.end) };
+  return c.kind === 'circle' ? { ...c, center: f(c.center) } : { ...c, center: f(c.center), startDeg: 180 - c.endDeg, endDeg: 180 - c.startDeg };
 }
 
 /** Below the centerline: radius negated; an arc keeps running counter-clockwise. */
 function mirrorCurve(c: ProfileCurve): ProfileCurve {
   const f = (p: Vec2): Vec2 => ({ x: p.x, y: -p.y });
-  return c.kind === 'line' ? { ...c, start: f(c.start), end: f(c.end) } : { ...c, center: f(c.center), startDeg: -c.endDeg, endDeg: -c.startDeg };
+  if (c.kind === 'line') return { ...c, start: f(c.start), end: f(c.end) };
+  return c.kind === 'circle' ? { ...c, center: f(c.center) } : { ...c, center: f(c.center), startDeg: -c.endDeg, endDeg: -c.startDeg };
+}
+
+/** Moved by (dx, dy). */
+export function shiftCurve(c: ProfileCurve, dx: number, dy: number): ProfileCurve {
+  const m = (p: Vec2): Vec2 => ({ x: p.x + dx, y: p.y + dy });
+  return c.kind === 'line' ? { ...c, start: m(c.start), end: m(c.end) } : { ...c, center: m(c.center) };
+}
+
+/** The box the curves fill: [minX, minY, maxX, maxY]. */
+export function curvesBox(curves: readonly ProfileCurve[]): [number, number, number, number] {
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  const take = (p: Vec2): void => {
+    [x0, y0, x1, y1] = [Math.min(x0, p.x), Math.min(y0, p.y), Math.max(x1, p.x), Math.max(y1, p.y)];
+  };
+  for (const c of curves) {
+    if (c.kind === 'line') [c.start, c.end].forEach(take);
+    else if (c.kind === 'circle') [-1, 1].forEach((k) => take({ x: c.center.x + k * c.radius, y: c.center.y + k * c.radius }));
+    else {
+      const sweep = (((c.endDeg - c.startDeg) % 360) + 360) % 360;
+      for (const q of [c.startDeg, c.endDeg, 0, 90, 180, 270]) {
+        const from = (((q - c.startDeg) % 360) + 360) % 360;
+        if (q === c.startDeg || q === c.endDeg || from <= sweep) take({ x: c.center.x + c.radius * Math.cos((q * Math.PI) / 180), y: c.center.y + c.radius * Math.sin((q * Math.PI) / 180) });
+      }
+    }
+  }
+  return [x0, y0, x1, y1];
 }
 
 /** How far apart two angles are, in degrees, the short way round. */
@@ -105,19 +137,16 @@ function degApart(a: number, b: number): number {
  */
 export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurve[] {
   const lines: Joinable[] = [];
-  const arcs: Extract<ProfileCurve, { kind: 'arc' }>[] = [];
+  const round: Round[] = [];
   for (const c of curves) {
-    if (c.kind === 'arc') {
-      const close = (a: number, b: number): boolean => degApart(a, b) * (Math.PI / 180) * c.radius <= tol;
-      const same = arcs.some(
-        (o) => Math.abs(o.center.x - c.center.x) <= tol && Math.abs(o.center.y - c.center.y) <= tol && Math.abs(o.radius - c.radius) <= tol && o.style === c.style && close(o.startDeg, c.startDeg) && close(o.endDeg, c.endDeg),
-      );
-      if (!same) arcs.push(c);
+    if (c.kind !== 'line') {
+      round.push(c.kind === 'circle' ? { ...c, kind: 'arc', startDeg: 0, endDeg: 360 } : c);
       continue;
     }
     const [a, b] = c.start.x < c.end.x || (Math.abs(c.start.x - c.end.x) <= tol && c.start.y < c.end.y) ? [c.start, c.end] : [c.end, c.start];
-    lines.push(c.style ? { a, b, style: c.style } : { a, b });
+    lines.push({ a, b, ...marks(c) });
   }
+  const arcs = joinArcs(round, tol);
   // Join lines on one carrier whose spans overlap or touch, until nothing joins.
   let joined = true;
   while (joined) {
@@ -134,14 +163,49 @@ export function merge(curves: readonly ProfileCurve[], tol: number): ProfileCurv
       }
     }
   }
-  return [...lines.map((l): ProfileCurve => (l.style ? { kind: 'line', start: l.a, end: l.b, style: l.style } : { kind: 'line', start: l.a, end: l.b })), ...arcs];
+  return [...lines.map((l): ProfileCurve => ({ kind: 'line', start: l.a, end: l.b, ...marks(l) })), ...arcs];
 }
 
-type Joinable = { readonly a: Vec2; readonly b: Vec2; readonly style?: ProfileStyle };
+const marks = (c: CurveMarks): CurveMarks => ({ ...(c.style ? { style: c.style } : {}), ...(c.fitted ? { fitted: true as const } : {}) });
+
+/** An arc, or a whole circle as 0 to 360. */
+type Round = Extract<ProfileCurve, { kind: 'arc' }>;
+
+/** How far `a` is from `from`, counter-clockwise, in [0, 360). */
+const ccw = (from: number, a: number): number => (((a - from) % 360) + 360) % 360;
+
+/** Arcs of one circle that overlap or touch, joined; a full turn becomes a circle; repeats dropped. */
+function joinArcs(arcs: readonly Round[], tol: number): ProfileCurve[] {
+  const out: { c: Round; start: number; sweep: number }[] = [];
+  for (const a of arcs) {
+    let start = a.startDeg;
+    let sweep = a.endDeg - a.startDeg >= 360 - TOL ? 360 : ccw(a.startDeg, a.endDeg);
+    const slack = ((tol / a.radius) * 180) / Math.PI;
+    for (let i = out.length - 1; i >= 0; i--) {
+      const o = out[i]!;
+      if (Math.abs(o.c.center.x - a.center.x) > tol || Math.abs(o.c.center.y - a.center.y) > tol || Math.abs(o.c.radius - a.radius) > tol || o.c.style !== a.style || o.c.fitted !== a.fitted) continue;
+      if (o.sweep >= 360 || sweep >= 360) {
+        [start, sweep] = [0, 360];
+      } else if (ccw(o.start, start) <= o.sweep + slack) {
+        sweep = Math.min(360, Math.max(o.sweep, ccw(o.start, start) + sweep));
+        start = o.start;
+      } else if (ccw(start, o.start) <= sweep + slack) {
+        sweep = Math.min(360, Math.max(sweep, ccw(start, o.start) + o.sweep));
+      } else continue;
+      out.splice(i, 1);
+    }
+    out.push({ c: a, start, sweep: sweep >= 360 - slack ? 360 : sweep });
+  }
+  return out.map(({ c, start, sweep }): ProfileCurve =>
+    sweep >= 360 ? { kind: 'circle', center: c.center, radius: c.radius, ...marks(c) } : { kind: 'arc', center: c.center, radius: c.radius, startDeg: start, endDeg: start + sweep, ...marks(c) },
+  );
+}
+
+type Joinable = { readonly a: Vec2; readonly b: Vec2 } & CurveMarks;
 
 /** One line covering both when they lie on one line, overlap or touch, and are the same kind of edge. */
 function join(p: Joinable, q: Joinable, tol: number): Joinable | undefined {
-  if (p.style !== q.style) return undefined;
+  if (p.style !== q.style || p.fitted !== q.fitted) return undefined;
   const d = { x: p.b.x - p.a.x, y: p.b.y - p.a.y };
   const len = Math.hypot(d.x, d.y);
   if (len === 0) return undefined;
@@ -196,6 +260,7 @@ function showing(c: ProfileCurve, tol: number): Vec2 {
     if (Math.abs(c.end.x - c.start.x) <= tol) return c.start.y > c.end.y ? c.start : c.end;
     return { x: (c.start.x + c.end.x) / 2, y: (c.start.y + c.end.y) / 2 };
   }
+  if (c.kind === 'circle') return { x: c.center.x, y: c.center.y + c.radius };
   const sweep = (((c.endDeg - c.startDeg) % 360) + 360) % 360;
   const mid = ((c.startDeg + sweep / 2) * Math.PI) / 180;
   return { x: c.center.x + c.radius * Math.cos(mid), y: c.center.y + c.radius * Math.sin(mid) };
@@ -212,6 +277,7 @@ function curveEnds(c: ProfileCurve): { at: Vec2; away: Vec2 }[] {
       { at: c.end, away: { x: -d.x, y: -d.y } },
     ];
   }
+  if (c.kind === 'circle') return [];
   const rad = (deg: number): number => (deg * Math.PI) / 180;
   const at = (deg: number): Vec2 => ({ x: c.center.x + c.radius * Math.cos(rad(deg)), y: c.center.y + c.radius * Math.sin(rad(deg)) });
   const ccw = (deg: number): Vec2 => ({ x: -Math.sin(rad(deg)), y: Math.cos(rad(deg)) });
@@ -236,6 +302,10 @@ function radiusAt(curves: readonly ProfileCurve[], z: number, tol: number): numb
     const dz = z - c.center.x;
     if (Math.abs(dz) > c.radius + tol) continue;
     const dy = Math.sqrt(Math.max(0, c.radius * c.radius - dz * dz));
+    if (c.kind === 'circle') {
+      r = Math.max(r, c.center.y + dy);
+      continue;
+    }
     const slack = (tol / c.radius) * (180 / Math.PI);
     const sweep = (((c.endDeg - c.startDeg) % 360) + 360) % 360;
     for (const y of [c.center.y + dy, c.center.y - dy]) {

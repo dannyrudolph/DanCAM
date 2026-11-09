@@ -704,6 +704,30 @@ Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
    and the viewer (ray against planes, cylinders, cones, spheres, tori,
    with a point-in-face test on the surface); hidden pieces under visible
    ones dropped.
+   **(done, 5 and 6)** `io/step/threeViews` (`threeViews(model, units,
+   {flip, turn})` → front, top, end as ProfileCurves with `style` and
+   `fitted`). Frame: the axis from `findAxis`, up the global Y (else Z,
+   else X) most square to it; Turn is a quarter turn about the axis, Flip
+   reverses it. Edges once each by id; seams and edges between two faces
+   on one surface dropped; an edge whose faces' normals agree is tangent.
+   Silhouettes: cylinder lines, cone generators, the sphere's great
+   circle, torus circles (axis along or across the view), clipped to the
+   face. A curve on a cylinder seen end-on (the cross hole's break-out)
+   is that cylinder's arc exactly; other curves not face-on or edge-on are
+   fitted with arcs and lines (within size × 1e-5). Visibility: a ray
+   toward the viewer against every face (`io/step/faceSolid`: the face's
+   boundary in its surface's parameters, a crossing test that knows seams
+   and poles, ray–surface hits); a change within the clearance of a
+   piece's end is at the end (tangent runs into a shoulder). The reader
+   learns edge ids, orientations (OpenCascade's backwards torus loops put
+   right by a neighbour vote) and B-splines (`geometry/bspline`).
+   `model/profilePlacement`: circles, arcs joined in `merge`, `sideView`
+   (hidden bores, edge lines). Timing: pin ~100 ms, shaft ~350 ms. Tests:
+   the pin's front view equals the Full profile and its end view the
+   circles with the far chamfer hidden; the shaft's cross hole (circle
+   from above, hidden walls ±1.18 from the side, Turn makes it the exact
+   circle in front, Flip moves it); slot walls 0.83 apart; the tang flat
+   across the end view; fitting; faceSolid's point-in-face cases.
 7. Import tool: Profile / 3 views, Turn 90°, the views laid out third-angle
    with Z0 and Flip as now, a layer per view and one for fitted curves, one
    undo step. Browser test.

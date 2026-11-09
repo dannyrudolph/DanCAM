@@ -18,7 +18,7 @@ import type { Placement, StepEdge, StepFace, StepModel } from './stepModel';
 
 export type ProfileResult = { readonly ok: true; readonly profile: TurnedProfile } | { readonly ok: false; readonly error: string };
 
-type Axis = { readonly point: Vec3; readonly dir: Vec3 };
+export type Axis = { readonly point: Vec3; readonly dir: Vec3 };
 
 /** Points sampled along a circle or ellipse edge (enough to show which way an arc goes and how far it reaches). */
 const ARC_SAMPLES = 24;
@@ -115,7 +115,7 @@ const coaxial = (at: Placement, axis: Axis, tol: number): boolean => parallel(at
  * counting flat faces square to it too, so a cross hole never wins. It
  * points along the model's positive direction.
  */
-function findAxis(faces: readonly StepFace[], tol: number): Axis | undefined {
+export function findAxis(faces: readonly StepFace[], tol: number): Axis | undefined {
   const candidates: Axis[] = [];
   for (const f of faces) {
     const s = f.surface;
