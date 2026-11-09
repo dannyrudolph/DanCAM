@@ -413,7 +413,12 @@ export class App {
       if (req.kind === 'point') {
         this.onceSnap = undefined;
         if (snap?.deferred) this.send({ kind: 'point', at: snap.at, deferred: snap.deferred });
-        else this.send({ kind: 'point', at: this.nextPoint(snap) });
+        else {
+          const at = this.nextPoint(snap);
+          // A point placed on a snap (not moved off it by a typed value) keeps the feature it is on.
+          const anchor = snap?.on && vecNearlyEqual(at, snap.at) ? snap.on : undefined;
+          this.send(anchor ? { kind: 'point', at, anchor } : { kind: 'point', at });
+        }
         return;
       }
       const at = snap?.at ?? cursor;

@@ -3,7 +3,8 @@ import type { Vec2 } from '../geometry/vec';
 import type { Tolerance, ZeroRules } from '../model/dimFormat';
 import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
-import type { DimensionEntity, Entity } from '../model/entity';
+import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
+import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 
@@ -14,12 +15,16 @@ import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
  */
 export const FILE_EXTENSION = '.cad2d.json';
 export const FORMAT = 'DanCAM drawing';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
-/** Version 2 added dimension styles (and dimension entities, which need them). */
-type FileV2 = {
+/**
+ * Version 2 added dimension styles (and dimension entities, which need
+ * them); version 3 anchors dimensions to geometry (`anchors` in place of
+ * the unused `refs`).
+ */
+type FileV3 = {
   format: typeof FORMAT;
-  schemaVersion: 2;
+  schemaVersion: 3;
   units: Units;
   nextId: number;
   /** Optional: files from before layers had a current layer open on "0". */
@@ -36,7 +41,7 @@ type FileV2 = {
 };
 
 export function serializeDrawing(d: Drawing): string {
-  const file: FileV2 = {
+  const file: FileV3 = {
     format: FORMAT,
     schemaVersion: SCHEMA_VERSION,
     units: d.units,
@@ -58,6 +63,9 @@ export type ParseResult = { readonly ok: true; readonly drawing: Drawing } | { r
 /** Thrown inside the parser; turned into a ParseResult error at the top. */
 class FileError extends Error {}
 
+/** Set by the 2 → 3 migration: dimensions may carry `refs` to turn into anchors. */
+const REFS_FROM_V2 = '__refsFromV2';
+
 /**
  * Upgrades from version n to n + 1, run in order until the file is current,
  * so old drawings always open.
@@ -68,7 +76,10 @@ const MIGRATIONS: Readonly<Record<number, (file: Record<string, unknown>) => Rec
     const style = defaultDimStyle(file.units === 'mm' ? 'mm' : 'in');
     return { ...file, schemaVersion: 2, dimStyles: [style], currentDimStyle: style.name };
   },
+  // 2 → 3: dimensions' `refs` become anchors, worked out once the geometry is read.
+  2: (file) => ({ ...file, schemaVersion: 3, [REFS_FROM_V2]: true }),
 };
+
 
 /** Reads a `.cad2d.json` file, checking every field, or explains why it can't. */
 export function parseDrawing(text: string): ParseResult {
@@ -137,8 +148,13 @@ function readCurrent(file: Record<string, unknown>): Drawing {
   if (file.diameterMode !== undefined) d.diameterMode = bool(file.diameterMode, 'diameterMode');
 
   let maxId = 0;
+  const refs = new Map<EntityId, EntityId[]>();
   arr(file.entities, 'entities').forEach((v, i) => {
-    const e = readEntity(obj(v, `entities[${i}]`), `entities[${i}]`);
+    const o = obj(v, `entities[${i}]`);
+    const e = readEntity(o, `entities[${i}]`);
+    if (file[REFS_FROM_V2] === true && o.refs !== undefined) {
+      refs.set(e.id, arr(o.refs, `entities[${i}].refs`).map((r, j) => str(r, `entities[${i}].refs[${j}]`)));
+    }
     if (d.entities.has(e.id)) throw new FileError(`entities[${i}]: id "${e.id}" appears twice.`);
     if (!d.layers.has(e.layer)) throw new FileError(`entities[${i}]: layer "${e.layer}" is not defined.`);
     if (e.kind === 'dimension' && !d.dimStyles.has(e.dimStyle)) {
@@ -148,6 +164,21 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     const n = /^e(\d+)$/.exec(e.id);
     if (n) maxId = Math.max(maxId, Number(n[1]));
   });
+
+  for (const [id, e] of d.entities) {
+    if (e.kind !== 'dimension') continue;
+    const named = refs.get(id);
+    if (named) {
+      const anchors = anchorsFromRefs(d, e, named);
+      if (anchors) d.entities.set(id, { ...e, anchors });
+    }
+    for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines'] as const) {
+      for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
+        const g = d.entities.get(a);
+        if (!g || g.kind === 'dimension') throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
+      }
+    }
+  }
 
   if (file.currentLayer === undefined) {
     ensureCurrentLayer(d);
@@ -201,7 +232,7 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
     ...base,
     dimStyle: str(o.dimStyle, `${at}.dimStyle`),
     at: vec(o.at, `${at}.at`),
-    ...(o.refs === undefined ? {} : { refs: arr(o.refs, `${at}.refs`).map((r, i) => str(r, `${at}.refs[${i}]`)) }),
+    ...(o.anchors === undefined ? {} : { anchors: dimAnchors(o.anchors, `${at}.anchors`) }),
     ...(o.precision === undefined ? {} : { precision: places(o.precision, `${at}.precision`) }),
     ...(o.tolerance === undefined ? {} : { tolerance: tolerance(o.tolerance, `${at}.tolerance`) }),
     ...(o.textOverride === undefined ? {} : { textOverride: str(o.textOverride, `${at}.textOverride`) }),
@@ -233,6 +264,41 @@ function readDimension(o: Record<string, unknown>, base: Pick<Entity, 'id' | 'la
 }
 
 /** A whole number of decimal places, 0 to 8. */
+function anchor(v: unknown, at: string): Anchor {
+  const o = obj(v, at);
+  const id = str(o.id, `${at}.id`);
+  switch (o.feature) {
+    case 'start':
+    case 'end':
+    case 'mid':
+    case 'center':
+    case 'node':
+      return { id, feature: o.feature };
+    case 'quad': {
+      const deg = num(o.deg, `${at}.deg`);
+      if (![0, 90, 180, 270].includes(deg)) throw new FileError(`${at}.deg must be 0, 90, 180 or 270.`);
+      return { id, feature: 'quad', deg };
+    }
+    case 'int':
+      return { id, feature: 'int', other: str(o.other, `${at}.other`) };
+    default:
+      throw new FileError(`${at}: unknown feature ${JSON.stringify(o.feature)}.`);
+  }
+}
+
+function dimAnchors(v: unknown, at: string): DimAnchors {
+  const o = obj(v, at);
+  const lines = o.lines === undefined ? undefined : arr(o.lines, `${at}.lines`).map((x, i) => str(x, `${at}.lines[${i}]`));
+  if (lines && lines.length !== 2) throw new FileError(`${at}.lines must name two lines.`);
+  return {
+    ...(o.p1 !== undefined && { p1: anchor(o.p1, `${at}.p1`) }),
+    ...(o.p2 !== undefined && { p2: anchor(o.p2, `${at}.p2`) }),
+    ...(o.vertex !== undefined && { vertex: anchor(o.vertex, `${at}.vertex`) }),
+    ...(o.curve !== undefined && { curve: str(o.curve, `${at}.curve`) }),
+    ...(lines && { lines: [lines[0]!, lines[1]!] as const }),
+  };
+}
+
 function places(v: unknown, at: string): number {
   const n = num(v, at);
   if (!Number.isInteger(n) || n < 0 || n > 8) throw new FileError(`${at} must be a whole number from 0 to 8.`);

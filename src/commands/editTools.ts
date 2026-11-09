@@ -1,7 +1,7 @@
 import { angleDeg } from '../geometry/angle';
+import { withNewIds } from '../model/anchor';
 import { type Transform, mirrorLine, rotation, scaling, translation } from '../geometry/transform';
 import { type Vec2, distance, sub } from '../geometry/vec';
-import { newEntityId } from '../model/drawing';
 import { type Entity, transformEntity } from '../model/entity';
 import type { Change } from '../model/undo';
 import type { PointRequest, Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption, ValueRequest } from './tool';
@@ -50,7 +50,7 @@ function commitTransform(ctx: ToolContext, label: string, es: readonly Entity[],
 
 /** Adds a transformed copy of each entity with a new id, as one undo step. */
 function commitCopies(ctx: ToolContext, label: string, es: readonly Entity[], t: Transform, extra: readonly Change[] = []): void {
-  const adds: Change[] = es.map((e) => ({ op: 'add', entity: { ...transformEntity(e, t), id: newEntityId(ctx.drawing) } }));
+  const adds: Change[] = withNewIds(ctx.drawing, moved(es, t)).map((entity) => ({ op: 'add', entity }));
   ctx.undo.commit({ label, changes: [...adds, ...extra] });
 }
 

@@ -1,10 +1,11 @@
-import { cosSinDeg } from '../geometry/angle';
-import { arcEnd, arcStart } from '../geometry/arc';
-import { lineLine } from '../geometry/intersect';
 import { TOL } from '../geometry/tolerance';
-import { type Vec2, cross, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
+import { type Vec2, distance, sub, vecNearlyEqual } from '../geometry/vec';
+import type { Anchor, DimAnchors } from '../model/anchor';
+import { angleBetweenLines, arcArms } from '../model/associate';
 import { expandSymbols } from '../model/dimFormat';
 import type { DimensionEntity, EntityId, LineEntity } from '../model/entity';
+
+export { angleBetweenLines } from '../model/associate';
 import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption } from './tool';
 import { MethodChoice, PREVIEW_ID, addEntity } from './toolSteps';
 
@@ -54,19 +55,21 @@ function createDimTool(type: 'linear' | 'aligned'): ToolDef {
     *run(ctx): ToolGen {
       let p1: Vec2 | undefined;
       let p2: Vec2 | undefined;
-      let refs: EntityId[] | undefined;
+      let anchors: DimAnchors | undefined;
       if (method.current === 'points') {
-        p1 = yield* method.point({ prompt: `${name}: pick the first point to measure from` });
-        if (!p1) return;
-        const first = p1;
-        p2 = yield* method.point({ prompt: `${name}: pick the second point`, base: first });
-        if (!p2) return;
+        const first = yield* method.anchoredPoint({ prompt: `${name}: pick the first point to measure from` });
+        if (!first) return;
+        p1 = first.at;
+        const second = yield* method.anchoredPoint({ prompt: `${name}: pick the second point`, base: first.at });
+        if (!second) return;
+        p2 = second.at;
+        anchors = pointAnchors({ p1: first.anchor, p2: second.anchor });
       } else {
         const pick = yield* method.entity(ctx, { prompt: `${name}: pick a line to dimension`, accepts: (e) => e.kind === 'line' });
         if (!pick || pick.entity.kind !== 'line') return;
         p1 = pick.entity.start;
         p2 = pick.entity.end;
-        refs = [pick.entity.id];
+        anchors = { p1: { id: pick.entity.id, feature: 'start' }, p2: { id: pick.entity.id, feature: 'end' } };
       }
       if (vecNearlyEqual(p1, p2)) {
         ctx.message('The two points are the same; there is nothing to measure.');
@@ -75,7 +78,7 @@ function createDimTool(type: 'linear' | 'aligned'): ToolDef {
       const a = p1;
       const b = p2;
       const dimension = (id: EntityId, at: Vec2): DimensionEntity => {
-        const base = { kind: 'dimension' as const, id, layer: ctx.newProps().layer, dimStyle: ctx.drawing.currentDimStyle, p1: a, p2: b, at, ...(refs && { refs }) };
+        const base = { kind: 'dimension' as const, id, layer: ctx.newProps().layer, dimStyle: ctx.drawing.currentDimStyle, p1: a, p2: b, at, ...(anchors && { anchors }) };
         if (type === 'aligned') return { ...base, type };
         const dir = orientation === 'h' ? H : orientation === 'v' ? V : linearDirFor(a, b, at);
         return { ...base, type, dir };
@@ -157,7 +160,7 @@ function createRadialTool(type: 'radius' | 'diameter'): ToolDef {
           center: e.center,
           radius: e.radius,
           at,
-          refs: [e.id],
+          anchors: { curve: e.id },
         }));
         return;
       }
@@ -173,30 +176,10 @@ const unit = (v: Vec2): Vec2 => {
   return { x: v.x / l, y: v.y / l };
 };
 
-/**
- * The angle between two lines, in the quadrant where `at` is: each arm runs
- * from the lines' crossing along the line, toward `at`'s side. An arm's
- * extension line starts at the end of its line farthest along it, or at the
- * crossing when the line doesn't reach that side. Undefined for parallel lines.
- */
-export function angleBetweenLines(l1: LineEntity, l2: LineEntity, at: Vec2): Pick<Extract<DimensionEntity, { type: 'angular' }>, 'vertex' | 'p1' | 'p2' | 'dir1' | 'dir2'> | undefined {
-  const d1 = unit(sub(l1.end, l1.start));
-  const d2 = unit(sub(l2.end, l2.start));
-  const vertex = lineLine(l1.start, d1, l2.start, d2);
-  if (!vertex) return undefined;
-  // at - vertex = α d1 + β d2: the signs pick the quadrant.
-  const w = sub(at, vertex);
-  const den = cross(d1, d2);
-  const s1 = cross(w, d2) / den >= 0 ? 1 : -1;
-  const s2 = cross(d1, w) / den >= 0 ? 1 : -1;
-  const dir1 = { x: d1.x * s1 || 0, y: d1.y * s1 || 0 };
-  const dir2 = { x: d2.x * s2 || 0, y: d2.y * s2 || 0 };
-  const armStart = (l: LineEntity, d: Vec2): Vec2 => {
-    const [a, b] = [l.start, l.end].map((p) => ({ p, t: dot(sub(p, vertex), d) })) as [{ p: Vec2; t: number }, { p: Vec2; t: number }];
-    const far = a.t >= b.t ? a : b;
-    return far.t > TOL ? far.p : vertex;
-  };
-  return { vertex, p1: armStart(l1, dir1), p2: armStart(l2, dir2), dir1, dir2 };
+/** The point anchors that snaps gave, or none. */
+function pointAnchors(ps: Partial<Record<'p1' | 'p2' | 'vertex', Anchor | undefined>>): DimAnchors | undefined {
+  const out = Object.fromEntries(Object.entries(ps).filter(([, a]) => a !== undefined)) as DimAnchors;
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 /**
@@ -221,7 +204,7 @@ export function createAngularDimTool(): ToolDef {
     shortcut: 'shift+g',
     *run(ctx): ToolGen {
       const layer = ctx.newProps().layer;
-      const dim = (id: EntityId, at: Vec2, arms: Pick<Extract<DimensionEntity, { type: 'angular' }>, 'vertex' | 'p1' | 'p2' | 'dir1' | 'dir2'>, refs: EntityId[]): DimensionEntity => ({
+      const dim = (id: EntityId, at: Vec2, arms: Pick<Extract<DimensionEntity, { type: 'angular' }>, 'vertex' | 'p1' | 'p2' | 'dir1' | 'dir2'>, anchors: DimAnchors | undefined): DimensionEntity => ({
         kind: 'dimension',
         id,
         layer,
@@ -229,7 +212,7 @@ export function createAngularDimTool(): ToolDef {
         type: 'angular',
         ...arms,
         at,
-        ...(refs.length > 0 && { refs }),
+        ...(anchors && { anchors }),
       });
       const prompt = 'pick where the dimension arc goes';
       if (method.current === 'lines') {
@@ -246,23 +229,25 @@ export function createAngularDimTool(): ToolDef {
         }
         yield* place(ctx, name, prompt, (id, at) => {
           const arms = angleBetweenLines(l1, l2, at);
-          return arms && dim(id, at, arms, [l1.id, l2.id]);
+          return arms && dim(id, at, arms, { lines: [l1.id, l2.id] });
         });
       } else if (method.current === 'arc') {
         const pick = yield* method.entity(ctx, { prompt: `${name}: pick an arc`, accepts: (e) => e.kind === 'arc' });
         if (!pick || pick.entity.kind !== 'arc') return;
         const a = pick.entity;
-        const [c1, s1] = cosSinDeg(a.startDeg);
-        const [c2, s2] = cosSinDeg(a.endDeg);
-        const arms = { vertex: a.center, p1: arcStart(a), p2: arcEnd(a), dir1: { x: c1, y: s1 }, dir2: { x: c2, y: s2 } };
-        yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, [a.id]));
+        const arms = arcArms(a);
+        yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, { curve: a.id }));
       } else {
-        const vertex = yield* method.point({ prompt: `${name}: pick the vertex` });
-        if (!vertex) return;
-        const p1 = yield* method.point({ prompt: `${name}: pick a point on the first side`, base: vertex });
-        if (!p1) return;
-        const p2 = yield* method.point({ prompt: `${name}: pick a point on the second side`, base: vertex });
-        if (!p2) return;
+        const v = yield* method.anchoredPoint({ prompt: `${name}: pick the vertex` });
+        if (!v) return;
+        const vertex = v.at;
+        const s1 = yield* method.anchoredPoint({ prompt: `${name}: pick a point on the first side`, base: vertex });
+        if (!s1) return;
+        const s2 = yield* method.anchoredPoint({ prompt: `${name}: pick a point on the second side`, base: vertex });
+        if (!s2) return;
+        const p1 = s1.at;
+        const p2 = s2.at;
+        const anchors = pointAnchors({ vertex: v.anchor, p1: s1.anchor, p2: s2.anchor });
         if (distance(p1, vertex) <= TOL || distance(p2, vertex) <= TOL) {
           ctx.message('A side point is on the vertex; there is no angle to measure.');
           return;
@@ -272,7 +257,7 @@ export function createAngularDimTool(): ToolDef {
           ctx.message('Both sides run the same way; there is no angle to measure.');
           return;
         }
-        yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, []));
+        yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, anchors));
       }
     },
   };

@@ -1,8 +1,8 @@
 import { polarArray, rectangularArray } from '../geometry/array';
+import { withNewIds } from '../model/anchor';
 import { EMPTY_BBOX, union } from '../geometry/bbox';
 import type { Transform } from '../geometry/transform';
 import type { Vec2 } from '../geometry/vec';
-import { newEntityId } from '../model/drawing';
 import { type Entity, entityBBox, transformEntity } from '../model/entity';
 import { objects, value } from './editTools';
 import type { ToolDef, ToolGen, ToolOption } from './tool';
@@ -32,7 +32,8 @@ export function createArrayTool(): ToolDef {
       const es = yield* objects(ctx, 'Array');
       if (!es) return;
       const commit = (ts: readonly Transform[]): void => {
-        ctx.undo.commit({ label: 'Array', changes: copies(es, ts).map((e) => ({ op: 'add', entity: { ...e, id: newEntityId(ctx.drawing) } })) });
+        const adds = ts.flatMap((t) => withNewIds(ctx.drawing, copies(es, [t])));
+        ctx.undo.commit({ label: 'Array', changes: adds.map((entity) => ({ op: 'add', entity })) });
       };
       // The first step carries the Rectangular / Polar choice.
       let center: Vec2 | undefined;

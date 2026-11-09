@@ -1,3 +1,4 @@
+import type { DimAnchors } from './anchor';
 import { arcBBox } from '../geometry/arc';
 import { type BBox, EMPTY_BBOX, fromPoints } from '../geometry/bbox';
 import { circleBBox } from '../geometry/circle';
@@ -63,8 +64,9 @@ export type RayEntity = EntityBase & {
 /**
  * A dimension: a readout of the points it measures, never an input (CAD-1).
  * `at` places it: a point on the dimension line or arc, or where the text
- * goes for radius and diameter. `refs` names the measured geometry, unused
- * until associativity (Phase 5). The line style is ignored: dimensions
+ * goes for radius and diameter. `anchors` ties what it measures to the
+ * geometry, so it follows a change (`model/associate`); without them it
+ * measures fixed points. The line style is ignored: dimensions
  * draw thin. By `type`:
  * - `linear`: the distance from `p1` to `p2` along `dir` (a unit vector:
  *   (1, 0) horizontal, (0, 1) vertical, other angles after a rotate).
@@ -86,7 +88,7 @@ export type DimensionEntity = EntityBase & {
   readonly kind: 'dimension';
   readonly dimStyle: string;
   readonly at: Vec2;
-  readonly refs?: readonly EntityId[];
+  readonly anchors?: DimAnchors;
   readonly precision?: number;
   readonly tolerance?: Tolerance;
   readonly textOverride?: string;

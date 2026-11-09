@@ -68,6 +68,19 @@ describe('Linear dimension tool', () => {
     expect(dims(t).map((d) => d.type === 'linear' && d.dir)).toEqual([V, V]);
   });
 
+  it('points placed on snaps keep the features they are on, so the dimension follows a later change', () => {
+    const t = setup();
+    t.add({ kind: 'line', id: 'L', layer: '0', start: v(0, 0), end: v(1, 0) });
+    t.runner.start(createLinearDimTool());
+    t.runner.send({ kind: 'point', at: v(0, 0), anchor: { id: 'L', feature: 'start' } });
+    t.click(1, 0); // typed, not snapped: a fixed point
+    t.click(0.5, -0.5);
+    expect(dims(t)[0]!.anchors).toEqual({ p1: { id: 'L', feature: 'start' } });
+    const l = t.entities().find((e) => e.id === 'L')!;
+    t.undo.commit({ label: 'Move', changes: [{ op: 'modify', before: l, after: { ...l, start: v(-0.25, 0) } as typeof l }] });
+    expect(measuredValue(dims(t)[0]!)).toBe(1.25);
+  });
+
   it('Pick a line measures its ends and remembers which line it was', () => {
     const t = setup();
     t.add({ kind: 'line', id: 'L', layer: '0', start: v(0.5, 0.25), end: v(1, 0.25) });
@@ -76,7 +89,7 @@ describe('Linear dimension tool', () => {
     expect(t.runner.request?.prompt).toBe('Linear: pick a line to dimension');
     t.pick('L', 0.7, 0.25);
     t.click(0.75, 0.6);
-    expect(dims(t)[0]).toMatchObject({ p1: v(0.5, 0.25), p2: v(1, 0.25), refs: ['L'], dir: H });
+    expect(dims(t)[0]).toMatchObject({ p1: v(0.5, 0.25), p2: v(1, 0.25), anchors: { p1: { id: 'L', feature: 'start' }, p2: { id: 'L', feature: 'end' } }, dir: H });
   });
 
   it('refuses two points that are the same', () => {
@@ -121,7 +134,7 @@ describe('Radius and Diameter tools', () => {
     t.pick('A', 0.115, 0.2);
     expect(t.preview(v(0.3, 0.4))).toMatchObject([{ type: 'radius', center: v(0.1, 0.2), radius: 0.015 }]);
     t.click(0.3, 0.4);
-    expect(dims(t)).toEqual([{ kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: v(0.1, 0.2), radius: 0.015, at: v(0.3, 0.4), refs: ['A'] }]);
+    expect(dims(t)).toEqual([{ kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: v(0.1, 0.2), radius: 0.015, at: v(0.3, 0.4), anchors: { curve: 'A' } }]);
     expect(t.runner.request?.prompt).toBe('Radius: pick an arc or circle');
   });
 
@@ -150,7 +163,7 @@ describe('Angular tool', () => {
     t.pick('D', 0.5, 0.5);
     t.click(1.5, 0.3);
     expect(measuredValue(dims(t)[0]!)).toBeCloseTo(45, 12);
-    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), p1: v(2, 0), p2: v(1, 1), dir1: H, refs: ['H', 'D'] });
+    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), p1: v(2, 0), p2: v(1, 1), dir1: H, anchors: { lines: ['H', 'D'] } });
     t.pick('H', 1, 0);
     t.pick('D', 0.5, 0.5);
     t.click(-1, 0.3); // left of the vertex: between -X and the 45° line
@@ -183,7 +196,7 @@ describe('Angular tool', () => {
     const [inside, other] = dims(t).map(measuredValue);
     expect(inside).toBeCloseTo(120, 12); // the arc's angles go through cos/sin and back: a few ULPs, far below display
     expect(other).toBeCloseTo(240, 12);
-    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), refs: ['A'] });
+    expect(dims(t)[0]).toMatchObject({ vertex: v(0, 0), anchors: { curve: 'A' } });
   });
 
   it('a vertex and two points; the far side reads the reflex angle; a side point on the vertex is refused', () => {

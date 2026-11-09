@@ -360,7 +360,21 @@ deferred (ray to Phase 2, autosave to Phase 6).
 2. Associativity: snaps report what they hit (entity + feature);
    dimensions anchor each measured point (replaces `refs`; file v2 → v3);
    a geometry change re-measures its dimensions inside the same
-   transaction, so one undo restores both.
+   transaction, so one undo restores both. **(done)** `model/anchor`
+   (`Anchor`: entity + start/end/mid/center/node/quad/int; `DimAnchors`
+   p1/p2/vertex points, `curve`, `lines`); snaps carry `on`, the app sends
+   it as the point's `anchor` when the point is on the snap; the tools
+   anchor snapped points, Pick a line (start/end), radius/diameter/arc
+   angle (`curve`), two-line angle (`lines`). `model/associate`:
+   `UndoStack.commit` appends `dimensionFollowUp` to the transaction:
+   geometry changed → re-measure (a uniform move carries `at`/`textAt`);
+   geometry deleted, wrong kind, parallel or zero-length → delete the
+   dimension; a feature gone → that point unanchored; a dimension changed
+   itself → mismatched anchors dropped. Copy and Array remap anchors onto
+   the copies (`withNewIds`). File v3: `anchors` (checked to name
+   geometry); v2 `refs` converted on open where the points still match.
+   Leaders aren't anchored yet; Nearest, Perpendicular and Tangent snaps
+   don't anchor.
 3. Symmetric diameter (Shift+M): the lathe centerline (or a picked one),
    then features one after another; Ø + twice the distance; Half (default)
    or Full per style. In lathe mode a linear dimension across the

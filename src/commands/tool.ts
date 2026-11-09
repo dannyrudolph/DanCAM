@@ -1,5 +1,6 @@
 import type { Deferred } from '../geometry/curve';
 import type { Vec2 } from '../geometry/vec';
+import type { Anchor } from '../model/anchor';
 import type { Drawing } from '../model/drawing';
 import type { Entity, EntityId, EntityProps } from '../model/entity';
 import type { Row } from '../model/properties';
@@ -106,7 +107,8 @@ export type Request = PointRequest | ValueRequest | EntityRequest | SelectionReq
 
 export type ToolInput =
   /** `deferred` is set only for a step that `acceptsDeferred`; `at` is then where the curve was clicked. */
-  | { readonly kind: 'point'; readonly at: Vec2; readonly deferred?: Deferred }
+  /** `anchor`: the geometry feature an object snap put the point on, for dimensions to follow. */
+  | { readonly kind: 'point'; readonly at: Vec2; readonly deferred?: Deferred; readonly anchor?: Anchor }
   /** `at` is the cursor when the value was given. */
   | { readonly kind: 'value'; readonly value: number; readonly at: Vec2 }
   /** `at` is where the entity was clicked; `shift` is true for a Shift-click. */

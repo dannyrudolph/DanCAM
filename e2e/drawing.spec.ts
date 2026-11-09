@@ -1284,6 +1284,52 @@ test('dimension grips: a measured point snaps onto a line end; the text slides o
   await expect(page.locator('#properties h2')).toHaveText(/^Dimension /); // undone: back in the middle
 });
 
+test('a dimension snapped to a line follows when the line is edited, and is erased with it; one undo brings both back', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '2', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('p');
+  await typeValues(page, '2', '2'); // with the line, makes the extents 2 × 2
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const scale = Math.min(box.width, box.height) * 0.45;
+  const c = await canvasCenter(page);
+  const at = (x: number, y: number) => ({ x: c.x + (x - 1) * scale, y: c.y - (y - 1) * scale });
+  const clickAt = async (x: number, y: number, snap?: string) => {
+    const p = at(x, y);
+    await page.mouse.move(p.x + 3, p.y - 2);
+    if (snap) await expect(page.locator('#canvas')).toHaveAttribute('data-snap', snap);
+    await page.mouse.click(p.x + 3, p.y - 2);
+  };
+
+  await page.keyboard.press('Shift+D');
+  await clickAt(0, 0, 'end');
+  await clickAt(2, 0, 'end');
+  await clickAt(1, 0.5);
+  await page.keyboard.press('Escape');
+  await expect(prop(page, 'entity-count')).toHaveText('3');
+
+  await clickAt(0.5, 0); // the line
+  await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+  await prop(page, 'End X').click();
+  await page.keyboard.type('2.5');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await clickAt(0.6, 0.5); // the dimension line
+  await expect(prop(page, 'Measured')).toHaveText('2.5000');
+
+  await page.keyboard.press('Escape');
+  await clickAt(0.5, 0);
+  await page.keyboard.press('Delete');
+  await expect(prop(page, 'entity-count')).toHaveText('1'); // the point is all that is left
+  await page.keyboard.press('Control+z');
+  await expect(prop(page, 'entity-count')).toHaveText('3');
+  await clickAt(0.6, 0.5);
+  await expect(prop(page, 'Measured')).toHaveText('2.5000');
+});
+
 test.describe('leader', () => {
   test('the note is typed into a box that has the focus: letters are text, not tool shortcuts; Enter adds it', async ({ page }) => {
     await page.keyboard.press('Shift+N');

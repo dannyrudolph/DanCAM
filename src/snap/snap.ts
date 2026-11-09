@@ -3,8 +3,9 @@ import { pointAtDeg } from '../geometry/circle';
 import { type Curve, type Deferred, intersectCurves, nearestOnCurve, perpendicularFeet, tangentPointsFrom } from '../geometry/curve';
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
+import type { Anchor } from '../model/anchor';
 import type { Drawing } from '../model/drawing';
-import { entityCurve } from '../model/entity';
+import { type EntityId, entityCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
 
 export type SnapKind = 'end' | 'mid' | 'cen' | 'quad' | 'int' | 'perp' | 'tan' | 'nea' | 'node';
@@ -31,7 +32,8 @@ export const DEFAULT_SNAP_KINDS: readonly SnapKind[] = ['end', 'mid', 'cen', 'qu
 export const NEEDS_BASE: ReadonlySet<SnapKind> = new Set<SnapKind>(['perp', 'tan']);
 
 /** `deferred`: a Tangent or Perpendicular picked with no base point yet; `at` is the point on the curve under the cursor. */
-export type Snap = { readonly kind: SnapKind; readonly at: Vec2; readonly deferred?: Deferred };
+/** `on`: the geometry feature the snap point is, for a dimension to stay on (none for Perpendicular, Tangent, Nearest). */
+export type Snap = { readonly kind: SnapKind; readonly at: Vec2; readonly deferred?: Deferred; readonly on?: Anchor };
 
 type Candidate = Snap & { readonly score: number; readonly dist: number };
 
@@ -59,51 +61,54 @@ export function findSnap(
   deferOk = false,
 ): Snap | undefined {
   const found: Candidate[] = [];
-  const point = (kind: SnapKind, at: Vec2): void => {
+  const point = (kind: SnapKind, at: Vec2, on?: Anchor): void => {
     if (!kinds.has(kind)) return;
     const dist = distance(cursor, at);
-    if (dist <= aperture) found.push({ kind, at, score: dist, dist });
+    if (dist <= aperture) found.push({ kind, at, score: dist, dist, ...(on && { on }) });
   };
-  const fromObject = (kind: SnapKind, at: Vec2): void => {
+  const fromObject = (kind: SnapKind, at: Vec2, on?: Anchor): void => {
     if (!kinds.has(kind)) return;
     const dist = distance(cursor, at);
-    found.push({ kind, at, score: Math.min(dist, aperture), dist });
+    found.push({ kind, at, score: Math.min(dist, aperture), dist, ...(on && { on }) });
   };
 
   const hovered: Curve[] = [];
+  const hoveredIds: EntityId[] = [];
   for (const e of d.entities.values()) {
     // Dimensions are annotation, not geometry: nothing snaps to them.
     if (d.layers.get(e.layer)?.visible === false || e.kind === 'dimension') continue;
     const onIt = distanceToEntity(d, cursor, e) <= aperture;
     if (e.kind === 'point') {
-      if (onIt) point('node', e.at);
+      if (onIt) point('node', e.at, { id: e.id, feature: 'node' });
       continue;
     }
     const c = entityCurve(e)!;
-    if ((c.kind === 'circle' || c.kind === 'arc') && !onIt) point('cen', c.center);
+    const id = e.id;
+    if ((c.kind === 'circle' || c.kind === 'arc') && !onIt) point('cen', c.center, { id, feature: 'center' });
     if (!onIt) continue;
     hovered.push(c);
+    hoveredIds.push(id);
     switch (c.kind) {
       case 'segment':
-        point('end', c.a);
-        point('end', c.b);
-        point('mid', { x: (c.a.x + c.b.x) / 2, y: (c.a.y + c.b.y) / 2 });
+        point('end', c.a, { id, feature: 'start' });
+        point('end', c.b, { id, feature: 'end' });
+        point('mid', { x: (c.a.x + c.b.x) / 2, y: (c.a.y + c.b.y) / 2 }, { id, feature: 'mid' });
         break;
       case 'ray':
-        point('end', c.base);
+        point('end', c.base, { id, feature: 'start' });
         break;
       case 'xline':
         break;
       case 'arc':
       case 'circle':
         if (c.kind === 'arc') {
-          point('end', arcStart(c));
-          point('end', arcEnd(c));
-          point('mid', arcMid(c));
+          point('end', arcStart(c), { id, feature: 'start' });
+          point('end', arcEnd(c), { id, feature: 'end' });
+          point('mid', arcMid(c), { id, feature: 'mid' });
         }
-        fromObject('cen', c.center);
+        fromObject('cen', c.center, { id, feature: 'center' });
         for (const q of [0, 90, 180, 270]) {
-          if (c.kind === 'circle' || arcContainsDeg(c, q)) point('quad', pointAtDeg(c.center, c.radius, q));
+          if (c.kind === 'circle' || arcContainsDeg(c, q)) point('quad', pointAtDeg(c.center, c.radius, q), { id, feature: 'quad', deg: q });
         }
         break;
     }
@@ -123,7 +128,7 @@ export function findSnap(
   if (kinds.has('int')) {
     for (let i = 0; i < hovered.length; i++) {
       for (let j = i + 1; j < hovered.length; j++) {
-        for (const p of intersectCurves(hovered[i]!, hovered[j]!)) point('int', p);
+        for (const p of intersectCurves(hovered[i]!, hovered[j]!)) point('int', p, { id: hoveredIds[i]!, feature: 'int', other: hoveredIds[j]! });
       }
     }
   }
@@ -133,7 +138,8 @@ export function findSnap(
   let best: Candidate | undefined;
   for (const c of pool) if (!best || beats(c, best)) best = c;
   if (!best) return undefined;
-  return best.deferred ? { kind: best.kind, at: best.at, deferred: best.deferred } : { kind: best.kind, at: best.at };
+  const { score: _s, dist: _d, ...snap } = best;
+  return snap;
 }
 
 /** Lower score wins, then the nearer point; snaps at the same point go by SNAP_KINDS order. */

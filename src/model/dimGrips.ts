@@ -4,6 +4,7 @@ import { angularSector, dimLine, dimensionLayout } from './dimLayout';
 import { dimStyleOf } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
+import { withoutAnchors } from './anchor';
 import type { Grip } from './grips';
 
 /**
@@ -11,7 +12,7 @@ import type { Grip } from './grips';
  * dimension-line position are dragged by grips and snap to sensible
  * offsets). By type:
  * - linear, aligned: `p1`, `p2` move a measured point (the dimension then
- *   measures to the new point and drops its geometry refs); `line1`,
+ *   measures to the new point, no longer anchored to geometry); `line1`,
  *   `line2` at the dimension line's ends move the line; `text` moves the
  *   text along the line, and the line with it.
  * - radius, diameter: `text` moves the text (and its leader).
@@ -88,8 +89,7 @@ export function applyDimensionGrip(d: Drawing, e: DimensionEntity, key: string, 
       if (key === 'p1' || key === 'p2') {
         const other = key === 'p1' ? e.p2 : e.p1;
         if (vecNearlyEqual(to, other)) return undefined;
-        const { refs: _refs, ...rest } = e; // no longer on the geometry it measured
-        return { ...rest, [key]: to };
+        return { ...withoutAnchors(e, [key]), [key]: to } as DimensionEntity; // no longer on the geometry it measured
       }
       if (key === 'line1' || key === 'line2') return { ...e, at: snapLineOffset(d, e, to) };
       if (key === 'text') {

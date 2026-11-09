@@ -1,4 +1,5 @@
 import type { Vec2 } from '../geometry/vec';
+import type { Anchor } from '../model/anchor';
 import { newEntityId } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import type { EntityRequest, PointRequest, Request, ToolContext, ToolInput, ToolOption, ValueRequest } from './tool';
@@ -38,6 +39,15 @@ export class MethodChoice<K extends string> {
       const input = yield* this.ask({ ...req, kind: 'point' });
       if (!input) return undefined;
       if (input.kind === 'point') return input.at;
+    }
+  }
+
+  /** A point and, when an object snap placed it, the feature it is on. */
+  *anchoredPoint(req: Ask<PointRequest>): Step<{ at: Vec2; anchor?: Anchor }> {
+    for (;;) {
+      const input = yield* this.ask({ ...req, kind: 'point' });
+      if (!input) return undefined;
+      if (input.kind === 'point') return input.anchor ? { at: input.at, anchor: input.anchor } : { at: input.at };
     }
   }
 

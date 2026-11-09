@@ -7,7 +7,7 @@ import { textWidth } from './textMetrics';
 
 const v = (x: number, y: number) => ({ x, y });
 type Lin = Extract<DimensionEntity, { type: 'linear' }>;
-const linear: Lin = { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: v(1, 0), p1: v(0, 0), p2: v(1, 0), at: v(0.5, 0.5), refs: ['e1'] };
+const linear: Lin = { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: v(1, 0), p1: v(0, 0), p2: v(1, 0), at: v(0.5, 0.5), anchors: { p1: { id: 'e1', feature: 'start' }, p2: { id: 'e1', feature: 'end' } } };
 const inch = createDrawing('in'); // text .12: snaps within .06
 
 describe('dimension grips', () => {
@@ -57,11 +57,11 @@ describe('dimension grips', () => {
     expect(dimensionLayout(inch, back).fit).toBe('inside');
   });
 
-  it('a measured point moves, dropping the geometry refs; it cannot land on the other point', () => {
+  it('a measured point moves, dropping its anchor and keeping the other; it cannot land on the other point', () => {
     const moved = applyDimensionGrip(inch, linear, 'p2', v(1.25, 0.1)) as Lin;
-    const { refs: _refs, ...rest } = linear;
-    expect(moved).toEqual({ ...rest, p2: v(1.25, 0.1) });
-    expect('refs' in moved).toBe(false);
+    expect(moved).toEqual({ ...linear, p2: v(1.25, 0.1), anchors: { p1: { id: 'e1', feature: 'start' } } });
+    const both = applyDimensionGrip(inch, applyDimensionGrip(inch, moved, 'p1', v(0, 0.1))!, 'p2', v(1, 0.1))!;
+    expect('anchors' in both).toBe(false);
     expect(applyDimensionGrip(inch, linear, 'p2', v(0, 0))).toBeUndefined();
   });
 

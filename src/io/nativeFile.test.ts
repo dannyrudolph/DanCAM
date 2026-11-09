@@ -76,11 +76,12 @@ describe('native file', () => {
     expect(reopen(v1({ units: 'mm' })).currentDimStyle).toBe('MM-2PL');
   });
 
-  it('round-trips an aligned dimension with geometry refs, and a style with tolerance, dual units and a suffix', () => {
+  it('round-trips an aligned dimension anchored to a line\'s ends, and a style with tolerance, dual units and a suffix', () => {
     const d = createDrawing('in');
     const style = { ...defaultDimStyle('in'), name: 'TOL', tolerance: { kind: 'deviation' as const, upper: 0.002, lower: 0 }, dual: { precision: 2, zeros: { leading: true, trailing: false } }, suffix: ' TYP' };
     d.dimStyles.set('TOL', style);
-    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'TOL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 }, refs: ['e7'] };
+    d.entities.set('e7', { kind: 'line', id: 'e7', layer: '0', start: { x: 0, y: 0 }, end: { x: 0.3, y: 0.4 } });
+    const e: Entity = { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'TOL', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.3, y: 0.4 }, at: { x: 0, y: 1 }, anchors: { p1: { id: 'e7', feature: 'start' }, p2: { id: 'e7', feature: 'end' } } };
     d.entities.set('e1', e);
     const back = reopen(serializeDrawing(d));
     expect(back.entities.get('e1')).toEqual(e);
@@ -131,10 +132,58 @@ describe('native file', () => {
     expect([old.lathe, old.diameterMode]).toEqual([false, false]);
   });
 
+  it('opens a version 2 file with its dimensions anchored from their refs, where the geometry still matches', () => {
+    const line = { kind: 'line', id: 'e1', layer: '0', start: { x: 0, y: 0 }, end: { x: 1, y: 0 } };
+    const arc = { kind: 'arc', id: 'e2', layer: '0', center: { x: 3, y: 0 }, radius: 0.5, startDeg: 0, endDeg: 90 };
+    const base = { kind: 'dimension', layer: '0', dimStyle: 'INCH-3PL' };
+    const v2 = JSON.stringify({
+      format: 'DanCAM drawing',
+      schemaVersion: 2,
+      units: 'in',
+      nextId: 7,
+      currentDimStyle: 'INCH-3PL',
+      layers: [{ name: '0', color: '#000000', visible: true, style: 'visible' }],
+      dimStyles: [defaultDimStyle('in')],
+      entities: [
+        line,
+        arc,
+        { ...base, id: 'e3', type: 'linear', dir: { x: 1, y: 0 }, p1: { x: 0, y: 0 }, p2: { x: 1, y: 0 }, at: { x: 0.5, y: -0.5 }, refs: ['e1'] },
+        { ...base, id: 'e4', type: 'radius', center: { x: 3, y: 0 }, radius: 0.5, at: { x: 4, y: 1 }, refs: ['e2'] },
+        { ...base, id: 'e5', type: 'aligned', p1: { x: 0, y: 0 }, p2: { x: 0.25, y: 2 }, at: { x: 0, y: 1 }, refs: ['e1'] }, // p2 is off the line
+        { ...base, id: 'e6', type: 'radius', center: { x: 3, y: 0 }, radius: 0.5, at: { x: 4, y: 1 }, refs: ['e1'] }, // names a line
+      ],
+    });
+    const d = reopen(v2);
+    const dim = (id: string) => d.entities.get(id) as Extract<Entity, { kind: 'dimension' }>;
+    expect(dim('e3').anchors).toEqual({ p1: { id: 'e1', feature: 'start' }, p2: { id: 'e1', feature: 'end' } });
+    expect(dim('e4').anchors).toEqual({ curve: 'e2' });
+    expect(dim('e5').anchors).toEqual({ p1: { id: 'e1', feature: 'start' } });
+    expect('anchors' in dim('e6')).toBe(false);
+    expect('refs' in dim('e3')).toBe(false);
+    expect(serializeDrawing(d)).not.toContain('refs');
+  });
+
+  it('round-trips quadrant and intersection anchors; an anchor to something that is not geometry is refused', () => {
+    const d = createDrawing('in');
+    d.entities.set('e1', { kind: 'circle', id: 'e1', layer: '0', center: { x: 0, y: 0 }, radius: 1 });
+    d.entities.set('e2', { kind: 'line', id: 'e2', layer: '0', start: { x: -2, y: 0.5 }, end: { x: 2, y: 0.5 } });
+    const dim: Entity = {
+      kind: 'dimension', id: 'e3', layer: '0', dimStyle: 'INCH-3PL', type: 'aligned',
+      p1: { x: 0, y: 1 }, p2: { x: Math.sqrt(0.75), y: 0.5 }, at: { x: 1, y: 2 },
+      anchors: { p1: { id: 'e1', feature: 'quad', deg: 90 }, p2: { id: 'e1', feature: 'int', other: 'e2' } },
+    };
+    d.entities.set('e3', dim);
+    const text = serializeDrawing(d);
+    expect(reopen(text).entities.get('e3')).toEqual(dim);
+    expect(errorOf(text.replace('"other": "e2"', '"other": "e3"'))).toBe('entity e3: anchors.p2 names "e3", which is not geometry in the drawing.');
+    expect(errorOf(text.replace('"deg": 90', '"deg": 45'))).toBe('entities[2].anchors.p1.deg must be 0, 90, 180 or 270.');
+  });
+
   it('round-trips radius, diameter and angular dimensions', () => {
     const d = createDrawing('in');
     const es: Entity[] = [
-      { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: { x: 0.1, y: 0.2 }, radius: 0.015, at: { x: 1, y: 1 }, refs: ['e9'] },
+      { kind: 'dimension', id: 'e1', layer: '0', dimStyle: 'INCH-3PL', type: 'radius', center: { x: 0.1, y: 0.2 }, radius: 0.015, at: { x: 1, y: 1 }, anchors: { curve: 'e9' } },
+      { kind: 'circle', id: 'e9', layer: '0', center: { x: 0.1, y: 0.2 }, radius: 0.015 },
       { kind: 'dimension', id: 'e2', layer: '0', dimStyle: 'INCH-3PL', type: 'diameter', center: { x: 0, y: 0 }, radius: 0.0625, at: { x: 0, y: 0 } },
       { kind: 'dimension', id: 'e3', layer: '0', dimStyle: 'INCH-3PL', type: 'angular', vertex: { x: 0, y: 0 }, p1: { x: 1, y: 0 }, p2: { x: 0, y: 0 }, dir1: { x: 1, y: 0 }, dir2: { x: 0.6, y: 0.8 }, at: { x: 2, y: 1 } },
     ];

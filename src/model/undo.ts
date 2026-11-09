@@ -1,3 +1,4 @@
+import { dimensionFollowUp } from './associate';
 import type { DimStyle } from './dimStyle';
 import type { Drawing, Layer, Units } from './drawing';
 import type { Entity } from './entity';
@@ -113,10 +114,17 @@ export class UndoStack {
 
   constructor(private readonly drawing: Drawing) {}
 
+  /**
+   * Applies `tx`, then measures again the dimensions on the geometry it
+   * changed (deleting those whose geometry is gone); those changes join the
+   * transaction, so undo restores both.
+   */
   commit(tx: Transaction): void {
     if (tx.changes.length === 0) return;
     for (const c of tx.changes) apply(this.drawing, c);
-    this.done.push(tx);
+    const follow = dimensionFollowUp(this.drawing, tx.changes);
+    for (const c of follow) apply(this.drawing, c);
+    this.done.push(follow.length === 0 ? tx : { label: tx.label, changes: [...tx.changes, ...follow] });
     this.undone.length = 0;
   }
 
