@@ -180,10 +180,16 @@ points along an edge, then its new angle).
 
 ## Phase 4 (plan approved 2026-11-08): in progress
 
-1. Formatting kernel `model/dimFormat`: precision 0–8, ASME zero rules
-   (inch `.250`, mm `0.25` trailing suppressed), tolerances (symmetric,
-   deviation, limits), dual units, decimal degrees / D°M'S, prefix/suffix,
-   `<>` overrides; decimal (not binary) rounding.
+1. **Formatting kernel (done).** `model/dimFormat`: `roundDecimal` rounds
+   the 15-significant-digit decimal of the stored value, halves away from
+   zero, no "-0" (so .1245 → .125 at 3 places); `formatDecimal` with zero
+   rules (`INCH_ZEROS`, `MM_ZEROS`); `formatDimension` → `DimText` (main,
+   inline ± or stacked deviation/limits, alt in brackets), prefix/suffix,
+   `<>` override; with a tolerance the value and tolerance keep trailing
+   zeros; a zero deviation is "+.000"/"-.000" when the style keeps
+   trailing zeros, a bare "0" when it drops them (mm); limits leave `main`
+   empty; angles in decimal ° or D°M'S (`formatDms`, carries), no dual
+   units on angles. `flatText` for one-line display.
 2. Model, file v2 (migration), `model/dimLayout`, rendering (text,
    arrows, extension lines, ASME horizontal text breaking the line, fit
    rules), pick/select/transform, properties rows.
