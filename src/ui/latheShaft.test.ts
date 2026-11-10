@@ -8,7 +8,7 @@ import { dimensionLayout } from '../model/dimLayout';
 import { createDrawing, type Drawing } from '../model/drawing';
 import { type DimensionEntity, entityCurve } from '../model/entity';
 import { UndoStack } from '../model/undo';
-import { HOLE, LATHE_TEXTS, SHAFT, loadLatheReference } from './latheReference';
+import { HOLE, SHAFT, SHAFT_TEXTS, loadLatheShaft } from './latheShaft';
 
 const dims = (d: Drawing): DimensionEntity[] => [...d.entities.values()].filter((e): e is DimensionEntity => e.kind === 'dimension');
 const texts = (d: Drawing): string[] => dims(d).map((e) => flatText(dimensionLayout(d, e).text));
@@ -18,7 +18,7 @@ type Ord = Extract<DimensionEntity, { type: 'ordinate' }>;
 
 function lathePart(): Drawing {
   const d = createDrawing('in');
-  loadLatheReference(d);
+  loadLatheShaft(d);
   return d;
 }
 
@@ -41,7 +41,7 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
   const d = lathePart();
 
   it('Z by ordinates from the front face, Ø by symmetric diameters, notes, a center mark and a centerline', () => {
-    expect(texts(d)).toEqual([...LATHE_TEXTS]);
+    expect(texts(d)).toEqual([...SHAFT_TEXTS]);
     expect(dims(d).map((e) => e.type)).toEqual(['centerMark', 'centerline', ...Array(6).fill('ordinate'), 'symmetric', 'symmetric', 'symmetric', 'leader', 'leader']);
     expect(d.lathe && d.diameterMode).toBe(true);
     expect(d.sheetScale).toBe(10);
@@ -60,7 +60,7 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
     moveEnds(e, undo, sides, { x: 0.025, y: 0 });
     expect(texts(e)[4]).toBe('.300');
     undo.undo();
-    expect(texts(e)).toEqual([...LATHE_TEXTS]);
+    expect(texts(e)).toEqual([...SHAFT_TEXTS]);
   });
 
   it('the ordinates sit on one baseline; the .425 text moved clear of .400 and its leader jogs', () => {
@@ -103,7 +103,7 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
     expect(o650.p1).toEqual({ x: 0.65, y: SHAFT.backTop.y });
     expect(undo.undoLabel).toBe('Move ends');
     undo.undo();
-    expect(texts(e)).toEqual([...LATHE_TEXTS]);
+    expect(texts(e)).toEqual([...SHAFT_TEXTS]);
   });
 
   it('the groove deepened to Ø.090: its diameter re-measures, its ordinates stay', () => {
@@ -116,7 +116,7 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
   it('saved and reopened, it reads the same, lathe and Ø on', () => {
     const r = parseDrawing(serializeDrawing(d));
     if (!r.ok) throw new Error(r.error);
-    expect(texts(r.drawing)).toEqual([...LATHE_TEXTS]);
+    expect(texts(r.drawing)).toEqual([...SHAFT_TEXTS]);
     expect([...r.drawing.entities.values()]).toEqual([...d.entities.values()]);
     expect(r.drawing.lathe && r.drawing.diameterMode).toBe(true);
   });

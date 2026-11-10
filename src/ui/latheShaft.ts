@@ -11,7 +11,7 @@ import { UndoStack } from '../model/undo';
 import { DEFAULT_SNAP_KINDS, findSnap } from '../snap/snap';
 
 /**
- * The Phase 5 reference part (loaded with `?lathe`): a turned pin drawn as
+ * A second Phase 5 lathe part (loaded with `?shaft`): a turned pin drawn as
  * the upper half on the lathe axis, dimensioned the lathe way. Front face
  * at Z 0 with a .005 × 45° chamfer to Ø.080, a shoulder at Z .150 up to
  * Ø.125, a Ø.030 cross hole at Z .275, a .025 wide groove to Ø.100 at Z
@@ -43,10 +43,10 @@ export const SHAFT = {
 /** The cross hole's two sides (hidden lines), Ø.030 at Z .275. */
 export const HOLE = { z: 0.275, radius: 0.015 } as const;
 
-export const LATHE_END_VIEW = { x: -0.25, y: 0 };
+export const SHAFT_END_VIEW = { x: -0.25, y: 0 };
 
 /** What each dimension reads, in the order they are made. */
-export const LATHE_TEXTS = [
+export const SHAFT_TEXTS = [
   '', // center mark on the end view
   '', // the cross hole's centerline
   '0', // ordinates from the front face (the origin reads a bare 0)
@@ -63,14 +63,14 @@ export const LATHE_TEXTS = [
 ] as const;
 
 /** Builds the lathe reference part into `d` (an empty inch drawing). */
-export function loadLatheReference(d: Drawing): void {
+export function loadLatheShaft(d: Drawing): void {
   const undo = new UndoStack(d);
   const ctx: ToolContext = {
     drawing: d,
     undo,
     newProps: () => ({ layer: '0' }),
     message: (m) => {
-      throw new Error(`Lathe reference: unexpected message "${m}"`);
+      throw new Error(`Lathe shaft: unexpected message "${m}"`);
     },
     report: () => undefined,
     selection: () => [],
@@ -87,7 +87,7 @@ export function loadLatheReference(d: Drawing): void {
   /** A click on an object snap, carrying its anchor as the app sends it. */
   const snapClick = (p: Vec2): void => {
     const s = findSnap(d, p, 1e-6, kinds);
-    if (!s?.on || !vecNearlyEqual(s.at, p)) throw new Error(`Lathe reference: no snap at ${p.x}, ${p.y}`);
+    if (!s?.on || !vecNearlyEqual(s.at, p)) throw new Error(`Lathe shaft: no snap at ${p.x}, ${p.y}`);
     runner.send({ kind: 'point', at: p, anchor: s.on });
   };
   const pick = (id: EntityId, at: Vec2): void => runner.send({ kind: 'entity', id, at });
@@ -112,14 +112,14 @@ export function loadLatheReference(d: Drawing): void {
 
   // End view: the outside diameter.
   use(createCircleTool());
-  click(LATHE_END_VIEW);
-  runner.send({ kind: 'value', value: SHAFT.backTop.y, at: LATHE_END_VIEW });
+  click(SHAFT_END_VIEW);
+  runner.send({ kind: 'value', value: SHAFT.backTop.y, at: SHAFT_END_VIEW });
   const od = lastId();
 
   // A center mark on the end view, and the hole's centerline, which the
   // hole's ordinate then snaps to.
   use(createCenterMarkTool());
-  pick(od, { x: LATHE_END_VIEW.x + SHAFT.backTop.y, y: 0 });
+  pick(od, { x: SHAFT_END_VIEW.x + SHAFT.backTop.y, y: 0 });
   use(createCenterMarkTool());
   runner.send({ kind: 'option', key: 'method:lines' });
   pick(holeSides[0]!, { x: HOLE.z - HOLE.radius, y: 0.03 });

@@ -1772,17 +1772,17 @@ test.describe('Phase 4 done-when: the reference drawing, checked text by text', 
   });
 });
 
-test.describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
+test.describe('Phase 5: a second lathe part, the shaft, dimensioned the lathe way', () => {
   test('ordinates in Z, symmetric diameters and notes read back, lathe and Ø on', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
-    await page.goto('/?lathe');
+    await page.goto('/?shaft');
     await expect(prop(page, 'entity-count')).toHaveText('26');
     await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
     await page.getByTestId('zoom-extents').click();
-    // Extents and text centers from the layout (src/ui/latheReference.test.ts builds the same drawing).
+    // Extents and text centers from the layout (src/ui/latheShaft.test.ts builds the same drawing).
     const at = await extentsMapper(page, { minX: -0.325, maxX: 0.6827632311977716, minY: -0.075, maxY: 0.13075 });
     const texts: [string, number, number][] = [
       ['0', 0, 0.1247],
