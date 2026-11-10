@@ -88,12 +88,21 @@ export class Toolbars {
       grip.title = `${g.label} toolbar: right-click to reset it or show and hide toolbars`;
       grip.dataset.testid = `toolbar-grip-${g.id}`;
       grip.addEventListener('contextmenu', (e) => this.openMenu(e, [this.resetItem(g)]));
-      bar.append(grip);
+      // The buttons, with the bar's name in small type under them.
+      const buttons = document.createElement('div');
+      buttons.className = 'toolbar-buttons';
+      const name = document.createElement('span');
+      name.className = 'toolbar-label';
+      name.textContent = g.label;
+      const body = document.createElement('div');
+      body.className = 'toolbar-body';
+      body.append(buttons, name);
+      bar.append(grip, body);
       for (const item of g.items) {
         const b = makeButton(item);
         b.addEventListener('contextmenu', (e) => this.openMenu(e, [{ label: `Hide ${item.label}`, enabled: true, run: () => this.update(hideButton(this.prefs, item.id)) }], false));
         this.buttons.set(item.id, b);
-        bar.append(b);
+        buttons.append(b);
       }
       this.bars.set(g.id, bar);
       row.append(bar);

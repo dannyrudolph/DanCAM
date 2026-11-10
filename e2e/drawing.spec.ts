@@ -212,6 +212,7 @@ test.describe('toolbars', () => {
   test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
     await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
     await expect(page.getByTestId('toolbar-modify')).toBeVisible();
+    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Edit', 'Modify', 'Dimension', 'Snaps']);
     await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
     await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar', 'Snaps toolbar']);
     await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
