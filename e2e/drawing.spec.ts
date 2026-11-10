@@ -778,16 +778,17 @@ test.describe('selection', () => {
 
   test('a window takes what is fully inside; the same box dragged right to left also takes what it touches', async ({ page }) => {
     const at = await draw(page);
-    // x 0.5..1.2, y 0.5..1.2: B pokes in, A and C don't, nothing is fully inside
-    await drag(page, at(0.5, 1.2), at(1.2, 0.5));
+    // x 0.5..1.2, y 0.5..1.03: B pokes in, A and C don't, nothing is fully inside.
+    // Corners stay just past the lines: the view fits the lines' extents, so far past them may be off the canvas.
+    await drag(page, at(0.5, 1.03), at(1.2, 0.5));
     await expect(prop(page, 'entity-count')).toHaveText('3'); // still the drawing summary: nothing selected
-    await drag(page, at(1.2, 0.5), at(0.5, 1.2));
+    await drag(page, at(1.2, 0.5), at(0.5, 1.03));
     await expect(page.locator('#properties h2')).toHaveText(/^Line /);
     await expect(prop(page, 'Start Y')).toHaveText('1.0000');
 
     await page.keyboard.press('Escape');
     await expect(prop(page, 'entity-count')).toHaveText('3');
-    await drag(page, at(-0.1, 1.1), at(1.1, -0.1)); // window around A and B
+    await drag(page, at(-0.1, 1.03), at(1.1, -0.03)); // window around A and B
     await expect(prop(page, 'selection-count')).toHaveText('2');
   });
 
@@ -806,7 +807,7 @@ test.describe('selection', () => {
     await page.keyboard.up('Shift');
     await expect(prop(page, 'selection-count')).toHaveText('2');
 
-    await drag(page, at(-0.1, 1.1), at(1.1, 0.5), true); // Shift-window around B only
+    await drag(page, at(-0.1, 1.03), at(1.1, 0.5), true); // Shift-window around B only
     await expect(page.locator('#properties h2')).toHaveText(/^Line /);
     await expect(prop(page, 'Start Y')).toHaveText('0.0000');
 
