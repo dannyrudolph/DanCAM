@@ -117,9 +117,11 @@ test('Esc clears locked values first, then leaves the tool', async ({ page }) =>
   await expect(page.getByTestId('tool-line')).not.toHaveClass(/active/);
 });
 
-test('new lines take the chosen style', async ({ page }) => {
-  await page.getByTestId('style').selectOption('hidden');
+test('new lines take the chosen style, picked in the options bar while drawing', async ({ page }) => {
+  await expect(page.getByTestId('style')).toHaveCount(0); // not without a drawing tool
   await page.keyboard.press('l');
+  await page.getByTestId('style').selectOption('hidden');
+  await expect(page.locator('#options [data-testid="style"]')).toHaveValue('hidden');
   await typeValues(page, '0', '0');
   await typeValues(page, '1', '0');
   await page.keyboard.press('Escape');
@@ -198,6 +200,55 @@ test('a focused box that has not been typed in keeps following the cursor', asyn
   await expect(angle).toHaveValue('45.0000');
   await page.mouse.move(c.x - 100, c.y - 1); // just above 180°, caught by polar tracking
   await expect(angle).toHaveValue('180.0000');
+});
+
+/** Shows or hides a whole toolbar from the right-click menu on a toolbar's grip. */
+async function setToolbar(page: Page, label: string): Promise<void> {
+  await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
+  await page.locator('.context-menu button.checkable', { hasText: `${label} toolbar` }).click();
+}
+
+test.describe('toolbars', () => {
+  test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
+    await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
+    await expect(page.getByTestId('toolbar-modify')).toBeVisible();
+    await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
+    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar']);
+    await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
+    await page.locator('.context-menu button.checkable', { hasText: 'Modify toolbar' }).click();
+    await expect(page.getByTestId('toolbar-modify')).toBeHidden();
+    await page.keyboard.press('t'); // a hidden tool keeps its shortcut
+    await expect(page.locator('.options-tool')).toHaveText('Trim');
+    await page.keyboard.press('Escape');
+    await setToolbar(page, 'Inquiry');
+    await expect(page.getByTestId('tool-dist')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('toolbar-modify')).toBeHidden();
+    await expect(page.getByTestId('toolbar-inquiry')).toBeVisible();
+    // Every bar hidden: the row's own right-click still brings them back.
+    for (const bar of ['Draw', 'Edit', 'Dimension', 'Inquiry']) await setToolbar(page, bar);
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(0);
+    await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
+    await page.locator('.context-menu button', { hasText: 'Reset all toolbars' }).click();
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(4);
+  });
+
+  test('a button hidden by right-click comes back with its toolbar\'s reset, and stays hidden across a reload', async ({ page }) => {
+    await page.getByTestId('tool-trim').click({ button: 'right' });
+    await expect(page.locator('.context-menu button')).toHaveText(['Hide Trim']);
+    await page.locator('.context-menu button', { hasText: 'Hide Trim' }).click();
+    await expect(page.getByTestId('tool-trim')).toBeHidden();
+    await expect(page.getByTestId('tool-extend')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('tool-trim')).toBeHidden();
+    await page.getByTestId('toolbar-grip-draw').click({ button: 'right' });
+    await expect(page.locator('.context-menu button', { hasText: 'Reset Draw toolbar' })).toBeDisabled(); // nothing hidden there
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 300);
+    await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
+    await page.locator('.context-menu button', { hasText: 'Reset Modify toolbar' }).click();
+    await expect(page.getByTestId('tool-trim')).toBeVisible();
+  });
 });
 
 /** Screen position of a world point after Zoom Extents fits `extents` into the canvas. */
@@ -955,6 +1006,7 @@ test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
 
   /** ID at a snapped point; returns the full-precision X and Y from the results panel. */
   async function idAt(page: Page, p: { x: number; y: number }, snap: string) {
+    if (!(await page.getByTestId('tool-id').isVisible())) await setToolbar(page, 'Inquiry'); // hidden by default
     await page.getByTestId('tool-id').click();
     await snapClick(page, p, snap);
     await page.keyboard.press('Escape');

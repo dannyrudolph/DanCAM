@@ -36,6 +36,7 @@ import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
 import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
+import { type ToolbarGroup, Toolbars } from './toolbars';
 import { DrawingFile } from './fileAccess';
 import { ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
@@ -70,6 +71,13 @@ export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFil
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...INQUIRY_TOOLS];
+const TOOLBARS: readonly ToolbarGroup[] = [
+  { id: 'draw', label: 'Draw', tools: DRAW_TOOLS },
+  { id: 'edit', label: 'Edit', tools: EDIT_TOOLS },
+  { id: 'modify', label: 'Modify', tools: MODIFY_TOOLS },
+  { id: 'dimension', label: 'Dimension', tools: DIMENSION_TOOLS },
+  { id: 'inquiry', label: 'Inquiry', tools: INQUIRY_TOOLS },
+];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -671,7 +679,33 @@ export class App {
       b.addEventListener('click', () => this.send({ kind: 'option', key: o.key }));
       items.push(b);
     }
+    if (tool && DRAW_TOOLS.includes(tool)) items.push(this.styleSelect());
     this.optionsBar.replaceChildren(...items);
+  }
+
+  /** The line style new objects take (by layer, or one style), for the drawing tools' options bar. */
+  private styleSelect(): HTMLSelectElement {
+    const style = document.createElement('select');
+    style.className = 'options-style';
+    style.title = 'Line style for new objects';
+    style.tabIndex = -1;
+    style.dataset.testid = 'style';
+    const byLayer = document.createElement('option');
+    byLayer.value = '';
+    byLayer.textContent = 'Style: by layer';
+    style.append(byLayer);
+    for (const name of LINE_STYLE_NAMES) {
+      const o = document.createElement('option');
+      o.value = name;
+      o.textContent = `Style: ${LINE_STYLES[name].label}`;
+      style.append(o);
+    }
+    style.value = this.currentStyle ?? '';
+    style.addEventListener('change', () => {
+      this.currentStyle = style.value === '' ? undefined : (style.value as LineStyleName);
+      style.blur();
+    });
+    return style;
   }
 
   private requestRedraw(): void {
@@ -739,38 +773,20 @@ export class App {
 
   // ---- building the chrome ---------------------------------------------------
 
-  /** Drawing tools in a row under the top bar, ending with the drawing's units. */
+  /** Select, then the toolbars (see `toolbars.ts`), then the drawing's units, in a row under the top bar. */
   private buildToolbar(): void {
-    const bar = el('toolbar');
+    const row = el('toolbar');
     this.selectButton = button(ICONS.select, 'Select (Esc): pick objects, or drag a window', () => this.selectMode(), 'tool-select');
-    bar.append(this.selectButton);
-    const addTools = (defs: readonly ToolDef[]): void => {
-      for (const def of defs) {
-        const icon = ICONS[def.id as keyof typeof ICONS];
-        const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
-        const tip = keys ? `${def.label} (${keys})` : def.label;
-        const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
-        this.toolButtons.set(def.id, b);
-        bar.append(b);
-      }
+    row.append(this.selectButton);
+    const makeButton = (def: ToolDef): HTMLButtonElement => {
+      const icon = ICONS[def.id as keyof typeof ICONS];
+      const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
+      const tip = keys ? `${def.label} (${keys})` : def.label;
+      const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
+      this.toolButtons.set(def.id, b);
+      return b;
     };
-    addTools(DRAW_TOOLS);
-    const gap = document.createElement('span');
-    gap.className = 'toolbar-separator';
-    bar.append(gap);
-    addTools(EDIT_TOOLS);
-    const gapModify = document.createElement('span');
-    gapModify.className = 'toolbar-separator';
-    bar.append(gapModify);
-    addTools(MODIFY_TOOLS);
-    const gapDim = document.createElement('span');
-    gapDim.className = 'toolbar-separator';
-    bar.append(gapDim);
-    addTools(DIMENSION_TOOLS);
-    const gap2 = document.createElement('span');
-    gap2.className = 'toolbar-separator';
-    bar.append(gap2);
-    addTools(INQUIRY_TOOLS);
+    new Toolbars(row, TOOLBARS, makeButton, this.menu);
     const u = this.unitsButton;
     u.type = 'button';
     u.className = 'units-button';
@@ -779,7 +795,7 @@ export class App {
     u.dataset.testid = 'units';
     u.textContent = this.drawing.units;
     u.addEventListener('click', () => this.openUnitsMenu(u.getBoundingClientRect()));
-    bar.append(u);
+    row.append(u);
   }
 
   private setSidePanel(shown: boolean): void {
@@ -792,24 +808,6 @@ export class App {
 
   private buildTopBar(): void {
     const bar = el('topbar');
-    const style = document.createElement('select');
-    style.title = 'Line style for new objects';
-    style.tabIndex = -1;
-    style.dataset.testid = 'style';
-    const byLayer = document.createElement('option');
-    byLayer.value = '';
-    byLayer.textContent = 'Style: by layer';
-    style.append(byLayer);
-    for (const name of LINE_STYLE_NAMES) {
-      const o = document.createElement('option');
-      o.value = name;
-      o.textContent = `Style: ${LINE_STYLES[name].label}`;
-      style.append(o);
-    }
-    style.addEventListener('change', () => {
-      this.currentStyle = style.value === '' ? undefined : (style.value as LineStyleName);
-      style.blur();
-    });
     this.panButton = button(
       ICONS.pan,
       'Pan (H): drag with the left button. You can also hold Space and drag, or drag with the middle button',
@@ -837,7 +835,6 @@ export class App {
       button(ICONS.redo, 'Redo (Ctrl+Y)', () => this.doRedo(), 'redo'),
       this.panButton,
       button(ICONS.extents, 'Zoom Extents (double-click middle button)', () => this.zoomExtents(), 'zoom-extents'),
-      style,
     );
 
     const side = this.sidePanelButton;

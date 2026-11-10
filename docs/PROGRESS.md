@@ -463,6 +463,24 @@ we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
 defaults to Half; a dimension is deleted when the geometry it measures is
 deleted; shortcuts as above.
 
+Phase 5 accepted by the user ("looks good for now", 2026-11-09). Phase 6
+is on hold while the user tweaks the GUI.
+
+## GUI tweaks (user, 2026-11-09): in progress
+
+- **Toolbars (done).** `ui/toolbars`: the tool row is five bars (Draw,
+  Edit, Modify, Dimension, Inquiry), each with a grip. Right-click a
+  button: Hide it. Right-click a grip: Reset that bar, a checklist to show
+  or hide each bar, Reset all toolbars (the row's own right-click gives
+  the checklist too, so hidden bars can come back). Saved per browser
+  (`dancam.toolbars`), Inquiry hidden by default; hidden tools keep their
+  shortcuts.
+- **Style menu (done).** Off the top bar, into the options bar while a
+  Draw tool runs (user's choice).
+- **Colors (done).** Light theme after dannysdowelfactory.com: navy
+  (#003865) top bar, light gray bars and panels, blue (#0072ce) for active
+  and on, orange for messages and locked values; canvas stays white.
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the

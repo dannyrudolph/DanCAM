@@ -1,14 +1,18 @@
 :root {
-  --bg: #1b1f24;
-  --panel: #14171b;
-  --panel-2: #1f242a;
-  --border: #2c323a;
-  --text: #d6dbe1;
-  --muted: #8b949e;
-  --accent: #6cb6ff;
-  --warn: #f0c674;
-  --bad: #f47067;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Colors after dannysdowelfactory.com: navy brand, blue accent, orange for attention. */
+  --bg: #ffffff;
+  --panel: #f4f5f6;
+  --panel-2: #e9ecef;
+  --border: #dde1e6;
+  --text: #212529;
+  --muted: #6b7280;
+  --brand: #003865;
+  --accent: #0072ce;
+  --accent-soft: #dcebf8;
+  --warn: #d9660e;
+  --cta: #f47920;
+  --bad: #d64545;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 13px;
   color: var(--text);
   background: var(--bg);
@@ -55,9 +59,34 @@ input {
   min-height: 34px;
 }
 
+#topbar {
+  background: var(--brand);
+  border-bottom-color: var(--brand);
+  color: #fff;
+}
+
+#topbar .tool-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+#topbar .tool-button.active {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.7);
+  color: #fff;
+}
+
 #options {
-  background: var(--panel-2);
+  background: var(--bg);
   min-height: 32px;
+}
+
+.options-style {
+  margin-left: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
 }
 
 .options-tool {
@@ -103,6 +132,30 @@ input {
   flex-wrap: wrap; /* a second row on narrow windows */
 }
 
+/* One toolbar: a grip, then its buttons. */
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  border-right: 1px solid var(--border);
+}
+
+.toolbar-grip {
+  align-self: stretch;
+  width: 8px;
+  margin: 3px 3px 3px 2px;
+  border-radius: 2px;
+  background-image: radial-gradient(var(--muted) 1px, transparent 1.2px);
+  background-size: 4px 4px;
+  opacity: 0.6;
+  cursor: context-menu;
+}
+
+.toolbar-grip:hover {
+  opacity: 1;
+}
+
 .units-button {
   height: 32px;
   min-width: 36px;
@@ -110,7 +163,7 @@ input {
   padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--panel-2);
+  background: var(--bg);
   cursor: pointer;
 }
 
@@ -139,17 +192,9 @@ input {
 }
 
 .tool-button.active {
-  background: #1d3a57;
+  background: var(--accent-soft);
   border-color: var(--accent);
-  color: #fff;
-}
-
-#topbar select {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 6px;
-  margin-left: 8px;
+  color: var(--brand);
 }
 
 #canvas-wrap {
@@ -168,13 +213,6 @@ input {
 }
 
 /* No tool: picking and selection boxes, so an arrow rather than crosshairs. */
-.toolbar-separator {
-  width: 1px;
-  align-self: stretch;
-  margin: 4px 6px;
-  background: var(--border);
-}
-
 #canvas.selecting {
   cursor: default;
 }
@@ -446,7 +484,7 @@ input {
 }
 
 #properties dd.editable:hover {
-  background: #1d3a57;
+  background: var(--accent-soft);
 }
 
 #properties dd input {
@@ -455,7 +493,7 @@ input {
   text-align: right;
   font: inherit;
   color: inherit;
-  background: #0d1117;
+  background: var(--bg);
   border: 1px solid var(--accent);
   border-radius: 3px;
   padding: 0 3px;
@@ -516,9 +554,9 @@ input {
 }
 
 .status-toggle.on {
-  color: #fff;
+  color: var(--brand);
   border-color: var(--accent);
-  background: #1d3a57;
+  background: var(--accent-soft);
 }
 
 .status-scale-input {
@@ -562,7 +600,7 @@ input {
   align-items: center;
   gap: 3px;
   padding: 1px 4px;
-  background: rgba(20, 23, 27, 0.92);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--border);
   border-radius: 3px;
 }
@@ -578,7 +616,7 @@ input {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--muted);
+  color: var(--text);
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
 }
@@ -592,7 +630,7 @@ input {
 }
 
 .input-field input:focus {
-  color: #fff;
+  color: var(--accent);
 }
 
 .input-field input.locked {
@@ -612,7 +650,7 @@ input {
   padding: 1px 6px;
   border: 1px solid var(--border);
   border-radius: 3px;
-  background: rgba(20, 23, 27, 0.92);
+  background: rgba(255, 255, 255, 0.95);
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
@@ -628,7 +666,8 @@ input {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  background: var(--bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
 
 .context-menu button {
@@ -640,7 +679,7 @@ input {
 }
 
 .context-menu button:hover:not(:disabled) {
-  background: #1d3a57;
+  background: var(--accent-soft);
 }
 
 .context-menu button.checkable::before {
