@@ -5,7 +5,7 @@ import type { Units } from '../../model/drawing';
 import { type ProfileCurve, type ProfileStyle, merge } from '../../model/profilePlacement';
 import { MM_PER_INCH } from '../../model/units';
 import { type Curve3, type Piece3, edgePiece, point3, samples3 } from './curve3';
-import { type SolidFace, insideFace, normalAt, rayHits, rayMeetsBox, solidFaces } from './faceSolid';
+import { type SolidFace, insideFace, nearestOn, normalAt, rayHits, rayMeetsBox, solidFaces } from './faceSolid';
 import type { StepEdge, StepFace, StepModel, StepSurface } from './stepModel';
 import { findAxis } from './turnedProfile';
 
@@ -295,10 +295,28 @@ function samplesFor(p: Piece3, ctx: Ctx): number {
 
 /** The piece split into what the viewer sees and what material hides. */
 function seen(d: Draw, v: View, ctx: Ctx): { piece: Piece3; style: Style }[] {
-  const hidden = (q: Vec3): boolean => blocked(q, v.e, ctx);
+  // A spline edge only approximates where its faces meet, and may run a little inside the solid (the shaft's slot walls
+  // meeting its round, 0.0006 inside), where a ray leaving at a slant would find the edge's own face in the way.
+  const exact = d.piece.curve.kind === 'spline' ? onFaces(d.on) : (q: Vec3): Vec3 => q;
+  const hidden = (q: Vec3): boolean => blocked(exact(q), v.e, ctx);
   const shown = clip(d.piece, (q) => !hidden(q), ctx).map((piece) => ({ piece, style: d.style as Style }));
   const behind = clip(d.piece, hidden, ctx).map((piece) => ({ piece, style: 'hidden' as Style }));
   return [...shown, ...behind];
+}
+
+/**
+ * A point moved onto every one of the surfaces, the nearest point of each in
+ * turn: where two faces cross at an angle, a few rounds reach their
+ * intersection to within rounding.
+ */
+function onFaces(on: readonly StepSurface[]): (q: Vec3) => Vec3 {
+  const surfaces = on.filter((s): s is Exclude<StepSurface, { kind: 'other' }> => s.kind !== 'other');
+  if (surfaces.length === 0) return (q) => q;
+  return (q) => {
+    let p = q;
+    for (let i = 0; i < 12; i++) for (const s of surfaces) p = nearestOn(s, p);
+    return p;
+  };
 }
 
 /** Whether material lies between `q` and the viewer: a face the ray toward the viewer passes through. */

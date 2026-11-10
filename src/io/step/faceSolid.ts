@@ -38,6 +38,37 @@ function local(at: Placement, p: Vec3): Vec3 {
   return { x: dot3(w, at.ref), y: dot3(w, cross3(at.axis, at.ref)), z: dot3(w, at.axis) };
 }
 
+/**
+ * The point of the surface nearest `p`. A surface of revolution works in the
+ * half-plane through its axis and `p`: the nearest point of the generating
+ * line or circle there.
+ */
+export function nearestOn(s: Surface, p: Vec3): Vec3 {
+  const at = s.at;
+  const q = local(at, p);
+  if (s.kind === 'plane') return sub3(p, scale3(at.axis, q.z));
+  if (s.kind === 'sphere') {
+    const w = sub3(p, at.origin);
+    const len = length3(w);
+    return len === 0 ? add3(at.origin, scale3(at.ref, s.radius)) : add3(at.origin, scale3(w, s.radius / len));
+  }
+  const rho = Math.hypot(q.x, q.y);
+  const y = cross3(at.axis, at.ref);
+  const out = rho === 0 ? at.ref : add3(scale3(at.ref, q.x / rho), scale3(y, q.y / rho));
+  let [r, z] = [rho, q.z];
+  if (s.kind === 'cylinder') r = s.radius;
+  else if (s.kind === 'cone') {
+    const [sn, cs] = [Math.sin(s.semiAngle), Math.cos(s.semiAngle)];
+    const t = (rho - s.radius) * sn + q.z * cs;
+    [r, z] = [s.radius + t * sn, t * cs];
+  } else {
+    const [dr, dz] = [rho - s.major, q.z];
+    const len = Math.hypot(dr, dz);
+    [r, z] = len === 0 ? [s.major + s.minor, 0] : [s.major + (dr * s.minor) / len, (dz * s.minor) / len];
+  }
+  return add3(add3(at.origin, scale3(out, r)), scale3(at.axis, z));
+}
+
 /** True when u wraps round (an angle), and when v does (a torus's tube angle). */
 const periodic = (s: Surface): [boolean, boolean] => [s.kind !== 'plane', s.kind === 'torus'];
 

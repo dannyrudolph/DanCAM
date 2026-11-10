@@ -2190,7 +2190,7 @@ test.describe('Import STEP', () => {
     await expect(page.locator('[data-option="half"]')).toBeDisabled();
     await page.keyboard.press('Enter');
     await expect(status).toHaveText(
-      'Imported shaft.step as three views: 147 lines and arcs on layers shaft front, shaft fitted, shaft top, shaft end. Curves on shaft fitted are fitted with arcs and lines.',
+      'Imported shaft.step as three views: 129 lines and arcs on layers shaft front, shaft fitted, shaft top, shaft end. Curves on shaft fitted are fitted with arcs and lines.',
     );
     for (const name of ['shaft front', 'shaft top', 'shaft end', 'shaft fitted']) await expect(page.locator('#layers')).toContainText(name);
 

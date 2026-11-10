@@ -754,6 +754,13 @@ Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
    circle and the R0.15 round in the wrong style. It now snaps to the end
    nearer along the piece. Test: the head's rounds are quarter arcs,
    visible, in the front and top views.
+   Then: the shaft's spline edges (slot walls meeting the head's round, the
+   cross hole's break-out) run up to 0.0006 inside the solid, so a ray
+   leaving at a slant found the edge's own face and parts of the near
+   wall's curve came out hidden. A spline edge's points are now moved onto
+   both its faces (`faceSolid.nearestOn`, in turn) before the visibility
+   test. Shaft as 3 views: 129 curves. Tests: nearestOn on each surface;
+   the slot wall's curve at the round all visible.
 8. Done-when: shaft.step with its cross hole, slot and tang flat in every
    view, checked with List and dimensions.
 

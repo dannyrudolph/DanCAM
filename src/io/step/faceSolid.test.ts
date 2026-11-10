@@ -3,7 +3,7 @@ import ballInch from '../../../test-fixtures/step/ball-end-inch.step?raw';
 import pinMm from '../../../test-fixtures/step/pin-mm.step?raw';
 import shaft from '../../../test-fixtures/step/shaft.step?raw';
 import type { Vec3 } from '../../geometry/vec3';
-import { type SolidFace, insideFace, rayHits, solidFaces } from './faceSolid';
+import { type SolidFace, insideFace, nearestOn, rayHits, solidFaces } from './faceSolid';
 import { type StepModel, readStep } from './stepModel';
 
 const TOL = 1e-6;
@@ -120,5 +120,20 @@ describe('faces of the solid', () => {
     const tip = find(pin, (f) => f.surface.kind === 'cone' && f.surface.semiAngle > 1);
     const z = 32 - 0.75 / Math.tan((59 * Math.PI) / 180);
     expect([0, 180].map((th) => insideFace(tip, at(th, 0.75, z), TOL))).toEqual([true, true]);
+  });
+});
+
+describe('the nearest point of a surface', () => {
+  const Z = { origin: p(0, 0, 0), axis: p(0, 0, 1), ref: p(1, 0, 0) };
+  const round = (q: Vec3): number[] => [q.x, q.y, q.z].map((x) => Math.round(x * 1e9) / 1e9 + 0);
+
+  it('plane, cylinder, cone, sphere and torus: straight across to the surface, square to it', () => {
+    expect(round(nearestOn({ kind: 'plane', at: { ...Z, origin: p(0, 0, 1) } }, p(3, 4, 5)))).toEqual([3, 4, 1]);
+    expect(round(nearestOn({ kind: 'cylinder', at: Z, radius: 2 }, p(3, 4, 7)))).toEqual([1.2, 1.6, 7]);
+    // A 45° cone from R1: the point (3, 0, 1) meets its generator r = 1 + z square on at (2.5, 1.5).
+    expect(round(nearestOn({ kind: 'cone', at: Z, radius: 1, semiAngle: Math.PI / 4 }, p(3, 0, 1)))).toEqual([2.5, 0, 1.5]);
+    expect(round(nearestOn({ kind: 'sphere', at: { ...Z, origin: p(1, 1, 1) }, radius: 2 }, p(1, 1, 5)))).toEqual([1, 1, 3]);
+    // A torus R3 r1: from (0, 5, 1) toward its tube's centre (0, 3, 0), one radius out.
+    expect(round(nearestOn({ kind: 'torus', at: Z, major: 3, minor: 1 }, p(0, 5, 1)))).toEqual(round(p(0, 3 + 2 / Math.sqrt(5), 1 / Math.sqrt(5))));
   });
 });

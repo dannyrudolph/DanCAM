@@ -114,6 +114,15 @@ describe('three views', () => {
     ]);
   });
 
+  it('where the slot walls meet the head\'s round (spline edges a little inside the solid), the near one is visible all along', () => {
+    const v = views(shaft);
+    const [, , right] = curvesBox(v.front);
+    // The near and far walls' curves project onto one another; the near one, solid, covers the far one.
+    const atRound = v.front.filter((c) => c.fitted && c.kind !== 'line' && c.center.x - right > -2);
+    expect(atRound.length).toBeGreaterThan(0);
+    expect(atRound.filter((c) => c.style !== undefined)).toEqual([]);
+  });
+
   it('Turn moves the cross hole\'s circle into the front view; Flip puts it at the far end', () => {
     const turned = views(shaft, false, 1);
     // Exactly the hole's circle (the break-out curves lie on the hole), the far one hidden under it.
