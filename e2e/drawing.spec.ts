@@ -212,9 +212,13 @@ test.describe('toolbars', () => {
   test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
     await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
     await expect(page.getByTestId('toolbar-modify')).toBeVisible();
-    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Edit', 'Modify', 'Dimension', 'Snaps']);
+    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Snaps', 'Edit', 'Modify', 'Dimension']);
+    const top = async (id: string) => (await page.getByTestId(`toolbar-${id}`).boundingBox())!.y;
+    expect(await top('snaps')).toBe(await top('draw'));
+    expect(await top('modify')).toBe(await top('draw'));
+    expect(await top('dimension')).toBeGreaterThan(await top('draw')); // its own row
     await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
-    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar', 'Snaps toolbar']);
+    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Snaps toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar']);
     await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
     await page.locator('.context-menu button.checkable', { hasText: 'Modify toolbar' }).click();
     await expect(page.getByTestId('toolbar-modify')).toBeHidden();

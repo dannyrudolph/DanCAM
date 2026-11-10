@@ -3,8 +3,8 @@ import type { ContextMenu, MenuItem } from './contextMenu';
 /** A button on a toolbar: a tool, or a toggle such as a snap kind. */
 export type ToolbarItem = { readonly id: string; readonly label: string };
 
-/** One toolbar: a named group of buttons. */
-export type ToolbarGroup = { readonly id: string; readonly label: string; readonly items: readonly ToolbarItem[] };
+/** One toolbar: a named group of buttons; `newRow` starts a new row of bars with it. */
+export type ToolbarGroup = { readonly id: string; readonly label: string; readonly items: readonly ToolbarItem[]; readonly newRow?: boolean };
 
 /**
  * Which toolbars and buttons the user has hidden. A per-browser
@@ -80,6 +80,11 @@ export class Toolbars {
     private readonly menu: ContextMenu,
   ) {
     for (const g of groups) {
+      if (g.newRow) {
+        const br = document.createElement('div');
+        br.className = 'toolbar-row-break';
+        row.append(br);
+      }
       const bar = document.createElement('div');
       bar.className = 'toolbar-group';
       bar.dataset.testid = `toolbar-${g.id}`;

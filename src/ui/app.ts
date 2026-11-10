@@ -74,11 +74,11 @@ export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIF
 const SNAP_ITEM_KIND = new Map<string, SnapKind>(SNAP_KINDS.map((k) => [`snap-${k}`, k]));
 const TOOLBARS: readonly ToolbarGroup[] = [
   { id: 'draw', label: 'Draw', items: DRAW_TOOLS },
+  { id: 'snaps', label: 'Snaps', items: SNAP_KINDS.map((k) => ({ id: `snap-${k}`, label: `${SNAP_LABEL[k]} snap` })) },
   { id: 'edit', label: 'Edit', items: EDIT_TOOLS },
   { id: 'modify', label: 'Modify', items: MODIFY_TOOLS },
-  { id: 'dimension', label: 'Dimension', items: DIMENSION_TOOLS },
+  { id: 'dimension', label: 'Dimension', items: DIMENSION_TOOLS, newRow: true },
   { id: 'inquiry', label: 'Inquiry', items: INQUIRY_TOOLS },
-  { id: 'snaps', label: 'Snaps', items: SNAP_KINDS.map((k) => ({ id: `snap-${k}`, label: `${SNAP_LABEL[k]} snap` })) },
 ];
 
 /** Keys that start typing a value into the input boxes. */
