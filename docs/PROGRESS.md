@@ -656,8 +656,9 @@ says so: `npm run deploy` (build, then `wrangler deploy`). Its own
 static-only Worker `ddf-cad-lab` (`wrangler.jsonc`: assets from `dist/`,
 custom domain, no workers.dev URL), in the same Cloudflare account and
 zone as the DDF store but apart from it. wrangler 4.157.0 is a dev
-dependency (the user agreed). Not deployed yet; wrangler needs a one-time
-`npx wrangler login` from this project.
+dependency (the user agreed). First deployed 2026-11-10 from `phase-2`
+at `11eca54` (Worker version b958c8c1); checked live: the app loads at
+`/?lathe` with no page errors.
 
 ## Open questions
 
