@@ -52,6 +52,7 @@ keep them current when they change.
 | Lint | none |
 | Build | `npm run build` (type check + `vite build` → `dist/`) |
 | Dev server | `npm run dev` (open `/?demo` for the test drawing) |
+| Deploy | `npm run deploy` (build + `wrangler deploy` to https://cad.dannysdowelfactory.com; only when the user says so) |
 
 ## Done means
 

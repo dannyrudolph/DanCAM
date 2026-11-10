@@ -1,0 +1,22 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// DDF CAD LAB: static files only (the Vite build), no Worker script, no
+	// bindings, no secrets. Its own Worker, apart from the DDF store
+	// (pininstantquote), so a CAD deploy can never touch the store.
+	"name": "ddf-cad-lab",
+	"compatibility_date": "2026-11-01",
+	"assets": {
+		"directory": "./dist"
+	},
+	// Wrangler creates the DNS record and TLS certificate for the subdomain on
+	// the first deploy; the dannysdowelfactory.com zone is already in this
+	// Cloudflare account. No other record may exist for cad.dannysdowelfactory.com.
+	"routes": [
+		{
+			"pattern": "cad.dannysdowelfactory.com",
+			"custom_domain": true
+		}
+	],
+	// No workers.dev URL: the subdomain is the only address.
+	"workers_dev": false
+}

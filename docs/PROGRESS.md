@@ -486,6 +486,16 @@ is on hold while the user tweaks the GUI.
   (#003865) top bar, light gray bars and panels, blue (#0072ce) for active
   and on, orange for messages and locked values; canvas stays white.
 
+## Deployment (user, 2026-11-09)
+
+`cad.dannysdowelfactory.com`, public, deployed by hand only when the user
+says so: `npm run deploy` (build, then `wrangler deploy`). Its own
+static-only Worker `ddf-cad-lab` (`wrangler.jsonc`: assets from `dist/`,
+custom domain, no workers.dev URL), in the same Cloudflare account and
+zone as the DDF store but apart from it. wrangler 4.157.0 is a dev
+dependency (the user agreed). Not deployed yet; wrangler needs a one-time
+`npx wrangler login` from this project.
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
