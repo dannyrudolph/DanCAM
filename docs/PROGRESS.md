@@ -279,7 +279,7 @@ points along an edge, then its new angle).
       text. Undoable (`sheetScale` change), saved (optional in the file;
       absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
       20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
-      cancels). Print/PDF uses it in Phase 6.
+      cancels). Print/PDF uses it in Phase 7 (Output).
    c. **Dimension Styles panel (done).** `model/dimStyles` (like
       `layers`): New copies the style being edited as NAME-2, -3…; edit
       (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
@@ -327,7 +327,7 @@ Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
 user will give feedback on a working version; done-when uses our own
 reference drawing); ASME unidirectional text; leader text typed in a box
 at the cursor is fine (CAD-9 exception for notes); plain sans font for
-now, stroke font question at Phase 6.
+now, stroke font question at Phase 7 (Output).
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
@@ -341,7 +341,7 @@ line's first point was brought forward into step 2).
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
-deferred (ray to Phase 2, autosave to Phase 6).
+deferred (ray to Phase 2, autosave to Phase 7, Output).
 
 ## Phase 5 (plan approved 2026-11-09): in progress
 
@@ -458,19 +458,181 @@ deferred (ray to Phase 2, autosave to Phase 6).
    as it follows its lines, one undo step). The hole's ordinate is now
    anchored to its centerline. Open: the narrow groove's Ø text sits
    inside the part, wider than the groove; the user will look at it.
+   **Second part (from the other line of work, merged 2026-11-09)** `?lathe` loads
+   `ui/latheReference`: a turned pin, upper half on the axis, at 10:1,
+   Lathe and Ø on, built through the real tools with snapped (anchored)
+   points: .010 × 45° chamfer, Ø.125 nose, Ø.188 body, Ø.156 neck, Ø.030
+   cross hole at Z .400, end view. Symmetric Ø.125 and Ø.188, an X
+   ordinate Ø.156, Z ordinates .000/.250/.400/.600/.750 on one baseline,
+   a centerline through the hole, a center mark on the end view, two
+   leaders. Tests (`latheReference.test.ts`): texts, one baseline, no
+   overlaps or crossings, stretching the back .05 makes .650/.800 while
+   the diameters stay (one undo restores), file round trip; e2e "Phase 5
+   done-when" clicks each text. The hole ordinate (.400) is typed, so it
+   doesn't follow the hole.
 
 Decisions (user, 2026-11-09): no reference part needed yet (feedback as
 we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
 defaults to Half; a dimension is deleted when the geometry it measures is
 deleted; shortcuts as above.
 
-Phase 5 accepted by the user ("looks good for now", 2026-11-09). Phase 6
-is on hold while the user tweaks the GUI.
+## Phase 6: Blocks (plan approved 2026-11-09): in progress
 
-## GUI tweaks (user, 2026-11-09): in progress
+Decisions (user, 2026-11-09): blocks come before output (Output is now
+Phase 7). Main use: a cutting tool sketch (a whole sub-part) moved and
+copied against a profile. The library is shared by all drawings. A text
+field (description) is saved with each block. No nesting for now.
+Spec: "Blocks".
 
-- **Toolbars (done).** `ui/toolbars`: the tool row is five bars (Draw,
-  Edit, Modify, Dimension, Inquiry), each with a grip. Right-click a
+1. Model: `blocks` table on the drawing (name, base, entities, units,
+   description) and an `insert` entity (block, at, rotation, scale,
+   mirrored, layer); geometry transformed for render, bounds, hit test;
+   undo records for definitions; file v4 (v3 opens as before).
+   **(done)** `model/block`: `BlockDef` {name, description, entities:
+   lines/circles/arcs/points about the base at the origin, in drawing
+   units, ids unique within the block}; `instanceTransforms` (mirror about
+   own X, scale, rotate, move; identity steps skipped), `instanceEntities`
+   (layer-0 parts take the instance's layer), `insertBBox`, `insertsOf`,
+   `scaleBlock`. `InsertEntity` {block, at, rotationDeg, scale, mirrored};
+   `transformEntity` moves/rotates/scales it, a mirror at m° flips it and
+   turns it to 2m − rotation. `Drawing.blocks`; undo `block` op (refuses an
+   insert of an undefined block, removing a block with instances, removing
+   a layer a block uses); Convert units converts definitions (instances
+   keep their scale). Extents, pick, window/crossing select, grip
+   (insertion point), properties rows, Stretch (moves it when its
+   insertion point is in the window); the renderer draws parts in their
+   layers' colors. Layer rename carries block geometry; delete refused
+   while a block uses the layer. Snaps skip instances until step 4; anchors
+   never name an instance. The base point isn't a field: the origin is the
+   base. A units field is left to the library (step 6), since a drawing's
+   blocks are always in its units. Rendering is checked in
+   the browser from step 2, when inserts can be made.
+2. Create block (K) and Insert (Shift+I) with a Blocks panel in the
+   sidebar (name, preview, description); unit scaling on insert.
+   Split (user, 2026-11-09): 2a Create block and the panel; 2b Insert.
+   **2a (done)** `commands/blockTools.createBlockTool` (K, toolbar group
+   "Blocks", one-shot like the edit tools): selection first or a
+   selection step; only lines, circles, arcs and points go in (others are
+   left out, with a message); base point, then name (text box at the base;
+   blank or a name used in any case refused, asked again), then
+   description (Enter for none). Options Convert to block (default) / Keep
+   objects / Delete objects, kept for the session. `block.createBlock`:
+   one undo step "Create block X": definition about the base (ids b1…),
+   sources removed unless kept, an instance at the base on the current
+   layer when converted. `ui/blocksPanel` (section `#blocks`): name,
+   instance count, description, SVG preview (`blockPreviewSvg`); "None
+   yet" hint when empty. Browser test checks the instance is drawn (canvas
+   pixels; fails if inserts aren't drawn) and its properties.
+   Unit scaling on insert moves to step 6, where blocks come from a library
+   in another unit; a drawing's own blocks are always in its units.
+   **2b (done)** `createInsertTool` (Shift+I, sticky, one undo step per
+   copy): the block last chosen (Blocks panel row click, or its button in
+   the options bar), else the first by name; click the base point (preview
+   at the cursor), then pick or type the rotation (Enter keeps the last).
+   Options Mirror (toggle) and Scale (typed, more than zero); block,
+   rotation, mirror and scale kept for the session. On the current layer
+   and style. Browser test: panel click → Insert, a copy turned 90°, a
+   mirrored copy, both drawn (canvas pixels) and shown in properties.
+3. Instances as one object: selection, insertion grip, Move/Copy/Rotate/
+   Mirror/Scale/Array/Stretch/Erase, properties panel (name, description,
+   Z/X, rotation, scale, mirrored), List; Explode (Shift+U).
+   **(done)** The edit tools needed no change (step 1's `transformEntity`
+   and `withNewIds` already handle instances); tests pin Move, Copy,
+   Rotate, Mirror (a left-hand copy: flipped, 180 − rotation), Scale,
+   Erase and polar Array (items turned a step each). Properties: X/Y
+   (Z/X in lathe mode), Rotation (angle, normalised) and Scale (new
+   `factor` quantity, plain number, more than zero) are editable; Mirrored
+   is a Yes/No dropdown (`withMirrored`: flipped about its own X axis
+   through the insertion point); Block and Description read-only. List
+   reports the same rows. `explodeTool` (Shift+U, one-shot):
+   `block.explodeInserts` replaces each selected instance by its parts as
+   drawn (layer-0 parts on its layer and style), new ids, one undo step;
+   other objects left alone.
+4. Snaps and associativity inside instances: snaps on instance geometry,
+   anchors that name instance + inner entity, Trim/Extend boundaries.
+   **(done)** Geometry ids reach into instances as paths `insertId/partId`
+   (`block.partRef`, `refEntityId`, `resolveGeometry`: the part as drawn,
+   carrying the path as its id). `drawnGeometry` (plain geometry + parts,
+   visible layers) feeds `findSnap`, so every snap works on instance parts
+   and reports the path in `on`; the app passes it as the point's anchor
+   unchanged. `anchor.ts` and `associate.ts` resolve every anchor through
+   `resolveGeometry`; `dependsOn` matches a path by its instance; a
+   `block` change re-measures dimensions on that block's instances (step
+   5's Edit block relies on it). Copy remaps paths onto the copy
+   (`remapAnchors`). Erase or Explode of the instance deletes its
+   dimensions (spec). The file check accepts paths that resolve. Trim and
+   Extend take instance parts as edges; instances are never trimmed.
+   Browser test: a linear dimension snapped from the tool to a part face
+   reads 3.000, then 2.500 after the tool's X is edited to .5.
+   Not yet: tools that pick a whole object (Radius, Diameter, Center mark,
+   two-line Angle, Symmetric's centerline) can't pick a part inside an
+   instance; point-snapped dimensions can.
+5. Edit block (Save/Cancel, updates every instance in one undo step),
+   Rename, Purge.
+   **(done)** `model/blockEdit`: `blockEditDrawing` opens the block by
+   itself (base at the origin; the drawing's layers, styles, units and
+   settings; no blocks; new ids past its `e<n>` ids); `saveBlockEdit`
+   keeps only lines/circles/arcs/points (counts the rest as left out),
+   refuses an empty block, keeps part ids (so dimensions on kept parts stay
+   anchored and re-measure; those on deleted parts go), carries layers
+   made or changed while editing, one undo step "Edit block X", none when
+   nothing changed. `renameBlock` (instances follow; a change of case is
+   fine; clashes and blanks refused), `deleteBlock` (refused while used),
+   `purgeBlocks` (every unused one, one step). App: the Blocks panel's
+   pencil opens Edit block: its own drawing, undo stack and view, a base
+   point marker, a bar "Editing block X" with Save block / Cancel. Save
+   that can't (empty) stays open with the message. While editing, New,
+   Open, Save, Units and Sheet scale are refused ("Save or cancel the
+   block X first."); Lathe mode applies to both. Panel: double-click the
+   name to rename (Enter or leaving applies, Esc cancels), trash deletes,
+   Purge in the header. Browser tests: edit with two instances, erase the
+   nose, Save (both change, one undo brings it back), Ctrl+S refused while
+   editing; Cancel; rename; delete and purge refused while used, then
+   purge.
+6. Library: IndexedDB store, Save to library, insert from the library
+   (copied in), Update from library, Export/Import library file; name
+   clashes asked about, never overwritten silently.
+   **(done)** `model/library` (pure): `LibraryBlock` = definition + units
+   + the layers its geometry is on (not 0); `libraryEntry`, `inUnits`
+   (converts in↔mm), `sameBlock` (description and geometry within TOL),
+   `libraryStatus` (none/same/differs), `freeName` ("Tool 2"), `copyIn`
+   (one undo step, adds missing layers; existing layers keep the
+   drawing's colours), `updateFromLibrary` (one step, dimensions on
+   instances re-measure), `planImport`/`importEntries` (new, already
+   there, clashes: replace, keep both renamed, or skip). Names match
+   without case. `io/nativeFile`: `.cad2d-blocks.json` (`serializeLibrary`,
+   `parseLibrary`, checked like a drawing's blocks). `io/libraryStore`:
+   `IndexedDbLibrary` (db "dancam", store "blocks", keyed by lower-case
+   name); checked in the browser tests, no fake-IndexedDB package.
+   `ui/libraryPanel` ("Block library" under Blocks): rows with preview,
+   units, description, delete (asks; drawings keep their copies). Row
+   click copies in (or uses the drawing's when the same; asks when
+   different: use the drawing's / update it / copy in as "X 2") and
+   starts Insert. Blocks panel rows: Save to library (asks before
+   replacing a different one, or saves as "X 2"), and Update from library
+   when the library's differs. Export downloads
+   "DanCAM blocks.cad2d-blocks.json"; Import reads one (asks once about
+   clashes). Questions use the context menu with a new heading line.
+   Copy in and the first Insert are two undo steps.
+   Browser tests: save to library, reload, new mm drawing, insert (edge
+   explodes to 25.4); clash questions, Update from library and its undo,
+   Export, Import into a second browser context (and again: nothing new),
+   delete from the library.
+7. Done-when: a tool sketch saved to the library from one drawing, used in
+   another against a lathe profile (spec, roadmap Phase 6).
+
+Tests per step: model and transform unit tests, tool tests with the
+harness, file round trip and v3 migration, library store tests (fake
+IndexedDB in memory, no new package), and e2e for each tool and the
+done-when.
+
+Phase 5 accepted by the user ("looks good for now", 2026-11-09).
+
+## GUI tweaks (user, 2026-11-09), branch `gui-and-deploy`, merged with Phase 6
+
+- **Toolbars (done).** `ui/toolbars`: the tool row is bars with grips and
+  small captions, in two rows: Draw, Snaps, Edit, Modify; then Dimension,
+  Blocks (added at the merge with Phase 6), Inquiry. Right-click a
   button: Hide it. Right-click a grip: Reset that bar, a checklist to show
   or hide each bar, Reset all toolbars (the row's own right-click gives
   the checklist too, so hidden bars can come back). Saved per browser
@@ -501,4 +663,4 @@ dependency (the user agreed). Not deployed yet; wrangler needs a one-time
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).
-- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 6.
+- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 7 (Output).

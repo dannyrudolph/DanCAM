@@ -3,7 +3,8 @@ import { arcEnd, arcStart } from '../geometry/arc';
 import { lineLine } from '../geometry/intersect';
 import { TOL, nearlyEqual } from '../geometry/tolerance';
 import { type Vec2, add, cross, distance, dot, scale, sub, vecNearlyEqual } from '../geometry/vec';
-import { type Anchor, type DimAnchorKey, type DimAnchors, anchorIds, anchorPoint, dimAnchorIds, isAnchorable, withoutAnchors } from './anchor';
+import { type Anchor, type DimAnchorKey, type DimAnchors, anchorIds, anchorPoint, anchorTarget, dimAnchorIds, isAnchorable, withoutAnchors } from './anchor';
+import { insertsOf, refEntityId, resolveGeometry } from './block';
 import type { Drawing } from './drawing';
 import { type ArcEntity, type DimensionEntity, type EntityId, type LineEntity, dimensionPoints, entityCurve } from './entity';
 import type { Change } from './undo';
@@ -84,7 +85,7 @@ function follow(d: Drawing, a: Anchor | undefined, was: Vec2): { at: Vec2; ancho
   return at ? { at, anchor: a } : { at: was };
 }
 
-const isGeometry = (d: Drawing, id: EntityId): boolean => isAnchorable(d.entities.get(id));
+const isGeometry = (d: Drawing, id: EntityId): boolean => anchorTarget(d, id) !== undefined;
 
 /** The anchors with `key` set, or removed when `a` is undefined. */
 function setAnchor(anchors: DimAnchors, key: 'p1' | 'p2' | 'vertex', a: Anchor | undefined): DimAnchors {
@@ -116,13 +117,13 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
     case 'radius':
     case 'diameter': {
       if (anchors.curve === undefined) return e;
-      const c = d.entities.get(anchors.curve);
+      const c = resolveGeometry(d, anchors.curve);
       if (c?.kind !== 'arc' && c?.kind !== 'circle') return undefined;
       return { ...shifted(e, sub(c.center, e.center)), center: c.center, radius: c.radius };
     }
     case 'angular': {
       if (anchors.lines) {
-        const [l1, l2] = anchors.lines.map((id) => d.entities.get(id));
+        const [l1, l2] = anchors.lines.map((id) => resolveGeometry(d, id));
         if (l1?.kind !== 'line' || l2?.kind !== 'line') return undefined;
         const first = angleBetweenLines(l1, l2, e.at);
         if (!first) return undefined;
@@ -130,7 +131,7 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
         return { ...moved, ...angleBetweenLines(l1, l2, moved.at)! };
       }
       if (anchors.curve !== undefined) {
-        const a = d.entities.get(anchors.curve);
+        const a = resolveGeometry(d, anchors.curve);
         if (a?.kind !== 'arc') return undefined;
         return { ...shifted(e, sub(a.center, e.vertex)), ...arcArms(a) };
       }
@@ -152,7 +153,7 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
       let axisBase = e.axisBase;
       let axisDir = e.axisDir;
       if (anchors.axis !== undefined) {
-        const c = d.entities.get(anchors.axis);
+        const c = resolveGeometry(d, anchors.axis);
         const curve = c && entityCurve(c);
         if (curve?.kind === 'segment') {
           axisBase = curve.a;
@@ -184,13 +185,13 @@ export function remeasure(d: Drawing, e: DimensionEntity): DimensionEntity | und
     }
     case 'centerMark': {
       if (anchors.curve === undefined) return e;
-      const c = d.entities.get(anchors.curve);
+      const c = resolveGeometry(d, anchors.curve);
       if (c?.kind !== 'arc' && c?.kind !== 'circle') return undefined;
       return { ...e, center: c.center, radius: c.radius, at: c.center };
     }
     case 'centerline': {
       if (!anchors.lines) return e;
-      const [l1, l2] = anchors.lines.map((id) => d.entities.get(id));
+      const [l1, l2] = anchors.lines.map((id) => resolveGeometry(d, id));
       if (l1?.kind !== 'line' || l2?.kind !== 'line') return undefined;
       const ends = centerlineBetween(l1, l2);
       return ends && { ...e, ...ends, at: { x: (ends.p1.x + ends.p2.x) / 2, y: (ends.p1.y + ends.p2.y) / 2 } };
@@ -238,10 +239,10 @@ export function keepMatching(d: Drawing, e: DimensionEntity): DimensionEntity {
   return stale.length === 0 ? e : withoutAnchors(e, stale);
 }
 
-/** True when one of `e`'s anchors needs an entity in `ids`. */
+/** True when one of `e`'s anchors needs an entity in `ids` (an instance, for a part of it). */
 function dependsOn(e: DimensionEntity, ids: ReadonlySet<EntityId>): boolean {
   const anchors = e.anchors;
-  return anchors !== undefined && KEYS.some((k) => dimAnchorIds(anchors, k).some((id) => ids.has(id)));
+  return anchors !== undefined && KEYS.some((k) => dimAnchorIds(anchors, k).some((id) => ids.has(refEntityId(id))));
 }
 
 /** Ordinates that measured from `before` measure from `after`. */
@@ -264,6 +265,8 @@ export function dimensionFollowUp(d: Drawing, changes: readonly Change[]): Chang
   const out: Change[] = [];
   for (const c of changes) {
     if (c.op === 'dimOrigin') out.push(...originFollowUp(d, c.before, c.after));
+    // A block redefined: every instance of it is drawn differently.
+    if (c.op === 'block') for (const ins of insertsOf(d, (c.after ?? c.before)!.name)) geometry.add(ins.id);
     const e = c.op === 'add' || c.op === 'remove' ? c.entity : c.op === 'modify' ? c.after : undefined;
     if (!e) continue;
     // A centerline is measured and measured from: its dependents follow it.

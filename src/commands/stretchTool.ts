@@ -29,7 +29,8 @@ function windowLines(b: BBox, layer: string): Entity[] {
 function stretched(e: Entity, box: BBox, delta: Vec2): Entity | undefined {
   const inside = (p: Vec2): boolean => p.x >= box.minX && p.x <= box.maxX && p.y >= box.minY && p.y <= box.maxY;
   const mv = (p: Vec2): Vec2 => (inside(p) ? { x: p.x + delta.x, y: p.y + delta.y } : p);
-  if (e.kind === 'point') return inside(e.at) ? { ...e, at: mv(e.at) } : undefined;
+  // A point or block instance moves when it (its insertion point) is in the window.
+  if (e.kind === 'point' || e.kind === 'insert') return inside(e.at) ? { ...e, at: mv(e.at) } : undefined;
   if (e.kind === 'dimension') return dimensionPoints(e).some(inside) ? mapDimensionPoints(e, mv) : undefined;
   const c = entityCurve(e)!;
   const s = stretchCurve(c, box, delta);
@@ -40,7 +41,7 @@ function stretched(e: Entity, box: BBox, delta: Vec2): Entity | undefined {
 function touched(d: Drawing, box: BBox): Entity[] {
   return [...d.entities.values()].filter((e) => {
     if (d.layers.get(e.layer)?.visible === false) return false;
-    if (e.kind === 'point' || e.kind === 'dimension') return stretched(e, box, { x: 0, y: 0 }) !== undefined;
+    if (e.kind === 'point' || e.kind === 'dimension' || e.kind === 'insert') return stretched(e, box, { x: 0, y: 0 }) !== undefined;
     return curveTouchesBox(entityCurve(e)!, box);
   });
 }

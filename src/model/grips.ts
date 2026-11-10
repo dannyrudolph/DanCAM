@@ -11,7 +11,7 @@ import type { Entity } from './entity';
  * - `start`, `end`: a line end stretches; an arc end slides along its circle
  *   (center and radius fixed).
  * - `move`: moves the whole entity (a point, a line's midpoint, a center, an
- *   xline or ray base).
+ *   xline or ray base, an insert's insertion point).
  * - `quad0` … `quad270`: a circle's quadrants set its radius.
  * - `mid` on an arc: the arc passes through the dragged point, keeping both ends.
  * - a dimension's grips: see `dimGrips.ts`.
@@ -44,6 +44,8 @@ export function gripsFor(e: Entity, d?: Drawing): Grip[] {
     case 'xline':
     case 'ray':
       return [{ key: 'move', at: e.base }];
+    case 'insert':
+      return [{ key: 'move', at: e.at }];
     case 'dimension':
       return d ? dimensionGrips(d, e) : [];
   }
@@ -63,6 +65,7 @@ export function applyGrip(e: Entity, key: string, from: Vec2, to: Vec2, drawing?
   if (key === 'move') {
     switch (e.kind) {
       case 'point':
+      case 'insert':
         return { ...e, at: shift(e.at, d) };
       case 'line':
         return { ...e, start: shift(e.start, d), end: shift(e.end, d) };

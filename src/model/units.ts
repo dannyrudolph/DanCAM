@@ -1,3 +1,4 @@
+import { scaleBlock } from './block';
 import { scaleDimStyle } from './dimStyle';
 import type { Drawing, Units } from './drawing';
 import { scaleEntity } from './entity';
@@ -16,7 +17,8 @@ export const UNIT_LABEL: Readonly<Record<Units, string>> = { in: 'inch', mm: 'mm
  * Converts the drawing to `to`: every entity is scaled so its real size is
  * unchanged (inch → mm multiplies by 25.4, mm → inch divides), and so are the
  * dimension styles' sizes and tolerances, so text prints the same size,
- * and the ordinate origin.
+ * the ordinate origin, and the block definitions (instances keep their
+ * scale, so they stay the same real size).
  * Undefined when the drawing already uses `to`.
  */
 export function convertUnits(d: Drawing, to: Units): Transaction | undefined {
@@ -25,6 +27,9 @@ export function convertUnits(d: Drawing, to: Units): Transaction | undefined {
   const changes: Change[] = [{ op: 'units', before: d.units, after: to }];
   for (const e of d.entities.values()) {
     changes.push({ op: 'modify', before: e, after: scaleEntity(e, scale) });
+  }
+  for (const b of d.blocks.values()) {
+    changes.push({ op: 'block', before: b, after: scaleBlock(b, scale) });
   }
   for (const s of d.dimStyles.values()) {
     changes.push({ op: 'dimStyle', before: s, after: scaleDimStyle(s, scale) });

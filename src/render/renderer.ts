@@ -6,6 +6,7 @@ import { clipLine, clipRay, clipSegment } from '../geometry/clip';
 import { distance } from '../geometry/vec';
 import type { Vec2 } from '../geometry/vec';
 import { type DimLayout, dimensionLayout } from '../model/dimLayout';
+import { instanceEntities } from '../model/block';
 import { type Drawing, effectiveStyle } from '../model/drawing';
 import type { Entity, EntityId } from '../model/entity';
 import type { BoxMode } from '../model/selection';
@@ -27,6 +28,8 @@ const COLORS = {
   grip: '#0969da',
   /** Lathe mode's centerline at Y = 0: part of the view, not the drawing. */
   latheAxis: '#8c959f',
+  /** Lathe mode's Z0 X0 center mark, fainter than the centerline. */
+  latheOrigin: '#b8bec6',
   origin: '#0969da',
   hotGrip: '#d1242f',
   gripEdge: '#ffffff',
@@ -67,6 +70,8 @@ export type Overlay = {
   readonly nextPoint: Vec2 | undefined;
   /** The object snap the cursor is on; drawn instead of the next-point marker. */
   readonly snap: Snap | undefined;
+  /** Edit block: the block's base point (the origin), marked like the ordinate origin. */
+  readonly basePoint?: Vec2;
 };
 
 /**
@@ -86,9 +91,11 @@ export function render(
   if (drawing.lathe) {
     const axis: Entity = { kind: 'xline', id: 'lathe-axis', layer: '', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } };
     drawEntity(ctx, v, drawing, axis, LINE_STYLES.center, COLORS.latheAxis, 0);
+    drawCenterMark(ctx, worldToScreen(v, { x: 0, y: 0 }), COLORS.latheOrigin);
   }
   drawEntities(ctx, v, drawing, overlay.selected);
   if (showsOrigin(drawing)) drawOriginMark(ctx, worldToScreen(v, drawing.dimOrigin));
+  if (overlay.basePoint) drawOriginMark(ctx, worldToScreen(v, overlay.basePoint));
   for (const e of overlay.preview) {
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), COLORS.preview, 0);
   }
@@ -104,6 +111,15 @@ function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawi
     const layer = drawing.layers.get(e.layer);
     if (layer && !layer.visible) continue;
     const isSelected = selected.has(e.id);
+    if (e.kind === 'insert' && !isSelected) {
+      // Each part in its own layer's color (layer 0 parts are already on the instance's layer).
+      for (const part of instanceEntities(drawing, e)) {
+        const partLayer = drawing.layers.get(part.layer);
+        if (partLayer && !partLayer.visible) continue;
+        drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), partLayer?.color ?? COLORS.fallbackLine, 0);
+      }
+      continue;
+    }
     const color = isSelected ? COLORS.selected : (layer?.color ?? COLORS.fallbackLine);
     drawEntity(ctx, v, drawing, e, effectiveStyle(drawing, e), color, isSelected ? SELECTED_EXTRA_PX : 0);
   }
@@ -185,6 +201,10 @@ function drawEntity(
     case 'dimension':
       drawDimension(ctx, v, dimensionLayout(drawing, e), color, extraWidth);
       return;
+    case 'insert':
+      // Selected or a preview: every part in the one color.
+      for (const part of instanceEntities(drawing, e)) drawEntity(ctx, v, drawing, part, effectiveStyle(drawing, part), color, extraWidth);
+      return;
   }
 }
 
@@ -254,6 +274,21 @@ function drawOriginMark(ctx: CanvasRenderingContext2D, s: Vec2): void {
   ctx.lineTo(s.x + 2 * r, s.y);
   ctx.moveTo(s.x, s.y - 2 * r);
   ctx.lineTo(s.x, s.y + 2 * r);
+  ctx.stroke();
+}
+
+/** A drafting center mark, a fixed size on screen: a small cross at the center and longer arms past a gap. */
+function drawCenterMark(ctx: CanvasRenderingContext2D, s: Vec2, color: string): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x + 5 * dx, s.y + 5 * dy);
+    ctx.moveTo(s.x + 8 * dx, s.y + 8 * dy);
+    ctx.lineTo(s.x + 16 * dx, s.y + 16 * dy);
+  }
   ctx.stroke();
 }
 

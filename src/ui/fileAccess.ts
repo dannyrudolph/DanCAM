@@ -90,18 +90,25 @@ export class DrawingFile {
   }
 }
 
-function pickWithInput(): Promise<File | undefined> {
+/** Asks for a text file with a file input (`accept`: extensions, comma-separated); undefined when cancelled. */
+export async function pickTextFile(accept: string): Promise<{ name: string; text: string } | undefined> {
+  const file = await pickWithInput(accept);
+  return file && { name: file.name, text: await file.text() };
+}
+
+function pickWithInput(accept = `${FILE_EXTENSION},.json`): Promise<File | undefined> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = `${FILE_EXTENSION},.json`;
+    input.accept = accept;
     input.addEventListener('change', () => resolve(input.files?.[0]));
     input.addEventListener('cancel', () => resolve(undefined));
     input.click();
   });
 }
 
-function download(name: string, text: string): void {
+/** Saves `text` as a download named `name`. */
+export function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   const a = document.createElement('a');
   a.href = url;

@@ -218,13 +218,13 @@ test.describe('toolbars', () => {
   test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
     await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
     await expect(page.getByTestId('toolbar-modify')).toBeVisible();
-    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Snaps', 'Edit', 'Modify', 'Dimension']);
+    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Snaps', 'Edit', 'Modify', 'Dimension', 'Blocks']);
     const top = async (id: string) => (await page.getByTestId(`toolbar-${id}`).boundingBox())!.y;
     expect(await top('snaps')).toBe(await top('draw'));
     expect(await top('modify')).toBe(await top('draw'));
     expect(await top('dimension')).toBeGreaterThan(await top('draw')); // its own row
     await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
-    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Snaps toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar']);
+    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Snaps toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Blocks toolbar', 'Inquiry toolbar']);
     await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
     await page.locator('.context-menu button.checkable', { hasText: 'Modify toolbar' }).click();
     await expect(page.getByTestId('toolbar-modify')).toBeHidden();
@@ -237,11 +237,11 @@ test.describe('toolbars', () => {
     await expect(page.getByTestId('toolbar-modify')).toBeHidden();
     await expect(page.getByTestId('toolbar-inquiry')).toBeVisible();
     // Every bar hidden: the row's own right-click still brings them back.
-    for (const bar of ['Draw', 'Edit', 'Dimension', 'Inquiry', 'Snaps']) await setToolbar(page, bar);
+    for (const bar of ['Draw', 'Edit', 'Dimension', 'Blocks', 'Inquiry', 'Snaps']) await setToolbar(page, bar);
     await expect(page.locator('.toolbar-group:visible')).toHaveCount(0);
     await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
     await page.locator('.context-menu button', { hasText: 'Reset all toolbars' }).click();
-    await expect(page.locator('.toolbar-group:visible')).toHaveCount(5);
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(6);
   });
 
   test('a button hidden by right-click comes back with its toolbar\'s reset, and stays hidden across a reload', async ({ page }) => {
@@ -1806,4 +1806,435 @@ test.describe('Phase 5: a second lathe part, the shaft, dimensioned the lathe wa
     }
     expect(errors).toEqual([]);
   });
+});
+
+test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by text', () => {
+  test('lathe mode with Ø on: symmetric diameters, Z ordinates on one baseline, an X ordinate as a diameter and the notes read exactly', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/?lathe');
+    await expect(prop(page, 'entity-count')).toHaveText('23');
+    await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
+    await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('zoom-extents').click();
+    // Extents and text centers from the layout (src/ui/latheReference.test.ts builds the same drawing).
+    const at = await extentsMapper(page, { minX: -0.45649999999999996, maxX: 0.8517764623955432, minY: -0.1065, maxY: 0.14975000000000002 });
+    const texts: [string, number, number][] = [
+      ['Ø.125', 0.14, 0.03125],
+      ['Ø.188', 0.51, 0.047],
+      ['Ø.156', 0.829, 0.078],
+      ['0', 0, 0.14375],
+      ['.250', 0.25, 0.14375],
+      ['.400', 0.4, 0.14375],
+      ['.600', 0.6, 0.14375],
+      ['.750', 0.75, 0.14375],
+      ['Ø.030 THRU', 0.5665, -0.05],
+      ['.010 X 45°', -0.1574, 0.09],
+    ];
+    for (const [text, x, y] of texts) {
+      await page.keyboard.press('Escape');
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+      await expect(page.locator('#properties h2'), text).toHaveText(/^Dimension /);
+      await expect(prop(page, 'Text'), text).toHaveText(text);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('blocks', () => {
+  /** Ink, paper, or not painted yet, at a world point, after Zoom Extents fitted `extents`. */
+  async function prober(page: Page, extents: { minX: number; maxX: number; minY: number; maxY: number }) {
+    const at = await extentsMapper(page, extents);
+    const probe = async (x: number, y: number): Promise<string> => {
+      const p = at(x, y);
+      return page.evaluate(([sx, sy]) => {
+        const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
+        const r = c.getBoundingClientRect();
+        const k = c.width / r.width;
+        const data = c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k) - 2, Math.round((sy! - r.top) * k) - 2, 5, 5).data;
+        let paper = true;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3]! === 0) return 'not painted';
+          if (data[i]! < 128) return 'ink';
+          if (data[i]! < 250) paper = false;
+        }
+        return paper ? 'paper' : 'grey';
+      }, [p.x, p.y]);
+    };
+    return { at, probe };
+  }
+
+  /** Draws a line (0,0)-(1,0) and a circle at (1,0) R.25, selects both and makes them block "Tool", described "MGEHR holder". */
+  async function makeToolBlock(page: Page): Promise<void> {
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '0');
+    await typeValues(page, '1', '0'); // length 1 at 0°
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('c');
+    await typeValues(page, '1', '0');
+    await typeValues(page, '0.25');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const box = (await page.locator('#canvas').boundingBox())!;
+    await page.mouse.move(box.x + 3, box.y + 3); // a window over everything
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 3, box.y + box.height - 3, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator('#properties h2')).toHaveText('2 objects');
+
+    await page.keyboard.press('k');
+    await expect(page.getByTestId('tool-createBlock')).toHaveClass(/active/);
+    await expect(page.locator('[data-option="after:convert"]')).toHaveClass(/active/);
+    await typeValues(page, '0', '0'); // base point: the left end
+    await expect(page.locator('.input-boxes input[data-field="text"]')).toBeFocused();
+    await page.keyboard.type('Tool'); // letters are text, not shortcuts
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Create block Tool: type a description (holder, insert, notes), or press Enter for none');
+    await page.keyboard.type('MGEHR holder');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+  }
+
+  test('Create block (K): the selection becomes a block, listed in the Blocks panel and drawn as one instance', async ({ page }) => {
+    await expect(page.locator('#blocks .blocks-empty')).toHaveText('None yet. Select geometry and choose Create block (K).');
+    await makeToolBlock(page);
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await expect(row.locator('.layer-name')).toHaveText('Tool');
+    await expect(row.locator('.layer-count')).toHaveText('1');
+    await expect(row.locator('.block-description')).toHaveText('MGEHR holder');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+
+    // Drawn: ink on the edge line, paper just above it (polled: the canvas repaints on the next frame).
+    const { at, probe } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    await expect.poll(() => probe(0.5, 0)).toBe('ink');
+    await expect.poll(() => probe(0.5, 0.15)).toBe('paper');
+
+    const p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block e\d+$/);
+    await expect(prop(page, 'Block')).toHaveText('Tool');
+    await expect(prop(page, 'Description')).toHaveText('MGEHR holder');
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('no');
+
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible();
+  });
+
+  test('Insert: clicking the block in the panel places copies, turned and mirrored as asked', async ({ page }) => {
+    await makeToolBlock(page);
+    await page.locator('#blocks li[data-block="Tool"]').click();
+    await expect(page.getByTestId('tool-insertBlock')).toHaveClass(/active/);
+    await expect(page.locator('#status .status-prompt')).toHaveText('Insert Tool: pick where its base point goes');
+    await expect(page.locator('[data-option="block:Tool"]')).toHaveClass(/active/);
+    await typeValues(page, '0', '1'); // base point at (0, 1)
+    await expect(page.locator('#status .status-prompt')).toHaveText('Insert Tool: pick or type the rotation, or press Enter for 0°');
+    await typeValues(page, '90'); // edge runs straight up
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks li[data-block="Tool"] .layer-count')).toHaveText('2');
+
+    await page.locator('[data-option="mirror"]').click(); // still in Insert: the next copy mirrored
+    await expect(page.locator('[data-option="mirror"]')).toHaveClass(/active/);
+    await typeValues(page, '2', '0');
+    await page.keyboard.press('Enter'); // keeps 90°
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.keyboard.press('Escape');
+
+    // The turned copy's edge runs up from (0, 1) to (0, 2); the mirrored one, turned 90°, runs up from (2, 0) too.
+    await page.getByTestId('zoom-extents').click();
+    const { at, probe } = await prober(page, { minX: -0.25, maxX: 2.25, minY: -0.25, maxY: 2.25 });
+    await expect.poll(() => probe(0, 1.5)).toBe('ink');
+    await expect.poll(() => probe(2, 0.5)).toBe('ink');
+    await expect.poll(() => probe(1, 1.5)).toBe('paper');
+    const p = at(2, 0.5);
+    await page.mouse.click(p.x, p.y);
+    await expect(prop(page, 'Rotation')).toHaveText(/^90/);
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('yes');
+  });
+
+  test('an instance edited in the properties panel, then exploded back into plain objects (Shift+U)', async ({ page }) => {
+    await makeToolBlock(page);
+    const { at, probe } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+
+    // Turned 90° about its insertion point: the edge now runs up the Y axis.
+    await prop(page, 'Rotation').click();
+    await page.keyboard.type('90');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'Rotation')).toHaveText(/^90/);
+    await expect.poll(() => probe(0, 0.15)).toBe('ink');
+    await expect.poll(() => probe(0.5, 0)).toBe('paper');
+
+    await prop(page, 'Scale').click();
+    await page.keyboard.type('0');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText("Scale can't be 0: the scale needs to be more than zero.");
+    await prop(page, 'Mirrored').locator('select').selectOption('yes');
+    await expect(prop(page, 'Mirrored').locator('select')).toHaveValue('yes');
+
+    await page.keyboard.press('Shift+U');
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+    await expect(page.locator('#blocks li[data-block="Tool"] .layer-count')).toHaveText('0');
+    await page.keyboard.press('Escape');
+    const q = at(0, 0.15); // the edge, now a plain line
+    await page.mouse.click(q.x, q.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+  });
+
+  test('a dimension snapped to the tool in a block follows the tool when it moves', async ({ page }) => {
+    await makeToolBlock(page); // the tool's edge (0,0)-(1,0) and nose circle, as one instance
+    await page.keyboard.press('l');
+    await typeValues(page, '3', '-0.5');
+    await typeValues(page, '1', '90'); // a part face at Z 3, from -.5 to .5
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 3, minY: -0.5, maxY: 0.5 });
+    const click = async (x: number, y: number) => {
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+    };
+
+    await page.keyboard.press('Shift+D');
+    await click(0, 0); // Endpoint snap on the block's edge: its base end
+    await click(3, 0.5); // the face's top end
+    await click(1.5, 1); // dimension line above
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await page.keyboard.press('Escape');
+    await click(2, 1);
+    await expect(prop(page, 'Measured')).toHaveText('3.0000');
+    await page.keyboard.press('Escape');
+
+    await click(0.5, 0); // the instance
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+    await prop(page, 'X').click();
+    await page.keyboard.type('0.5');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await click(2.7, 1); // the dimension line, clear of the text now centered on the shorter span
+    await expect(prop(page, 'Measured')).toHaveText('2.5000');
+  });
+
+  test('Edit block: the block opens by itself; Save changes every instance in one undo step', async ({ page }) => {
+    await makeToolBlock(page);
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await row.locator('.block-preview').click(); // a second copy at (0, 1)
+    await typeValues(page, '0', '1');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(row.locator('.layer-count')).toHaveText('2');
+
+    await row.locator('[data-role="edit"]').click();
+    await expect(page.locator('#block-edit')).toBeVisible();
+    await expect(page.locator('#block-edit')).toContainText('Editing block Tool');
+    await expect(page.locator('#blocks .blocks-empty')).toHaveText('Editing Tool. Save block or Cancel in the bar above the drawing.');
+    await expect(prop(page, 'entity-count')).toHaveText('2'); // the block's edge and nose circle
+    await page.keyboard.press('Control+s');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Save or cancel the block Tool first.');
+
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Circle /);
+    await page.keyboard.press('Delete');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    await page.getByTestId('block-edit-save').click();
+    await expect(page.locator('#block-edit')).toBeHidden();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Saved block Tool');
+    await expect(prop(page, 'entity-count')).toHaveText('2'); // both instances, back in the drawing
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+
+    await page.keyboard.press('Control+z'); // one step brings the nose back to both
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+    await expect(prop(page, 'entity-count')).toHaveText('2');
+  });
+
+  test('Edit block Cancel, then Rename, Delete and Purge from the Blocks panel', async ({ page }) => {
+    await makeToolBlock(page);
+    const preview = (name: string) => page.locator(`#blocks li[data-block="${name}"] .block-preview svg g > *`);
+    await page.locator('#blocks li[data-block="Tool"] [data-role="edit"]').click();
+    await page.getByTestId('zoom-extents').click();
+    const extents = { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 };
+    let { at } = await prober(page, extents);
+    let p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+    await page.getByTestId('block-edit-cancel').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Block edit cancelled');
+    await expect(preview('Tool')).toHaveCount(2);
+    await page.getByTestId('zoom-extents').click(); // the bar is gone: the canvas is taller again
+    ({ at } = await prober(page, extents));
+
+    await page.locator('#blocks li[data-block="Tool"] [data-role="name"]').dblclick();
+    const input = page.locator('#blocks input[data-role="name-input"]');
+    await expect(input).toBeFocused();
+    await input.fill('Boring bar');
+    await input.press('Enter');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Rename block Tool to Boring bar');
+    await expect(preview('Boring bar')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    p = at(0.5, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(prop(page, 'Block')).toHaveText('Boring bar');
+
+    await page.locator('#blocks li[data-block="Boring bar"] [data-role="delete"]').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Boring bar has 1 instance in the drawing; erase or explode them first.');
+    await page.getByTestId('purge-blocks').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Every block is in use; nothing to purge.');
+
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete'); // the only instance gone, the block is unused
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+    await page.getByTestId('purge-blocks').click();
+    await expect(page.locator('#status .status-prompt')).toHaveText('Purge 1 block');
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible();
+    await page.keyboard.press('Control+z');
+    await expect(preview('Boring bar')).toHaveCount(2);
+  });
+
+  test('Library: a block saved from one drawing goes into a new mm drawing, converted, and outlives a reload', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await expect(page.locator('#library .blocks-empty')).toHaveText('Empty. Save a block to the library from the Blocks panel; every drawing can use it.');
+    await makeToolBlock(page);
+    const toLibrary = page.locator('#blocks li[data-block="Tool"] [data-role="to-library"]');
+    await toLibrary.click();
+    await expect(status).toHaveText('Saved Tool to the library');
+    const libRow = page.locator('#library li[data-library-block="Tool"]');
+    await expect(libRow.locator('.layer-count')).toHaveText('in');
+    await expect(libRow.locator('.block-description')).toHaveText('MGEHR holder');
+    await toLibrary.click();
+    await expect(status).toHaveText('Tool is already in the library, unchanged.');
+
+    await page.reload();
+    await expect(libRow).toBeVisible();
+    await expect(page.locator('#blocks .blocks-empty')).toBeVisible(); // a new drawing: no blocks of its own
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await expect(page.getByTestId('units')).toHaveText('mm');
+
+    await libRow.locator('.block-preview').click();
+    await expect(page.getByTestId('tool-insertBlock')).toHaveClass(/active/);
+    await expect(page.locator('#blocks li[data-block="Tool"] .block-description')).toHaveText('MGEHR holder');
+    await typeValues(page, '0', '0');
+    await page.keyboard.press('Enter'); // rotation 0
+    await page.keyboard.press('Escape');
+    await expect(prop(page, 'entity-count')).toHaveText('1');
+
+    // Exploded, the edge is 25.4 mm long: the inch block was converted.
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 31.75, minY: -6.35, maxY: 6.35 });
+    const p = at(12.7, 0);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Block /);
+    await page.keyboard.press('Shift+U');
+    await page.keyboard.press('Escape');
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'End X')).toHaveAttribute('title', '25.4');
+  });
+
+  test('Library: clashes are asked about, Update from library, Export, and Import into another browser', async ({ page, browser }) => {
+    const status = page.locator('#status .status-prompt');
+    const menu = page.locator('.context-menu');
+    await makeToolBlock(page);
+    const row = page.locator('#blocks li[data-block="Tool"]');
+    await row.locator('[data-role="to-library"]').click();
+    await expect(page.locator('#library li[data-library-block="Tool"]')).toBeVisible();
+
+    // The drawing's Tool loses its nose: now it differs from the library's.
+    await row.locator('[data-role="edit"]').click();
+    await page.getByTestId('zoom-extents').click();
+    const { at } = await prober(page, { minX: 0, maxX: 1.25, minY: -0.25, maxY: 0.25 });
+    const p = at(1.25, 0);
+    await page.mouse.click(p.x, p.y);
+    await page.keyboard.press('Delete');
+    await page.getByTestId('block-edit-save').click();
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+    await expect(row.locator('[data-role="from-library"]')).toBeVisible();
+
+    await row.locator('[data-role="to-library"]').click();
+    await expect(menu.locator('.menu-heading')).toHaveText('The library already has a different Tool.');
+    await menu.getByRole('button', { name: 'Save it as Tool 2' }).click();
+    await expect(status).toHaveText('Saved Tool to the library as Tool 2');
+    await expect(page.locator('#library li[data-library-block="Tool 2"] .block-preview svg g > *')).toHaveCount(1);
+
+    await page.locator('#library li[data-library-block="Tool"] .block-preview').click();
+    await expect(menu.locator('.menu-heading')).toHaveText("The drawing's Tool isn't the same as the library's.");
+    await menu.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.locator('#blocks li')).toHaveCount(1); // nothing copied in
+
+    await row.locator('[data-role="from-library"]').click();
+    await expect(status).toHaveText('Update block Tool from the library');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(2);
+    await expect(row.locator('[data-role="from-library"]')).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(row.locator('.block-preview svg g > *')).toHaveCount(1);
+
+    const downloading = page.waitForEvent('download');
+    await page.getByTestId('export-library').click();
+    const file = await downloading;
+    expect(file.suggestedFilename()).toBe('DanCAM blocks.cad2d-blocks.json');
+    await expect(status).toHaveText('Exported 2 blocks');
+
+    // Another browser: its own, empty library.
+    const other = await (await browser.newContext()).newPage();
+    await other.goto(page.url());
+    await expect(other.locator('#library .blocks-empty')).toBeVisible();
+    const choosing = other.waitForEvent('filechooser');
+    await other.getByTestId('import-library').click();
+    await (await choosing).setFiles((await file.path())!);
+    await expect(other.locator('#status .status-prompt')).toHaveText('Imported 2 blocks');
+    await expect(other.locator('#library li')).toHaveCount(2);
+
+    const again = other.waitForEvent('filechooser');
+    await other.getByTestId('import-library').click();
+    await (await again).setFiles((await file.path())!);
+    await expect(other.locator('#status .status-prompt')).toHaveText('Imported 0 blocks, 2 already in the library');
+
+    await other.locator('#library li[data-library-block="Tool 2"] [data-role="delete"]').click();
+    await other.locator('.context-menu').getByRole('button', { name: 'Delete Tool 2' }).click();
+    await expect(other.locator('#library li')).toHaveCount(1);
+  });
+});
+
+test('lathe mode marks Z0 X0 with a faint center mark, and a click near it starts a line exactly there', async ({ page }) => {
+  await page.keyboard.press('c');
+  await typeValues(page, '3', '3');
+  await typeValues(page, '4'); // something to zoom to, clear of the origin
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -1, maxX: 7, minY: -1, maxY: 7 });
+  const o = at(0, 0);
+  /** The red channel of the pixel `dy` CSS pixels above the origin. */
+  const redAbove = (dy: number) =>
+    page.evaluate(([sx, sy]) => {
+      const c = document.querySelector<HTMLCanvasElement>('#canvas')!;
+      const r = c.getBoundingClientRect();
+      const k = c.width / r.width;
+      return c.getContext('2d')!.getImageData(Math.round((sx! - r.left) * k), Math.round((sy! - r.top) * k), 1, 1).data[0];
+    }, [o.x, o.y - dy]);
+  await expect.poll(() => redAbove(12)).toBe(255); // lathe mode off: paper
+  await page.getByTestId('lathe').click();
+  await expect.poll(() => redAbove(12)).toBeLessThan(250); // the mark's upper arm: grey…
+  expect(await redAbove(12)).toBeGreaterThan(128); // …and faint, not ink
+  expect(await redAbove(6.5)).toBe(255); // the gap between the cross and the arm
+
+  await page.keyboard.press('l');
+  await page.mouse.move(o.x + 4, o.y - 3);
+  await page.mouse.click(o.x + 4, o.y - 3); // Center snap onto Z0 X0
+  await typeValues(page, '1', '0');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  const mid = at(0.5, 0);
+  await page.mouse.click(mid.x, mid.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+  await expect(prop(page, 'Start Z')).toHaveAttribute('title', '0');
+  await expect(prop(page, 'Start X')).toHaveAttribute('title', '0');
 });

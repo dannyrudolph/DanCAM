@@ -230,3 +230,17 @@ describe('findSnap and dimensions', () => {
     expect(findSnap(d, { x: 0, y: 0.02 }, AP, ALL)).toBeUndefined();
   });
 });
+
+describe('lathe mode datum', () => {
+  it('Center snaps to Z0 X0 within the aperture in lathe mode only, with no anchor; an endpoint there still wins', () => {
+    const d = drawing();
+    expect(findSnap(d, { x: 0.03, y: -0.04 }, AP, DEFAULTS)).toBeUndefined();
+    d.lathe = true;
+    expect(findSnap(d, { x: 0.03, y: -0.04 }, AP, DEFAULTS)).toEqual({ kind: 'cen', at: { x: 0, y: 0 } });
+    expect(findSnap(d, { x: 0.3, y: 0 }, AP, DEFAULTS)).toBeUndefined();
+    expect(findSnap(d, { x: 0.03, y: 0 }, AP, only('end'))).toBeUndefined();
+    const withLine = drawing(line({ x: 0, y: 0 }, { x: 1, y: 0 }));
+    withLine.lathe = true;
+    expect(findSnap(withLine, { x: 0.01, y: 0.01 }, AP, DEFAULTS)?.kind).toBe('end');
+  });
+});

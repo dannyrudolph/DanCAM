@@ -99,6 +99,16 @@ input {
   padding: 3px 6px;
 }
 
+/* Edit block: the bar says which block is open, with Save block and Cancel. */
+#block-edit {
+  background: var(--panel-2);
+  border-bottom: 2px solid var(--accent);
+}
+
+#block-edit span {
+  margin-right: 8px;
+}
+
 .options-tool {
   font-weight: 600;
   margin-right: 8px;
@@ -742,6 +752,15 @@ input {
   content: '✓';
 }
 
+.context-menu .menu-heading {
+  max-width: 300px;
+  margin: 0;
+  padding: 5px 10px 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
 .context-menu button:disabled {
   opacity: 0.4;
 }
@@ -749,4 +768,71 @@ input {
 .option-button.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+#blocks,
+#library {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto auto; /* preview, name, count, buttons */
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.block-row .layer-name-input {
+  min-width: 0;
+}
+
+.layers-header .header-actions,
+.block-actions {
+  display: flex;
+}
+
+.block-row:hover {
+  background: var(--panel-2);
+}
+
+.block-preview {
+  grid-row: span 2;
+  display: flex;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.block-preview svg {
+  width: 100%;
+  height: 100%;
+}
+
+.block-preview svg * {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+
+.block-description {
+  grid-column: 2 / span 3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.blocks-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }

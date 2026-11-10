@@ -2,6 +2,7 @@ import { type Curve, intersectCurves } from '../geometry/curve';
 import { extendCurve } from '../geometry/extend';
 import { trimCurve } from '../geometry/trim';
 import type { Vec2 } from '../geometry/vec';
+import { instanceEntities } from '../model/block';
 import { newEntityId } from '../model/drawing';
 import { type Entity, type EntityId, entityCurve, entityFromCurve } from '../model/entity';
 import type { Change } from '../model/undo';
@@ -24,8 +25,11 @@ function edgeCurves(ctx: ToolContext, edges: readonly EntityId[] | undefined, ex
   const out: Curve[] = [];
   for (const e of es) {
     if (!e || e.id === except) continue;
-    const c = entityCurve(e);
-    if (c) out.push(c);
+    // A block instance is an edge with each of its parts; it is never trimmed itself.
+    for (const part of e.kind === 'insert' ? instanceEntities(d, e) : [e]) {
+      const c = entityCurve(part);
+      if (c) out.push(c);
+    }
   }
   return out;
 }

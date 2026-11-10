@@ -1,5 +1,6 @@
 import { type BBox, isEmpty } from '../geometry/bbox';
 import { curveTouchesBox } from '../geometry/curve';
+import { insertBBox, instanceEntities } from './block';
 import { dimensionBBox, dimensionLayout, layoutTouchesBox } from './dimLayout';
 import type { Drawing } from './drawing';
 import { type Entity, type EntityId, entityBBox, entityCurve } from './entity';
@@ -13,7 +14,7 @@ export function boxModeFor(fromX: number, toX: number): BoxMode {
 }
 
 function inside(d: Drawing, e: Entity, box: BBox): boolean {
-  const b = e.kind === 'dimension' ? dimensionBBox(d, e) : entityBBox(e);
+  const b = e.kind === 'dimension' ? dimensionBBox(d, e) : e.kind === 'insert' ? insertBBox(d, e) : entityBBox(e);
   // Xlines and rays have no bounds: they are never inside a window.
   if (isEmpty(b)) return false;
   return b.minX >= box.minX && b.maxX <= box.maxX && b.minY >= box.minY && b.maxY <= box.maxY;
@@ -21,6 +22,7 @@ function inside(d: Drawing, e: Entity, box: BBox): boolean {
 
 function touches(d: Drawing, e: Entity, box: BBox): boolean {
   if (e.kind === 'dimension') return layoutTouchesBox(dimensionLayout(d, e), box);
+  if (e.kind === 'insert') return instanceEntities(d, e).some((part) => touches(d, part, box));
   const c = entityCurve(e);
   if (c) return curveTouchesBox(c, box);
   return inside(d, e, box); // a point

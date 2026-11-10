@@ -46,7 +46,7 @@ export function editLayer(d: Drawing, name: string, patch: Partial<Omit<Layer, '
 }
 
 /**
- * Renames a layer and moves its entities with it, as one undo step. Layer "0"
+ * Renames a layer and moves its entities (and block geometry) with it, as one undo step. Layer "0"
  * keeps its name, as in AutoCAD.
  */
 export function renameLayer(d: Drawing, from: string, toRaw: string): LayerEdit {
@@ -63,6 +63,11 @@ export function renameLayer(d: Drawing, from: string, toRaw: string): LayerEdit 
   for (const e of d.entities.values()) {
     if (e.layer === from) changes.push({ op: 'modify', before: e, after: { ...e, layer: to } });
   }
+  for (const b of d.blocks.values()) {
+    if (b.entities.some((e) => e.layer === from)) {
+      changes.push({ op: 'block', before: b, after: { ...b, entities: b.entities.map((e) => (e.layer === from ? { ...e, layer: to } : e)) } });
+    }
+  }
   changes.push({ op: 'layer', before: layer });
   return { ok: true, tx: { label: `Rename layer ${from} to ${to}`, changes } };
 }
@@ -75,6 +80,8 @@ export function deleteLayer(d: Drawing, name: string): LayerEdit {
   if (name === d.currentLayer) return refuse(`${name} is the current layer; make another layer current first.`);
   const used = layerUsage(d).get(name) ?? 0;
   if (used > 0) return refuse(`${name} still has ${used} object${used === 1 ? '' : 's'} on it.`);
+  const block = [...d.blocks.values()].find((b) => b.entities.some((e) => e.layer === name));
+  if (block) return refuse(`Block ${block.name} has geometry on ${name}.`);
   return { ok: true, tx: { label: `Delete layer ${name}`, changes: [{ op: 'layer', before: layer }] } };
 }
 

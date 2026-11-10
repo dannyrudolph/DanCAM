@@ -103,6 +103,17 @@ export function rowsFor(d: Drawing, e: Entity): Row[] {
         { label: 'Base Y', value: e.base.y },
         { label: 'Angle', value: angleDeg(e.dir), unit: '°' },
       ];
+    case 'insert':
+      return [
+        ...common,
+        { label: 'Block', value: e.block },
+        { label: 'Description', value: d.blocks.get(e.block)?.description ?? '' },
+        { label: 'X', value: e.at.x },
+        { label: 'Y', value: e.at.y },
+        { label: 'Rotation', value: e.rotationDeg, unit: '°' },
+        { label: 'Scale', value: e.scale },
+        { label: 'Mirrored', value: e.mirrored ? 'Yes' : 'No' },
+      ];
   }
 }
 
@@ -138,5 +149,6 @@ export const KIND_LABEL: Record<Entity['kind'], string> = {
   xline: 'Xline',
   ray: 'Ray',
   dimension: 'Dimension',
+  insert: 'Block',
 };
 

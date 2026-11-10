@@ -4,8 +4,9 @@ import { type Curve, type Deferred, intersectCurves, nearestOnCurve, perpendicul
 import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
+import { drawnGeometry } from '../model/block';
 import type { Drawing } from '../model/drawing';
-import { type EntityId, snapCurve } from '../model/entity';
+import { type Entity, type EntityId, snapCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
 
 export type SnapKind = 'end' | 'mid' | 'cen' | 'quad' | 'int' | 'perp' | 'tan' | 'nea' | 'node';
@@ -47,11 +48,19 @@ type Candidate = Snap & { readonly score: number; readonly dist: number };
  * anywhere, as long as their object is under the cursor; they rank as if
  * they were at the edge of the aperture, so a point snap close to the cursor
  * beats them. Otherwise the point nearest the cursor wins, and Nearest only
- * when nothing else is found. Perpendicular and Tangent need `base`; without
+ * when nothing else is found. In lathe mode Center also takes Z0 X0 when
+ * it is within the aperture. Perpendicular and Tangent need `base`; without
  * one, `deferOk` lets them give a deferred snap on the object under the
  * cursor (Tangent on circles and arcs, Perpendicular on anything), ranked
  * like Center so that point snaps in the aperture win.
  */
+/** Centerlines on visible layers: the one dimension that takes snaps. */
+function* visibleCenterlines(d: Drawing): Generator<Entity> {
+  for (const e of d.entities.values()) {
+    if (e.kind === 'dimension' && e.type === 'centerline' && d.layers.get(e.layer)?.visible !== false) yield e;
+  }
+}
+
 export function findSnap(
   d: Drawing,
   cursor: Vec2,
@@ -72,11 +81,13 @@ export function findSnap(
     found.push({ kind, at, score: Math.min(dist, aperture), dist, ...(on && { on }) });
   };
 
+  // Lathe mode marks Z0 X0 (the part's datum) and Center snaps to it, to start a profile there.
+  if (d.lathe) point('cen', { x: 0, y: 0 });
+
   const hovered: Curve[] = [];
   const hoveredIds: EntityId[] = [];
-  for (const e of d.entities.values()) {
-    // Dimensions are annotation, not geometry: nothing snaps to them but a centerline.
-    if (d.layers.get(e.layer)?.visible === false) continue;
+  // Plain geometry and the parts of block instances (by path), on visible layers; of dimensions, only centerlines.
+  for (const e of [...drawnGeometry(d), ...visibleCenterlines(d)]) {
     const c = snapCurve(e);
     if (!c && e.kind !== 'point') continue;
     const onIt = distanceToEntity(d, cursor, e) <= aperture;

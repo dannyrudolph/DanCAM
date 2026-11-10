@@ -179,14 +179,27 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 - Any single dimension can override precision, tolerance or text. Text overrides use `<>` to stand for the measured value, as in `<> THRU` or `2X <>`.
 - Text and dimension-line position can be dragged by grips after placement, and snap to sensible offsets from the geometry.
 
+## Blocks
+
+A block is a named, reusable piece of drawing, such as a cutting tool sketch (insert and holder) that is moved, rotated and copied against a part profile to check reach and clearance. Blocks are fixed geometry. A block never resizes from a dimension or parameter (CAD-1); a feature that comes in many sizes is drawn, not inserted.
+
+- **Definition:** a name, a base point (the insertion point, for example the tool tip or nose-radius center), its entities, the units it was drawn in, and a **description**. The description is a free text field saved with the block for detail such as holder and insert numbers, grade, or notes. It shows in the Blocks panel and the properties panel and is not drawn. A definition holds lines, circles, arcs and points. Xlines, rays and dimensions are not part of the first version. No nesting: a block cannot contain another block.
+- **Create block:** select geometry, choose Create block, click the base point, then type the name and, optionally, the description. Option buttons choose what happens to the selected geometry: convert it to an instance (default), keep it, or delete it.
+- **Insert:** pick a block in the Blocks panel (name, preview, description), then click to place it. Rotation and scale come from the input boxes at the cursor. Insert is sticky, so several copies can be placed. A block drawn in the other unit is scaled to the drawing's unit automatically.
+- **An instance is one object.** One click selects it. Move, Copy, Rotate, Mirror, Scale, Array, Stretch (moves it when its insertion point is in the window) and Erase work on it whole. Mirror gives a mirrored instance, for left-hand and right-hand tools. It has one grip at its insertion point. The properties panel shows block name, description, insertion point (Z/X in lathe mode), rotation, scale and mirrored, and edits them.
+- **Snaps and associativity reach inside.** All object snaps work on an instance's geometry, so a tool tip can be snapped to the part and a dimension measured from it to the part. Dimensions anchored to an instance's geometry follow when the instance moves, and are deleted when it is erased or exploded. Instance geometry can be a Trim and Extend boundary but cannot itself be trimmed.
+- **Layers:** geometry on layer 0 in a definition takes the instance's layer; geometry on other layers keeps its own layer (AutoCAD's convention).
+- **Edit block:** opens the definition by itself with Save and Cancel buttons. Saving updates every instance in the drawing in one undo step. Rename, Explode (an instance back to plain geometry, on the layers it shows on) and Purge (remove unused definitions) are also offered.
+- **Library:** saved blocks are available to every drawing. Save to library copies a definition into the browser's library (IndexedDB). Inserting a library block copies its definition into the drawing, so the drawing file stands alone and opens anywhere. Changing a library block does not change drawings until Update from library is chosen. Export library and Import library write and read a `.cad2d-blocks.json` file, for backup and for moving to another machine. A name already in the drawing or library is never silently overwritten.
+
 ## Files, saving and printing
 
 The native format is a versioned JSON file that you own and that stays readable without the app. DXF is the bridge to Solid Edge, CAM and customers.
 
 - **Native file:** `.cad2d.json` with a `schemaVersion` field and migration functions, so old drawings always open.
 - **Saving:** Save and Save As use the browser's File System Access API where supported (Chrome, Edge), with a download fallback. Autosave keeps a crash-recovery copy in IndexedDB.
-- **DXF export:** ASCII DXF with units set in the header and layers kept. LINE, CIRCLE, ARC, POINT and TEXT are written natively. Dimensions export as exploded lines and text by default, with native DIMENSION entities as an option.
-- **DXF import:** lines, arcs, circles, polylines (split into lines and arcs) and text, so existing Solid Edge drawings can be brought in. Imported dimensions come in as plain geometry.
+- **DXF export:** ASCII DXF with units set in the header and layers kept. LINE, CIRCLE, ARC, POINT and TEXT are written natively, and blocks as BLOCK definitions with INSERT instances (the description kept in the definition). Dimensions export as exploded lines and text by default, with native DIMENSION entities as an option.
+- **DXF import:** lines, arcs, circles, polylines (split into lines and arcs), text, and blocks with their inserts (nested blocks exploded), so existing Solid Edge drawings can be brought in. Imported dimensions come in as plain geometry.
 - **Print / PDF:** paper sizes Letter, Tabloid, A4 and A3. Plot scale is 1:1, 2:1, 5:1, 10:1, 20:1 or custom. A simple title block template holds part number, revision, material, units, scale and date. Line weights are set by layer.
 - **SVG export** for quick sharing or pasting into documents.
 
@@ -212,11 +225,14 @@ Each phase ends with something you can use and check by hand. Phases 1–3 alrea
 6. **Phase 5: Lathe dimensioning**
    - Symmetric diameter (both styles), ordinate with origin and auto-jog, baseline and continue, center marks and centerlines, associativity with geometry edits, lathe mode and diameter entry.
    - Done when: one of your real lathe parts can be dimensioned the way you do it in Solid Edge today.
-7. **Phase 6: Output**
-   - DXF export and import, PDF and SVG at scale, title block, PWA offline install.
+7. **Phase 6: Blocks** (moved ahead of output, user decision 2026-11-09)
+   - Block definitions with a description, Create block, Insert, instances edited as one object, snaps and associativity into instances, Edit block, Explode, Purge, and a library shared by all drawings with export and import. No nesting.
+   - Done when: a cutting tool sketch saved to the library from one drawing is inserted into another beside a lathe profile, moved, rotated and mirrored onto the part with snaps, dimensioned from its tip to the part, redefined, and the drawing saves and reopens the same.
+8. **Phase 7: Output**
+   - DXF export and import (with blocks), PDF and SVG at scale, title block, autosave, PWA offline install.
    - Done when: an exported DXF opens in Solid Edge with correct units and sizes, and a 10:1 PDF measures true with calipers.
-8. **Later, optional**
-   - Lathe G-code export from a selected profile, blocks or symbols, hatching, more linetypes, multiple views or sheets.
+9. **Later, optional**
+   - Lathe G-code export from a selected profile, nested blocks, per-instance text fields (attributes), hatching, more linetypes, multiple views or sheets.
 
 ## Testing and CLAUDE.md
 
