@@ -222,7 +222,7 @@ describe('blocks in the file (v4)', () => {
     expect(edit((f) => (f.entities[0].scale = 0))).toBe('entities[0].scale must be more than zero.');
     expect(
       edit((f) => f.entities.push({ kind: 'dimension', id: 'e9', layer: '0', dimStyle: 'INCH-3PL', type: 'centerMark', center: v(0, 0), radius: 1, at: v(0, 0), anchors: { curve: 'I' } })),
-    ).toBe('entity e9: anchors.curve names "I", which is not geometry in the drawing.');
+    ).toBe('entity e9: anchors.curve names "I", which is not geometry or a centerline in the drawing.');
   });
 });
 
@@ -325,7 +325,7 @@ describe('reaching inside instances', () => {
     if (!back.ok) throw new Error(back.error);
     expect(back.drawing.entities.get('D')).toEqual(dim);
     const r = parseDrawing(text.replace('"I/b1"', '"I/b9"'));
-    expect(r.ok ? 'opened' : r.error).toBe('entity D: anchors.p1 names "I/b9", which is not geometry in the drawing.');
+    expect(r.ok ? 'opened' : r.error).toBe('entity D: anchors.p1 names "I/b9", which is not geometry or a centerline in the drawing.');
   });
 
   it('Trim cuts a line where it crosses an instance\'s edge; the instance itself is never trimmed', () => {

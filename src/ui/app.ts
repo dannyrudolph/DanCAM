@@ -23,7 +23,8 @@ import { createXlineTool } from '../commands/xlineTool';
 import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
 import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
-import type { Entity, EntityId, EntityProps } from '../model/entity';
+import { type Entity, type EntityId, type EntityProps, entityBBox } from '../model/entity';
+import { fromPoints, union } from '../geometry/bbox';
 import { type Grip, gripsFor } from '../model/grips';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
@@ -37,13 +38,18 @@ import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
 import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
-import { DrawingFile } from './fileAccess';
-import { ICONS } from './icons';
+import { type ToolbarGroup, type ToolbarItem, Toolbars } from './toolbars';
+import { DrawingFile, pickTextFile } from './fileAccess';
+import { ICONS, SNAP_ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
 import { blockEditDrawing, saveBlockEdit } from '../model/blockEdit';
 import { BlocksPanel } from './blocksPanel';
+import { type ViewsFor, createStepImportTool, profileEntities } from '../commands/stepImportTool';
+import { readStep } from '../io/step/stepModel';
+import { turnedProfile } from '../io/step/turnedProfile';
+import { threeViews } from '../io/step/threeViews';
 import { LibraryPanel } from './libraryPanel';
 import { IndexedDbLibrary } from '../io/libraryStore';
 import { DimStylesPanel } from './dimStylesPanel';
@@ -75,9 +81,20 @@ export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFil
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
 /** Shared so the Blocks panel can point it at a block before starting it. */
 const INSERT_TOOL = createInsertTool();
+const STEP_IMPORT_TOOL = createStepImportTool();
 export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool(), INSERT_TOOL, explodeTool];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...BLOCK_TOOLS, ...INQUIRY_TOOLS];
+const SNAP_ITEM_KIND = new Map<string, SnapKind>(SNAP_KINDS.map((k) => [`snap-${k}`, k]));
+const TOOLBARS: readonly ToolbarGroup[] = [
+  { id: 'draw', label: 'Draw', items: DRAW_TOOLS },
+  { id: 'snaps', label: 'Snaps', items: SNAP_KINDS.map((k) => ({ id: `snap-${k}`, label: `${SNAP_LABEL[k]} snap` })) },
+  { id: 'edit', label: 'Edit', items: EDIT_TOOLS },
+  { id: 'modify', label: 'Modify', items: MODIFY_TOOLS },
+  { id: 'dimension', label: 'Dimension', items: DIMENSION_TOOLS, newRow: true },
+  { id: 'blocks', label: 'Blocks', items: BLOCK_TOOLS },
+  { id: 'inquiry', label: 'Inquiry', items: INQUIRY_TOOLS },
+];
 
 /** Keys that start typing a value into the input boxes. */
 const VALUE_START = /^[0-9.+\-(]$/;
@@ -231,6 +248,7 @@ export class App {
   });
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
+  private readonly snapButtons = new Map<SnapKind, HTMLButtonElement>();
   private selectButton: HTMLButtonElement | undefined;
   private readonly unitsButton = document.createElement('button');
   private readonly sidePanelButton = document.createElement('button');
@@ -240,7 +258,6 @@ export class App {
     polar: true,
     polarIncrementDeg: 15,
     precision: DEFAULT_PRECISION,
-    osnap: true,
     snapKinds: new Set(DEFAULT_SNAP_KINDS),
   };
   /** A snap picked from the right-click menu for the next point only; it replaces the running snaps. */
@@ -282,7 +299,6 @@ export class App {
         saveScrollMode(this.settings.scrollMode);
         this.refresh();
       },
-      (anchor) => this.openSnapMenu(anchor),
       (scale) => this.setSheetScale(scale),
       (lathe, diameter) => {
         // Settings like the current layer: saved with the drawing, not undoable.
@@ -417,6 +433,35 @@ export class App {
     this.file.reset();
     this.setDrawing(createDrawing(units));
     this.status.showMessage(`New ${UNIT_LABEL[units]} drawing`);
+  }
+
+  /** Import STEP (spec, "STEP import"): reads the file, turns lathe mode on, and starts placing its profile. */
+  private async importStep(): Promise<void> {
+    if (this.inBlockEdit()) return;
+    const file = await pickTextFile(''); // any file: Safari won't let a .step be picked when the Mac has no type for it; anything else is refused when read
+    if (!file) return;
+    const model = readStep(file.text);
+    const profile = model.ok ? turnedProfile(model.model, this.drawing.units) : model;
+    if (!profile.ok) {
+      this.status.showMessage(`Can't import ${file.name}: ${profile.error}`);
+      return;
+    }
+    this.drawing.lathe = true; // a setting, like the Lathe button: not undoable
+    const stepModel = model.ok ? model.model : undefined;
+    const units = this.drawing.units;
+    const views: ViewsFor | undefined = stepModel
+      ? (flip, turn) => {
+          const v = threeViews(stepModel, units, { flip, turn });
+          return v.ok ? v.views : undefined;
+        }
+      : undefined;
+    STEP_IMPORT_TOOL.load(file.name, profile.profile, views);
+    this.status.clearMessage(); // the placing prompt, not whatever was said before the file dialog
+    this.startTool(STEP_IMPORT_TOOL);
+    // Fit every place the options can put it (Z0 at either end, both halves, the three views), so each choice stays in view.
+    const box = [...profileEntities(STEP_IMPORT_TOOL.reach(), '0', () => 'x').map(entityBBox), fromPoints([{ x: 0, y: 0 }])].reduce(union);
+    this.view = vp.zoomExtents(this.view, box);
+    this.refresh();
   }
 
   private async openDrawing(): Promise<void> {
@@ -675,31 +720,11 @@ export class App {
   private currentSnap(): Snap | undefined {
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value') || !this.cursorScreen) return undefined;
-    const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.osnap ? this.settings.snapKinds : undefined;
-    if (!kinds) return undefined;
+    const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.snapKinds;
+    if (kinds.size === 0) return undefined;
     // Typed values pin the point, so a sliding (deferred) end can't apply.
     const deferOk = req.kind === 'point' && req.acceptsDeferred === true && !this.boxes.hasLocks;
     return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base, deferOk);
-  }
-
-  /** The status bar's snap list; stays open while kinds are switched on and off. */
-  private openSnapMenu(anchor: DOMRect): void {
-    const kinds = this.settings.snapKinds;
-    this.menu.open(
-      anchor.left,
-      anchor.top,
-      SNAP_KINDS.map((k) => ({
-        label: SNAP_LABEL[k],
-        enabled: true,
-        checked: kinds.has(k),
-        run: () => {
-          if (kinds.has(k)) kinds.delete(k);
-          else kinds.add(k);
-          this.refresh();
-          this.openSnapMenu(anchor);
-        },
-      })),
-    );
   }
 
   /**
@@ -747,7 +772,7 @@ export class App {
     this.unitsButton.textContent = this.drawing.units;
     this.status.showSheetScale(this.drawing.sheetScale);
     this.status.showAxisView(this.drawing.lathe, this.drawing.diameterMode);
-    document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
+    document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DDF CAD LAB`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
@@ -760,6 +785,7 @@ export class App {
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
+    for (const [kind, b] of this.snapButtons) b.setAttribute('aria-pressed', String(this.settings.snapKinds.has(kind)));
     if (this.runner.tool?.id !== 'grip') this.hotGrip = undefined;
     const selecting = !this.runner.tool || req?.kind === 'selection';
     this.selectButton?.classList.toggle('active', !this.runner.tool && !this.panMode);
@@ -796,7 +822,33 @@ export class App {
       b.addEventListener('click', () => this.send({ kind: 'option', key: o.key }));
       items.push(b);
     }
+    if (tool && DRAW_TOOLS.includes(tool)) items.push(this.styleSelect());
     this.optionsBar.replaceChildren(...items);
+  }
+
+  /** The line style new objects take (by layer, or one style), for the drawing tools' options bar. */
+  private styleSelect(): HTMLSelectElement {
+    const style = document.createElement('select');
+    style.className = 'options-style';
+    style.title = 'Line style for new objects';
+    style.tabIndex = -1;
+    style.dataset.testid = 'style';
+    const byLayer = document.createElement('option');
+    byLayer.value = '';
+    byLayer.textContent = 'Style: by layer';
+    style.append(byLayer);
+    for (const name of LINE_STYLE_NAMES) {
+      const o = document.createElement('option');
+      o.value = name;
+      o.textContent = `Style: ${LINE_STYLES[name].label}`;
+      style.append(o);
+    }
+    style.value = this.currentStyle ?? '';
+    style.addEventListener('change', () => {
+      this.currentStyle = style.value === '' ? undefined : (style.value as LineStyleName);
+      style.blur();
+    });
+    return style;
   }
 
   private requestRedraw(): void {
@@ -836,6 +888,7 @@ export class App {
       snap = undefined;
       preview = req.preview?.(this.boxes.textValue()) ?? [];
     }
+    if (req?.kind === 'point' && req.shown) preview = [...preview, ...req.shown()];
     render(this.g, this.view, this.drawing, {
         preview,
         selected: this.selected,
@@ -865,42 +918,28 @@ export class App {
 
   // ---- building the chrome ---------------------------------------------------
 
-  /** Drawing tools in a row under the top bar, ending with the drawing's units. */
+  /** Select, then the toolbars (see `toolbars.ts`), then the drawing's units, in a row under the top bar. */
   private buildToolbar(): void {
-    const bar = el('toolbar');
+    const row = el('toolbar');
     this.selectButton = button(ICONS.select, 'Select (Esc): pick objects, or drag a window', () => this.selectMode(), 'tool-select');
-    bar.append(this.selectButton);
-    const addTools = (defs: readonly ToolDef[]): void => {
-      for (const def of defs) {
-        const icon = ICONS[def.id as keyof typeof ICONS];
-        const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
-        const tip = keys ? `${def.label} (${keys})` : def.label;
-        const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
-        this.toolButtons.set(def.id, b);
-        bar.append(b);
+    row.append(this.selectButton);
+    const makeButton = (item: ToolbarItem): HTMLButtonElement => {
+      const kind = SNAP_ITEM_KIND.get(item.id);
+      if (kind) {
+        const b = button(SNAP_ICONS[kind], `${SNAP_LABEL[kind]} snap: on or off`, () => this.toggleSnap(kind), `snap-${kind}`);
+        b.classList.add('snap-button');
+        this.snapButtons.set(kind, b);
+        return b;
       }
+      const def = TOOLS.find((t) => t.id === item.id)!;
+      const icon = ICONS[def.id as keyof typeof ICONS];
+      const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
+      const tip = keys ? `${def.label} (${keys})` : def.label;
+      const b = button(icon, tip, () => this.startTool(def), `tool-${def.id}`);
+      this.toolButtons.set(def.id, b);
+      return b;
     };
-    addTools(DRAW_TOOLS);
-    const gap = document.createElement('span');
-    gap.className = 'toolbar-separator';
-    bar.append(gap);
-    addTools(EDIT_TOOLS);
-    const gapModify = document.createElement('span');
-    gapModify.className = 'toolbar-separator';
-    bar.append(gapModify);
-    addTools(MODIFY_TOOLS);
-    const gapDim = document.createElement('span');
-    gapDim.className = 'toolbar-separator';
-    bar.append(gapDim);
-    addTools(DIMENSION_TOOLS);
-    const gapBlocks = document.createElement('span');
-    gapBlocks.className = 'toolbar-separator';
-    bar.append(gapBlocks);
-    addTools(BLOCK_TOOLS);
-    const gap2 = document.createElement('span');
-    gap2.className = 'toolbar-separator';
-    bar.append(gap2);
-    addTools(INQUIRY_TOOLS);
+    new Toolbars(row, TOOLBARS, makeButton, this.menu);
     const u = this.unitsButton;
     u.type = 'button';
     u.className = 'units-button';
@@ -909,7 +948,15 @@ export class App {
     u.dataset.testid = 'units';
     u.textContent = this.drawing.units;
     u.addEventListener('click', () => this.openUnitsMenu(u.getBoundingClientRect()));
-    bar.append(u);
+    row.append(u);
+  }
+
+  /** A Snaps toolbar button: that snap kind on or off. */
+  private toggleSnap(kind: SnapKind): void {
+    const kinds = this.settings.snapKinds;
+    if (kinds.has(kind)) kinds.delete(kind);
+    else kinds.add(kind);
+    this.refresh();
   }
 
   private setSidePanel(shown: boolean): void {
@@ -922,24 +969,6 @@ export class App {
 
   private buildTopBar(): void {
     const bar = el('topbar');
-    const style = document.createElement('select');
-    style.title = 'Line style for new objects';
-    style.tabIndex = -1;
-    style.dataset.testid = 'style';
-    const byLayer = document.createElement('option');
-    byLayer.value = '';
-    byLayer.textContent = 'Style: by layer';
-    style.append(byLayer);
-    for (const name of LINE_STYLE_NAMES) {
-      const o = document.createElement('option');
-      o.value = name;
-      o.textContent = `Style: ${LINE_STYLES[name].label}`;
-      style.append(o);
-    }
-    style.addEventListener('change', () => {
-      this.currentStyle = style.value === '' ? undefined : (style.value as LineStyleName);
-      style.blur();
-    });
     this.panButton = button(
       ICONS.pan,
       'Pan (H): drag with the left button. You can also hold Space and drag, or drag with the middle button',
@@ -958,16 +987,21 @@ export class App {
       },
       'new',
     );
+    const brand = document.createElement('span');
+    brand.className = 'brand';
+    brand.textContent = 'DDF CAD LAB';
+    brand.dataset.testid = 'brand';
     bar.append(
+      brand,
       newButton,
       button(ICONS.open, 'Open (Ctrl+O)', () => void this.openDrawing(), 'open'),
       button(ICONS.save, 'Save (Ctrl+S)', () => void this.saveDrawing(false), 'save'),
       button(ICONS.saveAs, 'Save As (Ctrl+Shift+S)', () => void this.saveDrawing(true), 'save-as'),
+      button(ICONS.importStep, 'Import STEP: a turned part\'s profile from a .step file, laid along Z', () => void this.importStep(), 'import-step'),
       button(ICONS.undo, 'Undo (Ctrl+Z)', () => this.doUndo(), 'undo'),
       button(ICONS.redo, 'Redo (Ctrl+Y)', () => this.doRedo(), 'redo'),
       this.panButton,
       button(ICONS.extents, 'Zoom Extents (double-click middle button)', () => this.zoomExtents(), 'zoom-extents'),
-      style,
     );
 
     const side = this.sidePanelButton;
@@ -1134,10 +1168,9 @@ export class App {
         this.spaceHeld = true;
         this.updateCanvasCursor(false);
       }
-    } else if (e.key === 'F3' || e.key === 'F8' || e.key === 'F10') {
+    } else if (e.key === 'F8' || e.key === 'F10') {
       e.preventDefault();
-      if (e.key === 'F3') this.settings.osnap = !this.settings.osnap;
-      else if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
+      if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
       else this.settings.polar = !this.settings.polar;
       this.refresh();
     } else if (e.key === 'Escape') {

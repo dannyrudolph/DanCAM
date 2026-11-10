@@ -23,6 +23,8 @@ export type PointRequest = {
   readonly base?: Vec2;
   /** Entities to draw as a preview for a candidate point, or a deferred one. */
   readonly preview?: (p: Vec2, deferred?: Deferred) => readonly Entity[];
+  /** Entities shown as a preview wherever the cursor is, even off the drawing (Import STEP's part in place). */
+  readonly shown?: () => readonly Entity[];
   /**
    * True when, with no base point yet, the step takes a deferred Tangent or
    * Perpendicular pick (a line end that slides along a curve until the other

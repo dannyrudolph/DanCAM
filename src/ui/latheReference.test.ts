@@ -67,7 +67,7 @@ describe('Phase 5 done-when: a turned pin in lathe mode, checked text by text', 
       x.kind === 'line' && (x.start.x >= 0.55 || x.end.x >= 0.55) ? [{ op: 'modify', before: x, after: { ...x, start: push(x.start), end: push(x.end) } }] : []);
     expect(changes).toHaveLength(4); // body top, the step down, the neck, the back face
     undo.commit({ label: 'Stretch', changes });
-    expect(texts(e)).toEqual(['Ø.125', 'Ø.188', 'Ø.156', '.000', '.250', '.400', '.650', '.800', '', '', 'Ø.030 THRU', '.010 X 45°']);
+    expect(texts(e)).toEqual(['Ø.125', 'Ø.188', 'Ø.156', '0', '.250', '.400', '.650', '.800', '', '', 'Ø.030 THRU', '.010 X 45°']);
     undo.undo();
     expect(texts(e)).toEqual([...LATHE_TEXTS]);
   });

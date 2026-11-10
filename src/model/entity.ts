@@ -332,6 +332,16 @@ export function entityCurve(e: Entity): Curve | undefined {
 }
 
 /**
+ * The curve object snaps and anchors find features on: the entity's own
+ * curve, or for a centerline the line between its ends (not the extension
+ * drawn past them). Other dimensions are annotation and have none.
+ */
+export function snapCurve(e: Entity): Curve | undefined {
+  if (e.kind === 'dimension') return e.type === 'centerline' ? { kind: 'segment', a: e.p1, b: e.p2 } : undefined;
+  return entityCurve(e);
+}
+
+/**
  * `e` reshaped to the curve `c`, keeping its id, layer and style. The kind
  * follows the curve: a trimmed xline becomes a ray, a trimmed circle an arc.
  */

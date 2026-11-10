@@ -117,9 +117,11 @@ test('Esc clears locked values first, then leaves the tool', async ({ page }) =>
   await expect(page.getByTestId('tool-line')).not.toHaveClass(/active/);
 });
 
-test('new lines take the chosen style', async ({ page }) => {
-  await page.getByTestId('style').selectOption('hidden');
+test('new lines take the chosen style, picked in the options bar while drawing', async ({ page }) => {
+  await expect(page.getByTestId('style')).toHaveCount(0); // not without a drawing tool
   await page.keyboard.press('l');
+  await page.getByTestId('style').selectOption('hidden');
+  await expect(page.locator('#options [data-testid="style"]')).toHaveValue('hidden');
   await typeValues(page, '0', '0');
   await typeValues(page, '1', '0');
   await page.keyboard.press('Escape');
@@ -198,6 +200,66 @@ test('a focused box that has not been typed in keeps following the cursor', asyn
   await expect(angle).toHaveValue('45.0000');
   await page.mouse.move(c.x - 100, c.y - 1); // just above 180°, caught by polar tracking
   await expect(angle).toHaveValue('180.0000');
+});
+
+/** Shows or hides a whole toolbar from the right-click menu on a toolbar's grip. */
+async function setToolbar(page: Page, label: string): Promise<void> {
+  await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
+  await page.locator('.context-menu button.checkable', { hasText: `${label} toolbar` }).click();
+}
+
+test.describe('toolbars', () => {
+  test('the header carries the name, before the file buttons', async ({ page }) => {
+    await expect(page.getByTestId('brand')).toHaveText('DDF CAD LAB');
+    const brand = (await page.getByTestId('brand').boundingBox())!;
+    expect(brand.x + brand.width).toBeLessThan((await page.getByTestId('new').boundingBox())!.x);
+  });
+
+  test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
+    await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
+    await expect(page.getByTestId('toolbar-modify')).toBeVisible();
+    await expect(page.locator('.toolbar-group:visible .toolbar-label')).toHaveText(['Draw', 'Snaps', 'Edit', 'Modify', 'Dimension', 'Blocks']);
+    const top = async (id: string) => (await page.getByTestId(`toolbar-${id}`).boundingBox())!.y;
+    expect(await top('snaps')).toBe(await top('draw'));
+    expect(await top('modify')).toBe(await top('draw'));
+    expect(await top('dimension')).toBeGreaterThan(await top('draw')); // its own row
+    await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
+    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Snaps toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Blocks toolbar', 'Inquiry toolbar']);
+    await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
+    await page.locator('.context-menu button.checkable', { hasText: 'Modify toolbar' }).click();
+    await expect(page.getByTestId('toolbar-modify')).toBeHidden();
+    await page.keyboard.press('t'); // a hidden tool keeps its shortcut
+    await expect(page.locator('.options-tool')).toHaveText('Trim');
+    await page.keyboard.press('Escape');
+    await setToolbar(page, 'Inquiry');
+    await expect(page.getByTestId('tool-dist')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('toolbar-modify')).toBeHidden();
+    await expect(page.getByTestId('toolbar-inquiry')).toBeVisible();
+    // Every bar hidden: the row's own right-click still brings them back.
+    for (const bar of ['Draw', 'Edit', 'Dimension', 'Blocks', 'Inquiry', 'Snaps']) await setToolbar(page, bar);
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(0);
+    await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
+    await page.locator('.context-menu button', { hasText: 'Reset all toolbars' }).click();
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(6);
+  });
+
+  test('a button hidden by right-click comes back with its toolbar\'s reset, and stays hidden across a reload', async ({ page }) => {
+    await page.getByTestId('tool-trim').click({ button: 'right' });
+    await expect(page.locator('.context-menu button')).toHaveText(['Hide Trim']);
+    await page.locator('.context-menu button', { hasText: 'Hide Trim' }).click();
+    await expect(page.getByTestId('tool-trim')).toBeHidden();
+    await expect(page.getByTestId('tool-extend')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('tool-trim')).toBeHidden();
+    await page.getByTestId('toolbar-grip-draw').click({ button: 'right' });
+    await expect(page.locator('.context-menu button', { hasText: 'Reset Draw toolbar' })).toBeDisabled(); // nothing hidden there
+    await page.keyboard.press('Escape');
+    await page.mouse.click(5, 300);
+    await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
+    await page.locator('.context-menu button', { hasText: 'Reset Modify toolbar' }).click();
+    await expect(page.getByTestId('tool-trim')).toBeVisible();
+  });
 });
 
 /** Screen position of a world point after Zoom Extents fits `extents` into the canvas. */
@@ -428,7 +490,7 @@ test.describe('files and units', () => {
 
   test('a saved drawing reopens with exactly the same coordinates', async ({ page }, info) => {
     await drawLine(page);
-    await expect(page).toHaveTitle('• Untitled.cad2d.json — DanCAM');
+    await expect(page).toHaveTitle('• Untitled.cad2d.json — DDF CAD LAB');
 
     const downloading = page.waitForEvent('download');
     await page.getByTestId('save').click();
@@ -436,7 +498,7 @@ test.describe('files and units', () => {
     expect(download.suggestedFilename()).toBe('Untitled.cad2d.json');
     const path = info.outputPath('saved.cad2d.json');
     await download.saveAs(path);
-    await expect(page).toHaveTitle('Untitled.cad2d.json — DanCAM');
+    await expect(page).toHaveTitle('Untitled.cad2d.json — DDF CAD LAB');
 
     await page.getByTestId('new').click();
     await page.locator('.context-menu').getByRole('button', { name: 'New inch drawing' }).click();
@@ -576,7 +638,7 @@ test('Shift+X starts the Ray tool and X still starts Xline', async ({ page }) =>
   await expect(page.getByTestId('tool-xline')).toHaveClass(/active/);
 });
 
-test('a click near a midpoint snaps to it exactly; F3 turns snaps off', async ({ page }) => {
+test('a click near a midpoint snaps to it exactly; the Snaps toolbar turns kinds off', async ({ page }) => {
   await page.keyboard.press('l');
   await typeValues(page, '0', '0');
   await typeValues(page, '1', '0');
@@ -600,10 +662,29 @@ test('a click near a midpoint snaps to it exactly; F3 turns snaps off', async ({
   await page.mouse.move(c.x + 4, c.y + 3);
   // the new line starts there too, and Endpoint wins a tie with Midpoint
   await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
-  await page.keyboard.press('F3');
-  await expect(page.getByTestId('osnap')).not.toHaveClass(/\bon\b/);
+  await page.getByTestId('snap-end').click();
+  await expect(page.getByTestId('snap-end')).toHaveAttribute('aria-pressed', 'false');
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid'); // Endpoint off: Midpoint now
+  await page.getByTestId('snap-mid').click();
+  await page.mouse.move(c.x + 4, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'int'); // where the two lines meet
+  await page.getByTestId('snap-int').click();
   await page.mouse.move(c.x + 5, c.y + 3);
   await expect(page.locator('#canvas')).toHaveAttribute('data-snap', '');
+  await page.getByTestId('snap-end').click(); // back on: the line tool still waiting, the snap returns
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+});
+
+test('the Snaps toolbar shows the running snaps pressed, the others raised; there is no OSNAP button', async ({ page }) => {
+  const pressed = async (kind: string) => page.getByTestId(`snap-${kind}`).getAttribute('aria-pressed');
+  for (const k of ['end', 'mid', 'cen', 'quad', 'int', 'node']) expect(await pressed(k), k).toBe('true');
+  for (const k of ['perp', 'tan', 'nea']) expect(await pressed(k), k).toBe('false');
+  await page.getByTestId('snap-tan').click();
+  expect(await pressed('tan')).toBe('true');
+  await expect(page.getByTestId('osnap')).toHaveCount(0);
+  await expect(page.getByTestId('snap-types')).toHaveCount(0);
 });
 
 test('a one-time Endpoint snap from the right-click menu ignores the midpoint under the cursor', async ({ page }) => {
@@ -697,16 +778,17 @@ test.describe('selection', () => {
 
   test('a window takes what is fully inside; the same box dragged right to left also takes what it touches', async ({ page }) => {
     const at = await draw(page);
-    // x 0.5..1.2, y 0.5..1.2: B pokes in, A and C don't, nothing is fully inside
-    await drag(page, at(0.5, 1.2), at(1.2, 0.5));
+    // x 0.5..1.2, y 0.5..1.03: B pokes in, A and C don't, nothing is fully inside.
+    // Corners stay just past the lines: the view fits the lines' extents, so far past them may be off the canvas.
+    await drag(page, at(0.5, 1.03), at(1.2, 0.5));
     await expect(prop(page, 'entity-count')).toHaveText('3'); // still the drawing summary: nothing selected
-    await drag(page, at(1.2, 0.5), at(0.5, 1.2));
+    await drag(page, at(1.2, 0.5), at(0.5, 1.03));
     await expect(page.locator('#properties h2')).toHaveText(/^Line /);
     await expect(prop(page, 'Start Y')).toHaveText('1.0000');
 
     await page.keyboard.press('Escape');
     await expect(prop(page, 'entity-count')).toHaveText('3');
-    await drag(page, at(-0.1, 1.1), at(1.1, -0.1)); // window around A and B
+    await drag(page, at(-0.1, 1.03), at(1.1, -0.03)); // window around A and B
     await expect(prop(page, 'selection-count')).toHaveText('2');
   });
 
@@ -725,7 +807,7 @@ test.describe('selection', () => {
     await page.keyboard.up('Shift');
     await expect(prop(page, 'selection-count')).toHaveText('2');
 
-    await drag(page, at(-0.1, 1.1), at(1.1, 0.5), true); // Shift-window around B only
+    await drag(page, at(-0.1, 1.03), at(1.1, 0.5), true); // Shift-window around B only
     await expect(page.locator('#properties h2')).toHaveText(/^Line /);
     await expect(prop(page, 'Start Y')).toHaveText('0.0000');
 
@@ -955,6 +1037,7 @@ test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
 
   /** ID at a snapped point; returns the full-precision X and Y from the results panel. */
   async function idAt(page: Page, p: { x: number; y: number }, snap: string) {
+    if (!(await page.getByTestId('tool-id').isVisible())) await setToolbar(page, 'Inquiry'); // hidden by default
     await page.getByTestId('tool-id').click();
     await snapClick(page, p, snap);
     await page.keyboard.press('Escape');
@@ -1690,6 +1773,42 @@ test.describe('Phase 4 done-when: the reference drawing, checked text by text', 
   });
 });
 
+test.describe('Phase 5: a second lathe part, the shaft, dimensioned the lathe way', () => {
+  test('ordinates in Z, symmetric diameters and notes read back, lathe and Ø on', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto('/?shaft');
+    await expect(prop(page, 'entity-count')).toHaveText('26');
+    await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
+    await page.getByTestId('zoom-extents').click();
+    // Extents and text centers from the layout (src/ui/latheShaft.test.ts builds the same drawing).
+    const at = await extentsMapper(page, { minX: -0.325, maxX: 0.6827632311977716, minY: -0.075, maxY: 0.13075 });
+    const texts: [string, number, number][] = [
+      ['0', 0, 0.1247],
+      ['.150', 0.15, 0.1247],
+      ['.275', 0.275, 0.1247],
+      ['.400', 0.4, 0.1247],
+      ['.425', 0.4388, 0.1247],
+      ['.600', 0.6, 0.1247],
+      ['Ø.080', -0.06, 0.02],
+      ['Ø.100', 0.4125, 0.025],
+      ['Ø.125', 0.66, 0.0313],
+      ['.005 X 45°', -0.0874, 0.09],
+      ['Ø.030 THRU', 0.3965, -0.04],
+    ];
+    for (const [text, x, y] of texts) {
+      await page.keyboard.press('Escape');
+      const p = at(x, y);
+      await page.mouse.click(p.x, p.y);
+      await expect(page.locator('#properties h2'), text).toHaveText(/^Dimension /);
+      await expect(prop(page, 'Text'), text).toHaveText(text);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by text', () => {
   test('lathe mode with Ø on: symmetric diameters, Z ordinates on one baseline, an X ordinate as a diameter and the notes read exactly', async ({ page }) => {
     const errors: string[] = [];
@@ -1706,7 +1825,7 @@ test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by te
       ['Ø.125', 0.14, 0.03125],
       ['Ø.188', 0.51, 0.047],
       ['Ø.156', 0.829, 0.078],
-      ['.000', 0, 0.14375],
+      ['0', 0, 0.14375],
       ['.250', 0.25, 0.14375],
       ['.400', 0.4, 0.14375],
       ['.600', 0.6, 0.14375],
@@ -2119,4 +2238,92 @@ test('lathe mode marks Z0 X0 with a faint center mark, and a click near it start
   await expect(page.locator('#properties h2')).toHaveText(/^Line /);
   await expect(prop(page, 'Start Z')).toHaveAttribute('title', '0');
   await expect(prop(page, 'Start X')).toHaveAttribute('title', '0');
+});
+
+test.describe('Import STEP', () => {
+  async function importFile(page: Page, path: string) {
+    const choosing = page.waitForEvent('filechooser');
+    await page.getByTestId('import-step').click();
+    const chooser = await choosing;
+    // No type filter: Safari greys out .step files when the Mac has no type registered for them.
+    expect(await chooser.element().getAttribute('accept')).toBeNull();
+    await chooser.setFiles(path);
+  }
+
+  test('a turned part from a STEP file is laid along Z with Z0 at its right end, on a layer named after the file', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await importFile(page, 'test-fixtures/step/pin-mm.step');
+    await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
+    await expect(status).toHaveText('Import pin-mm.step: choose the profile or three views, where Z0 goes and how it turns, then click or press Enter to place it');
+    await page.keyboard.press('Enter');
+    await expect(prop(page, 'entity-count')).toHaveText('14');
+    await expect(status).toHaveText('Imported pin-mm.step: 14 lines and arcs on layer pin-mm.');
+    await expect(page.locator('#layers')).toContainText('pin-mm');
+
+    // The Ø10 body runs from Z-39 (after the 1x45° chamfer) to the shoulder at Z-10.
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -40, maxX: 0, minY: 0, maxY: 5 });
+    const p = at(-25, 5);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Line /);
+    await expect(prop(page, 'Start Z')).toHaveText('-39.0000');
+    await expect(prop(page, 'End Z')).toHaveText('-10.0000');
+    await expect(prop(page, 'Start X')).toHaveText('5.0000');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('');
+
+    // The Ø3 bore, 8 deep from Z0, is inside the part: hidden.
+    await page.keyboard.press('Escape');
+    const b = at(-4, 1.5);
+    await page.mouse.click(b.x, b.y);
+    await expect(prop(page, 'Start Z')).toHaveText('-8.0000');
+    await expect(prop(page, 'Style').locator('select')).toHaveValue('hidden');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+  });
+
+  test('cross holes and flats are reported as left out; a file that isn\'t STEP is refused', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await importFile(page, 'test-fixtures/step/cross-hole-flat-mm.step');
+    await page.locator('[data-option="zero:left"]').click();
+    await page.keyboard.press('Enter');
+    await expect(status).toHaveText('Imported cross-hole-flat-mm.step: 3 lines and arcs on layer cross-hole-flat-mm. Left out: 4 faces not round about the axis (cross holes, flats, slots).');
+
+    await importFile(page, 'test-fixtures/step/make_fixtures.py');
+    await expect(status).toHaveText("Can't import make_fixtures.py: This is not a STEP file (it should start with ISO-10303-21;).");
+    await expect(prop(page, 'entity-count')).toHaveText('3');
+  });
+
+  test('3 views: the shaft laid out third-angle, its cross hole a circle in the top view, a layer per view', async ({ page }) => {
+    const status = page.locator('#status .status-prompt');
+    await page.getByTestId('new').click();
+    await page.locator('.context-menu').getByRole('button', { name: 'New mm drawing' }).click();
+    await importFile(page, 'test-fixtures/step/shaft.step');
+    await expect(page.locator('[data-option="half"]')).toBeEnabled();
+    await page.locator('[data-option="mode:views"]').click();
+    await expect(page.locator('[data-option="mode:views"]')).toHaveClass(/active/);
+    await expect(page.locator('[data-option="half"]')).toBeDisabled();
+    await page.keyboard.press('Enter');
+    await expect(status).toHaveText(
+      'Imported shaft.step as three views: 119 lines and arcs on layers shaft front, shaft fitted, shaft top, shaft end. Curves on shaft fitted are fitted with arcs and lines.',
+    );
+    for (const name of ['shaft front', 'shaft top', 'shaft end', 'shaft fitted']) await expect(page.locator('#layers')).toContainText(name);
+
+    // Front view Z-61.2 to Z0; the top view above it (a gap of 61.2/8); the cross hole 1.8 from the far end, seen down its axis.
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -61.2, maxX: 11.92, minY: -2.135, maxY: 14.0142779 });
+    const p = at(-59.4 + 0.56, 11.8792779);
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Circle/);
+    await expect(prop(page, 'Radius')).toHaveText('0.5600');
+    await expect(prop(page, 'Layer').locator('select')).toHaveValue('shaft top');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('0');
+  });
 });

@@ -43,6 +43,7 @@ export const ICONS = {
   fromLibrary: svg('<path d="M16 9 A6 6 0 1 0 14.2 14.2"/><path d="M16 4 V9 H11"/>'),
   exportFile: svg('<path d="M4 12 V17 H16 V12"/><path d="M10 13 V3 M7 6 L10 3 L13 6"/>'),
   importFile: svg('<path d="M4 12 V17 H16 V12"/><path d="M10 3 V13 M7 10 L10 13 L13 10"/>'),
+  importStep: svg('<path d="M2 8 H7 V6 H13 V8 H18 V14 H13 V12 H7 V14 H2 Z"/><path d="M10 1 V5 M8 3 L10 5 L12 3"/><path d="M1 17 H19" stroke-dasharray="3 1.5 1 1.5"/>'),
   explode: svg('<path d="M7 7 L4 4 M13 7 L16 4 M7 13 L4 16 M13 13 L16 16"/><rect x="7.5" y="7.5" width="5" height="5" rx="1"/>'),
   centerMark: svg('<circle cx="10" cy="10" r="6"/><path d="M8 10 H12 M10 8 V12 M14 10 H19 M1 10 H6 M10 1 V6 M10 14 V19"/>'),
   dimLeader: svg('<path d="M3 17 L11 7 H18"/><path d="M3 17 L4.2 13.6 L6 15.2 Z" fill="currentColor"/><path d="M12 4 H18"/>'),
@@ -63,4 +64,17 @@ export const ICONS = {
   redo: svg('<path d="M13 5 L17 9 L13 13"/><path d="M17 9 H8 a4 4 0 0 0 0 8 H11"/>'),
   pan: svg('<path d="M10 2 V18 M2 10 H18"/><path d="M7 5 L10 2 L13 5 M7 15 L10 18 L13 15 M5 7 L2 10 L5 13 M15 7 L18 10 L15 13"/>'),
   extents: svg('<path d="M3 7 V3 H7 M13 3 H17 V7 M17 13 V17 H13 M7 17 H3 V13"/><rect x="7" y="7" width="6" height="6"/>'),
+} as const;
+
+/** The Snaps toolbar: each kind's marker, as the canvas draws it at a snap. */
+export const SNAP_ICONS = {
+  end: svg('<path d="M2 15 L10 7" stroke-width="1"/><rect x="6" y="3" width="8" height="8"/>'),
+  mid: svg('<path d="M2 14 H18" stroke-width="1"/><path d="M10 5 L14.5 14 H5.5 Z"/>'),
+  cen: svg('<circle cx="10" cy="10" r="7" stroke-width="1"/><circle cx="10" cy="10" r="3.5"/>'),
+  quad: svg('<path d="M3 17 A14 14 0 0 1 17 3" stroke-width="1"/><path d="M7.1 3.1 L11.1 7.1 L7.1 11.1 L3.1 7.1 Z"/>'),
+  int: svg('<path d="M2 16 L18 4 M2 4 L18 16" stroke-width="1"/><path d="M6.5 6.5 L13.5 13.5 M13.5 6.5 L6.5 13.5"/>'),
+  perp: svg('<path d="M2 16 H18" stroke-width="1"/><path d="M6 4 V16 M6 11 H11 V16"/>'),
+  tan: svg('<path d="M2 3 H18" stroke-width="1"/><circle cx="10" cy="8" r="5"/><path d="M5 3 H15"/>'),
+  nea: svg('<path d="M2 15 L18 9" stroke-width="1"/><path d="M6 8 H14 L6 16 H14 Z"/>'),
+  node: svg('<circle cx="10" cy="10" r="5"/><path d="M6.5 6.5 L13.5 13.5 M13.5 6.5 L6.5 13.5"/>'),
 } as const;

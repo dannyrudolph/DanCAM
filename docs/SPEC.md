@@ -154,7 +154,7 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 | Ordinate | Origin set once, then feature points | X or Z (Y) coordinate from the origin |
 | Baseline / Continue | Starts from an existing linear dimension | Stacked or chained linear dimensions |
 | Leader / note | Arrow point, then text | Free text, such as `.010 X 45°` or `2X` callouts |
-| Center mark / centerline | Circle or arc; two lines | Annotation lines |
+| Center mark / centerline | Circle or arc; two lines | Annotation lines; a centerline takes object snaps at its ends, middle and crossings, so a hole can be dimensioned to it |
 
 **Symmetric diameter (lathe)**
 
@@ -171,6 +171,7 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 - Each pick creates an X or Z ordinate, chosen by drag direction or forced. Leaders jog automatically when text would overlap.
 - Ordinate text lines up on a common baseline, and an "align ordinates" command restacks a set evenly.
 - Option to show ordinate X values as diameters in lathe mode.
+- The ordinate at the origin reads a bare `0` (ASME), whatever the zero rules.
 
 **Dimension styles**
 
@@ -190,6 +191,19 @@ A block is a named, reusable piece of drawing, such as a cutting tool sketch (in
 - **Layers:** geometry on layer 0 in a definition takes the instance's layer; geometry on other layers keeps its own layer (AutoCAD's convention).
 - **Edit block:** opens the definition by itself with Save and Cancel buttons. Saving updates every instance in the drawing in one undo step. Rename, Explode (an instance back to plain geometry, on the layers it shows on) and Purge (remove unused definitions) are also offered.
 - **Library:** saved blocks are available to every drawing. Save to library copies a definition into the browser's library (IndexedDB). Inserting a library block copies its definition into the drawing, so the drawing file stands alone and opens anywhere. Changing a library block does not change drawings until Update from library is chosen. Export library and Import library write and read a `.cad2d-blocks.json` file, for backup and for moving to another machine. A name already in the drawing or library is never silently overwritten.
+
+## STEP import (turned parts)
+
+A turned part modelled in Solid Edge comes in as its lathe profile: the half-section through its axis, laid along Z, ready to dimension. The model is never kept or linked; the import is plain geometry, edited like anything drawn (CAD-1).
+
+- **What it reads:** a STEP file (`.step`, `.stp`, AP203/AP214/AP242 B-rep). The reader is part of DanCAM, with no CAD kernel: it reads points, directions, axis placements, the faces of a turned part (planes, cylinders, cones, tori and spheres) and their edges, and the file's length unit, converting to the drawing's units.
+- **The axis:** the line most of the cylinders, cones and tori share. The part is turned so the axis lies on Z (X = 0, the lathe centerline) with radius on X, the way lathe mode draws.
+- **The profile:** each face of revolution about the axis becomes its exact generating curve. A cylinder is a line at its radius, a cone an angled line (to its apex when it closes on the axis, as a drill point does), a flat face square to the axis a vertical line (down to the axis when it's a full disk), a torus an arc, and a sphere on the axis an arc. Faces split in two by the exporter come out as one line. Bores, internal grooves and undercuts come through, since they are part of the half-section.
+- **Edges across the part:** as in a side view, each circular edge on the outside of the part gets a vertical line from the centerline out to it (across both halves with Full): at every diameter change, chamfer and shoulder. Where a radius runs smoothly into a diameter the line is drawn in the tangent line style.
+- **Inside the part, hidden:** what lies within the part's outside at that Z (bores, drill points, inner shoulders, grooves and radii) comes in in the hidden line style, with a hidden line across the part at each of its edges unless a visible one already crosses there, so the import keeps as much of the model as a side view can show.
+- **Left out, and said so:** features that aren't round about the axis (cross holes, flats, slots, hex, knurls) and faces the reader can't take exactly (freeform B-spline surfaces). The import reports how many faces it left out and why.
+- **Placing it:** Import STEP turns lathe mode on and shows the profile with option buttons. **Z0 at** the right end (the default; the part runs into −Z) or the left end. **Flip** turns it end for end, since a STEP file's axis direction is arbitrary. **Half** profile (the default, above the centerline) or **Full** (mirrored below). Place puts it on a new layer named after the file, as one undo step.
+- **Three views:** so cross holes, slots and flats aren't lost while sketching, **3 views** places the part's front, top and right-end views instead of the profile, laid out third-angle: the front view along Z with Z0 at the end chosen, the top view above it, the end view to its right, a gap apart (the front view's height, or an eighth of the part's length when that is more). Every edge of the model and the outline of every curved face is projected: lines exactly, circles exactly when seen face-on or edge-on, and a curve on a cylinder seen end-on (where a cross hole breaks out) as that cylinder's arc. Anything else (ellipses, splines, circles at a slant) is fitted with arcs and lines and put on its own layer, so it is never mistaken for exact geometry. Edges with material between them and the viewer come in hidden; smooth edges (where a radius runs into a face) in the tangent style, except where they are part of the outline: an outside edge, such as a shoulder or end face seen edge-on beside its radius, is always in the visible style. **Turn 90°** turns the part a quarter turn about its axis before the views are taken, and **Flip** and **Z0 at** work as for the profile; Half and Full are for the profile only. Place puts each view on its own layer (`<name> front`, `<name> top`, `<name> end`, `<name> fitted`), as one undo step.
 
 ## Files, saving and printing
 
@@ -227,10 +241,13 @@ Each phase ends with something you can use and check by hand. Phases 1–3 alrea
 7. **Phase 6: Blocks** (moved ahead of output, user decision 2026-11-09)
    - Block definitions with a description, Create block, Insert, instances edited as one object, snaps and associativity into instances, Edit block, Explode, Purge, and a library shared by all drawings with export and import. No nesting.
    - Done when: a cutting tool sketch saved to the library from one drawing is inserted into another beside a lathe profile, moved, rotated and mirrored onto the part with snaps, dimensioned from its tip to the part, redefined, and the drawing saves and reopens the same.
-8. **Phase 7: Output**
+8. **Phase 7: STEP import for turned parts** (ahead of output, user decision 2026-11-09)
+   - A STEP reader with no new package, the turned profile from a part's faces of revolution, and Import STEP with Z0 at either end, Flip, and half or full profile, or the part's three views with hidden lines (see "STEP import").
+   - Done when: one of your real Solid Edge STEP files of a lathe part imports with every diameter, length, chamfer and radius matching the model, checked with List and dimensions, and its cross holes and flats reported as left out.
+9. **Phase 8: Output**
    - DXF export and import (with blocks), PDF and SVG at scale, title block, autosave, PWA offline install.
    - Done when: an exported DXF opens in Solid Edge with correct units and sizes, and a 10:1 PDF measures true with calipers.
-9. **Later, optional**
+10. **Later, optional**
    - Lathe G-code export from a selected profile, nested blocks, per-instance text fields (attributes), hatching, more linetypes, multiple views or sheets.
 
 ## Testing and CLAUDE.md

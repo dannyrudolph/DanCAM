@@ -3,8 +3,8 @@ import type { Vec2 } from '../geometry/vec';
 import type { Tolerance, ZeroRules } from '../model/dimFormat';
 import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
-import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
-import { type BlockDef, isBlockGeometry, resolveGeometry } from '../model/block';
+import { type Anchor, type DimAnchors, anchorTarget, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
+import { type BlockDef, isBlockGeometry } from '../model/block';
 import type { LibraryBlock } from '../model/library';
 import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
@@ -239,7 +239,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     }
     for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'] as const) {
       for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
-        if (!resolveGeometry(d, a)) throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
+        if (!anchorTarget(d, a)) throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry or a centerline in the drawing.`);
       }
     }
   }

@@ -4,7 +4,7 @@ import { intersectCurves } from '../geometry/curve';
 import { type Vec2, distance, vecNearlyEqual } from '../geometry/vec';
 import { refEntityId, resolveGeometry } from './block';
 import { type Drawing, newEntityId } from './drawing';
-import { type DimensionEntity, type Entity, type EntityId, entityCurve } from './entity';
+import { type DimensionEntity, type Entity, type EntityId, snapCurve } from './entity';
 
 /**
  * Where a dimension's measured point sits on the geometry: a feature of
@@ -51,8 +51,23 @@ export function dimAnchorIds(a: DimAnchors, key: DimAnchorKey): EntityId[] {
   return p ? anchorIds(p) : [];
 }
 
-/** Plain geometry, or a part of a block instance by its path (`block.resolveGeometry`). */
-const geometry = resolveGeometry;
+/** Whether `e` is something a point anchor can name: geometry, or a centerline (it takes snaps). */
+export function isAnchorable(e: Entity | undefined): e is Entity {
+  return e !== undefined && (e.kind !== 'dimension' || e.type === 'centerline');
+}
+
+/**
+ * What a point anchor names: plain geometry or a part of a block instance by
+ * its path (`block.resolveGeometry`), or a centerline.
+ */
+export function anchorTarget(d: Drawing, ref: EntityId): Entity | undefined {
+  const g = resolveGeometry(d, ref);
+  if (g) return g;
+  const e = d.entities.get(ref);
+  return e?.kind === 'dimension' && e.type === 'centerline' ? e : undefined;
+}
+
+const geometry = anchorTarget;
 
 /**
  * Where the anchor is now, or undefined when its entity no longer has that
@@ -63,7 +78,7 @@ export function anchorPoint(d: Drawing, a: Anchor, near: Vec2): Vec2 | undefined
   const e = geometry(d, a.id);
   if (!e) return undefined;
   if (e.kind === 'point') return a.feature === 'node' ? e.at : undefined;
-  const c = entityCurve(e)!;
+  const c = snapCurve(e)!;
   switch (a.feature) {
     case 'node':
       return undefined;
@@ -79,7 +94,7 @@ export function anchorPoint(d: Drawing, a: Anchor, near: Vec2): Vec2 | undefined
       return c.kind === 'circle' || (c.kind === 'arc' && arcContainsDeg(c, a.deg)) ? pointAtDeg(c.center, c.radius, a.deg) : undefined;
     case 'int': {
       const o = geometry(d, a.other);
-      const oc = o && entityCurve(o);
+      const oc = o && snapCurve(o);
       if (!oc) return undefined;
       let best: Vec2 | undefined;
       for (const p of intersectCurves(c, oc)) if (!best || distance(p, near) < distance(best, near)) best = p;

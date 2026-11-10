@@ -6,7 +6,7 @@ import { type Vec2, distance } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
 import { drawnGeometry } from '../model/block';
 import type { Drawing } from '../model/drawing';
-import { type EntityId, entityCurve } from '../model/entity';
+import { type Entity, type EntityId, snapCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
 
 export type SnapKind = 'end' | 'mid' | 'cen' | 'quad' | 'int' | 'perp' | 'tan' | 'nea' | 'node';
@@ -54,6 +54,13 @@ type Candidate = Snap & { readonly score: number; readonly dist: number };
  * cursor (Tangent on circles and arcs, Perpendicular on anything), ranked
  * like Center so that point snaps in the aperture win.
  */
+/** Centerlines on visible layers: the one dimension that takes snaps. */
+function* visibleCenterlines(d: Drawing): Generator<Entity> {
+  for (const e of d.entities.values()) {
+    if (e.kind === 'dimension' && e.type === 'centerline' && d.layers.get(e.layer)?.visible !== false) yield e;
+  }
+}
+
 export function findSnap(
   d: Drawing,
   cursor: Vec2,
@@ -79,14 +86,16 @@ export function findSnap(
 
   const hovered: Curve[] = [];
   const hoveredIds: EntityId[] = [];
-  // Plain geometry and the parts of block instances (by path), on visible layers; never dimensions.
-  for (const e of drawnGeometry(d)) {
+  // Plain geometry and the parts of block instances (by path), on visible layers; of dimensions, only centerlines.
+  for (const e of [...drawnGeometry(d), ...visibleCenterlines(d)]) {
+    const c = snapCurve(e);
+    if (!c && e.kind !== 'point') continue;
     const onIt = distanceToEntity(d, cursor, e) <= aperture;
     if (e.kind === 'point') {
       if (onIt) point('node', e.at, { id: e.id, feature: 'node' });
       continue;
     }
-    const c = entityCurve(e)!;
+    if (!c) continue;
     const id = e.id;
     if ((c.kind === 'circle' || c.kind === 'arc') && !onIt) point('cen', c.center, { id, feature: 'center' });
     if (!onIt) continue;

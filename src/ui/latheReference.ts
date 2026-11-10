@@ -46,7 +46,7 @@ export const LATHE_TEXTS = [
   'Ø.125', // symmetric diameter, nose
   'Ø.188', // symmetric diameter, body
   'Ø.156', // X ordinate of the neck, as a diameter
-  '.000', // Z ordinates from the front face, on one baseline
+  '0', // Z ordinates from the front face, on one baseline (the origin reads a bare 0)
   '.250',
   '.400',
   '.600',

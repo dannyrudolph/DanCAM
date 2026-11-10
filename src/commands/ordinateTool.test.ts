@@ -38,6 +38,13 @@ describe('ordinate layout', () => {
     expect(layoutDimension(ord(v(-0.75, 0.25), v(-0.75, 1), 'x'), INCH, 25.4).text.main).toBe('.750');
   });
 
+  it('at the origin it reads a bare 0, inch or mm, and so does a distance that rounds to nothing', () => {
+    expect(layoutDimension(ord(v(0, 0.25), v(0, 1), 'x'), INCH, 25.4).text.main).toBe('0');
+    expect(layoutDimension(ord(v(0.0004, 0.25), v(0, 1), 'x'), INCH, 25.4).text.main).toBe('0');
+    expect(layoutDimension(ord(v(0.0005, 0.25), v(0, 1), 'x'), INCH, 25.4).text.main).toBe('.001');
+    expect(layoutDimension(ord(v(0, 5), v(0, 20), 'x'), defaultDimStyle('mm'), 1 / 25.4).text.main).toBe('0');
+  });
+
   it('jogs across in its last two arrow lengths when the text is off the leader line', () => {
     const l = layoutDimension(ord(v(0.5, 0.25), v(0.75, 1), 'x'), INCH, 25.4);
     expect(l.lines).toHaveLength(3);

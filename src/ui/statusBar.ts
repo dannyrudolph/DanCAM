@@ -40,9 +40,7 @@ export type StatusSettings = {
   polar: boolean;
   polarIncrementDeg: number;
   precision: number;
-  /** Running object snaps on (OSNAP, F3). */
-  osnap: boolean;
-  /** Which snaps run when OSNAP is on. */
+  /** The running object snaps, switched on and off in the Snaps toolbar. */
   readonly snapKinds: Set<SnapKind>;
 };
 
@@ -53,7 +51,6 @@ export class StatusBar {
   private readonly fromBase: HTMLElement;
   private readonly ortho: HTMLButtonElement;
   private readonly polar: HTMLButtonElement;
-  private readonly osnap: HTMLButtonElement;
   private readonly increment: HTMLSelectElement;
   private readonly precision: HTMLSelectElement;
   private readonly sheetScale: HTMLSelectElement;
@@ -68,7 +65,6 @@ export class StatusBar {
     root: HTMLElement,
     private readonly settings: StatusSettings,
     private readonly onSettingsChanged: () => void,
-    openSnapMenu: (anchor: DOMRect) => void,
     /** The drawing's sheet scale was chosen; the app commits it as an undo step. */
     private readonly onSheetScale: (scale: number) => void,
     /** Lathe mode or diameter display was switched; the app stores it in the drawing. */
@@ -89,18 +85,6 @@ export class StatusBar {
     this.polar = this.toggle('Polar', 'Polar tracking (F10)', () => {
       settings.polar = !settings.polar;
     });
-    this.osnap = this.toggle('OSNAP', 'Object snaps (F3)', () => {
-      settings.osnap = !settings.osnap;
-    });
-    this.osnap.dataset.testid = 'osnap';
-    const snapTypes = document.createElement('button');
-    snapTypes.type = 'button';
-    snapTypes.className = 'status-toggle';
-    snapTypes.textContent = '▾';
-    snapTypes.title = 'Choose which object snaps run';
-    snapTypes.tabIndex = -1;
-    snapTypes.dataset.testid = 'snap-types';
-    snapTypes.addEventListener('click', () => openSnapMenu(snapTypes.getBoundingClientRect()));
     this.increment = this.select(
       POLAR_INCREMENTS.map((d) => [String(d), `${d}°`]),
       String(settings.polarIncrementDeg),
@@ -186,7 +170,7 @@ export class StatusBar {
     this.diameterButton.dataset.testid = 'diameter';
 
     const right = span('status-right');
-    right.append(this.latheButton, this.diameterButton, this.sheetScale, this.customScale, scroll, this.osnap, snapTypes, this.ortho, this.polar, this.increment, this.precision);
+    right.append(this.latheButton, this.diameterButton, this.sheetScale, this.customScale, scroll, this.ortho, this.polar, this.increment, this.precision);
     root.append(this.prompt, this.coords, this.fromBase, right);
     this.refreshToggles();
   }
@@ -195,6 +179,11 @@ export class StatusBar {
     if (performance.now() < this.messageUntil) return;
     this.prompt.textContent = text;
     this.prompt.classList.remove('message');
+  }
+
+  /** Lets the prompt show again now, for a new step the user just chose. */
+  clearMessage(): void {
+    this.messageUntil = 0;
   }
 
   showMessage(text: string): void {
@@ -240,13 +229,12 @@ export class StatusBar {
     this.sheetScale.value = String(scale);
   }
 
-  /** Call after settings change from elsewhere (F3, F8, F10). */
+  /** Call after settings change from elsewhere (F8, F10). */
   refreshToggles(): void {
     const set = (b: HTMLButtonElement, on: boolean): void => {
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
     };
-    set(this.osnap, this.settings.osnap);
     set(this.ortho, this.settings.ortho);
     set(this.polar, this.settings.polar);
   }
