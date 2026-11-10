@@ -490,7 +490,7 @@ test.describe('files and units', () => {
 
   test('a saved drawing reopens with exactly the same coordinates', async ({ page }, info) => {
     await drawLine(page);
-    await expect(page).toHaveTitle('• Untitled.cad2d.json — DanCAM');
+    await expect(page).toHaveTitle('• Untitled.cad2d.json — DDF CAD LAB');
 
     const downloading = page.waitForEvent('download');
     await page.getByTestId('save').click();
@@ -498,7 +498,7 @@ test.describe('files and units', () => {
     expect(download.suggestedFilename()).toBe('Untitled.cad2d.json');
     const path = info.outputPath('saved.cad2d.json');
     await download.saveAs(path);
-    await expect(page).toHaveTitle('Untitled.cad2d.json — DanCAM');
+    await expect(page).toHaveTitle('Untitled.cad2d.json — DDF CAD LAB');
 
     await page.getByTestId('new').click();
     await page.locator('.context-menu').getByRole('button', { name: 'New inch drawing' }).click();

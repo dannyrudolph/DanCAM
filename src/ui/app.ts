@@ -613,7 +613,7 @@ export class App {
     this.unitsButton.textContent = this.drawing.units;
     this.status.showSheetScale(this.drawing.sheetScale);
     this.status.showAxisView(this.drawing.lathe, this.drawing.diameterMode);
-    document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DanCAM`;
+    document.title = `${this.undo.dirty ? '• ' : ''}${this.file.name} — DDF CAD LAB`;
     ensureCurrentLayer(this.drawing); // an undo may have removed it
     ensureCurrentDimStyle(this.drawing);
     this.layers.show(this.drawing);
