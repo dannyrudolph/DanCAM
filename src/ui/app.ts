@@ -23,7 +23,8 @@ import { createXlineTool } from '../commands/xlineTool';
 import { type Vec2, vecNearlyEqual } from '../geometry/vec';
 import { parseDrawing, serializeDrawing } from '../io/nativeFile';
 import { type Drawing, type Units, createDrawing, drawingBBox } from '../model/drawing';
-import type { Entity, EntityId, EntityProps } from '../model/entity';
+import { type Entity, type EntityId, type EntityProps, entityBBox } from '../model/entity';
+import { fromPoints, union } from '../geometry/bbox';
 import { type Grip, gripsFor } from '../model/grips';
 import { LINE_STYLES, LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
 import { pickEntity } from '../model/pick';
@@ -38,13 +39,17 @@ import * as vp from '../render/viewport';
 import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
 import { type ToolbarGroup, type ToolbarItem, Toolbars } from './toolbars';
-import { DrawingFile } from './fileAccess';
+import { DrawingFile, pickTextFile } from './fileAccess';
 import { ICONS, SNAP_ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
 import { blockEditDrawing, saveBlockEdit } from '../model/blockEdit';
 import { BlocksPanel } from './blocksPanel';
+import { type ViewsFor, createStepImportTool, profileEntities } from '../commands/stepImportTool';
+import { readStep } from '../io/step/stepModel';
+import { turnedProfile } from '../io/step/turnedProfile';
+import { threeViews } from '../io/step/threeViews';
 import { LibraryPanel } from './libraryPanel';
 import { IndexedDbLibrary } from '../io/libraryStore';
 import { DimStylesPanel } from './dimStylesPanel';
@@ -76,6 +81,7 @@ export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFil
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
 /** Shared so the Blocks panel can point it at a block before starting it. */
 const INSERT_TOOL = createInsertTool();
+const STEP_IMPORT_TOOL = createStepImportTool();
 export const BLOCK_TOOLS: readonly ToolDef[] = [createBlockTool(), INSERT_TOOL, explodeTool];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...BLOCK_TOOLS, ...INQUIRY_TOOLS];
@@ -427,6 +433,35 @@ export class App {
     this.file.reset();
     this.setDrawing(createDrawing(units));
     this.status.showMessage(`New ${UNIT_LABEL[units]} drawing`);
+  }
+
+  /** Import STEP (spec, "STEP import"): reads the file, turns lathe mode on, and starts placing its profile. */
+  private async importStep(): Promise<void> {
+    if (this.inBlockEdit()) return;
+    const file = await pickTextFile(''); // any file: Safari won't let a .step be picked when the Mac has no type for it; anything else is refused when read
+    if (!file) return;
+    const model = readStep(file.text);
+    const profile = model.ok ? turnedProfile(model.model, this.drawing.units) : model;
+    if (!profile.ok) {
+      this.status.showMessage(`Can't import ${file.name}: ${profile.error}`);
+      return;
+    }
+    this.drawing.lathe = true; // a setting, like the Lathe button: not undoable
+    const stepModel = model.ok ? model.model : undefined;
+    const units = this.drawing.units;
+    const views: ViewsFor | undefined = stepModel
+      ? (flip, turn) => {
+          const v = threeViews(stepModel, units, { flip, turn });
+          return v.ok ? v.views : undefined;
+        }
+      : undefined;
+    STEP_IMPORT_TOOL.load(file.name, profile.profile, views);
+    this.status.clearMessage(); // the placing prompt, not whatever was said before the file dialog
+    this.startTool(STEP_IMPORT_TOOL);
+    // Fit every place the options can put it (Z0 at either end, both halves, the three views), so each choice stays in view.
+    const box = [...profileEntities(STEP_IMPORT_TOOL.reach(), '0', () => 'x').map(entityBBox), fromPoints([{ x: 0, y: 0 }])].reduce(union);
+    this.view = vp.zoomExtents(this.view, box);
+    this.refresh();
   }
 
   private async openDrawing(): Promise<void> {
@@ -853,6 +888,7 @@ export class App {
       snap = undefined;
       preview = req.preview?.(this.boxes.textValue()) ?? [];
     }
+    if (req?.kind === 'point' && req.shown) preview = [...preview, ...req.shown()];
     render(this.g, this.view, this.drawing, {
         preview,
         selected: this.selected,
@@ -961,6 +997,7 @@ export class App {
       button(ICONS.open, 'Open (Ctrl+O)', () => void this.openDrawing(), 'open'),
       button(ICONS.save, 'Save (Ctrl+S)', () => void this.saveDrawing(false), 'save'),
       button(ICONS.saveAs, 'Save As (Ctrl+Shift+S)', () => void this.saveDrawing(true), 'save-as'),
+      button(ICONS.importStep, 'Import STEP: a turned part\'s profile from a .step file, laid along Z', () => void this.importStep(), 'import-step'),
       button(ICONS.undo, 'Undo (Ctrl+Z)', () => this.doUndo(), 'undo'),
       button(ICONS.redo, 'Redo (Ctrl+Y)', () => this.doRedo(), 'redo'),
       this.panButton,

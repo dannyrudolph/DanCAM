@@ -28,6 +28,14 @@ function nameTaken(d: Drawing, name: string): boolean {
   return [...d.layers.keys()].some((n) => n.toLowerCase() === key);
 }
 
+/** `name`, or `name 2`, `name 3`, … : the first no layer has (without case). */
+export function freeLayerName(d: Drawing, name: string): string {
+  if (!nameTaken(d, name)) return name;
+  let i = 2;
+  while (nameTaken(d, `${name} ${i}`)) i += 1;
+  return `${name} ${i}`;
+}
+
 /** A new layer named Layer1, Layer2, ... (the first free one), black, visible, Visible style. */
 export function addLayer(d: Drawing): { readonly tx: Transaction; readonly name: string } {
   let i = 1;

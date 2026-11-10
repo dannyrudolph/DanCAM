@@ -181,6 +181,11 @@ export class StatusBar {
     this.prompt.classList.remove('message');
   }
 
+  /** Lets the prompt show again now, for a new step the user just chose. */
+  clearMessage(): void {
+    this.messageUntil = 0;
+  }
+
   showMessage(text: string): void {
     this.messageUntil = performance.now() + MESSAGE_MS;
     this.prompt.textContent = text;

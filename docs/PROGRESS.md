@@ -279,7 +279,7 @@ points along an edge, then its new angle).
       text. Undoable (`sheetScale` change), saved (optional in the file;
       absent opens at 1:1). Status bar dropdown: 1:1, 2:1, 5:1, 10:1,
       20:1, Custom… (types 50:1, 1:2, 3/2 or 2.5; Enter applies, Esc
-      cancels). Print/PDF uses it in Phase 7 (Output).
+      cancels). Print/PDF uses it in Phase 8 (Output).
    c. **Dimension Styles panel (done).** `model/dimStyles` (like
       `layers`): New copies the style being edited as NAME-2, -3…; edit
       (validated: text height > 0, sizes ≥ 0, places 0–8, ± ≥ 0, upper ≥
@@ -327,7 +327,7 @@ Decisions (user, 2026-11-08): no exact Solid Edge match needed yet (the
 user will give feedback on a working version; done-when uses our own
 reference drawing); ASME unidirectional text; leader text typed in a box
 at the cursor is fine (CAD-9 exception for notes); plain sans font for
-now, stroke font question at Phase 7 (Output).
+now, stroke font question at Phase 8 (Output).
 
 Decisions (user, 2026-11-08): Join may bridge gaps between collinear lines
 or arcs on one circle; Fillet and Chamfer accept xlines and rays (results
@@ -341,7 +341,7 @@ line's first point was brought forward into step 2).
 Decisions (user, 2026-11-08): arc angles in degrees; arcs count as full
 circles for TTR/TTT; Continue starts from the last line/arc drawn; current
 layer is saved in the file but not undoable; ray and IndexedDB autosave are
-deferred (ray to Phase 2, autosave to Phase 7, Output).
+deferred (ray to Phase 2, autosave to Output, now Phase 8).
 
 ## Phase 5 (plan approved 2026-11-09): in progress
 
@@ -626,6 +626,173 @@ harness, file round trip and v3 migration, library store tests (fake
 IndexedDB in memory, no new package), and e2e for each tool and the
 done-when.
 
+Step 7 waits: STEP import (Phase 7) comes first (user, 2026-11-09).
+
+## Phase 7: STEP import for turned parts (plan approved 2026-11-09): in progress
+
+Decisions (user, 2026-11-09): a priority ahead of Output (now Phase 8),
+started before Phase 6's step 7. Defaults taken where the user didn't
+choose (open to change): a STEP reader written here, no CAD kernel package
+(CAD-8); the import is plain lines and arcs on a new layer named after the
+file. Spec: "STEP import (turned parts)". Real Solid Edge files asked for,
+for the done-when and as fixtures.
+
+1. STEP reader (`io/step`): ISO 10303-21 text (header, data section,
+   simple and complex instances, strings, enums, lists, `$` and `*`);
+   typed access to points, directions, axis placements, lines, circles,
+   ellipses, planes, cylinders, cones, tori, spheres, faces, loops and
+   edges; the length unit (mm, inch, metre) as a scale to the drawing's.
+   Tests: hand-written fixtures in the shape exporters write, every
+   entity read exactly; malformed files refused with the reason.
+   **(done)** `io/step/part21` (syntax: comments, '' in strings, enums,
+   typed values, complex instances, AP242 `DATA(...)`; errors give the
+   line) and `io/step/stepModel` (`readStep`: every ADVANCED_FACE with its
+   surface, loops and edges, `sameSense`; SURFACE_CURVE/SEAM_CURVE/
+   TRIMMED_CURVE unwrapped; other surfaces and curves kept by type name; a
+   face with a broken reference listed as unreadable, not fatal; length
+   unit from the geometry context (SI prefixes, INCH, FOOT, or by its
+   measure); angles in radians whatever the file's unit; the declared
+   distance uncertainty). `geometry/vec3`. Fixtures in
+   `test-fixtures/step/`, written by OpenCascade through CadQuery
+   (`make_fixtures.py`, run from a throwaway venv; not a project
+   dependency): a pin (chamfers, shoulder fillet, bore with a 118° drill
+   point), the pin tilted in space, a ball-end rod in inches along X, a
+   bar with a cross hole and a flat. Tests load them with Vite's `?raw`
+   (no @types/node).
+2. Turned profile (pure): find the axis (the line most faces of
+   revolution share); map points to (z, r); each face about the axis to
+   its generating curve (cylinder, cone and its apex, plane square to the
+   axis and a full disk to the axis, torus, sphere and its pole); split
+   faces joined, duplicates dropped; the rest counted as left out with the
+   reason. Tests: a pin with chamfers, corner radii and a bore; a ball end;
+   a drill point; a cross hole and a flat left out; faces split in two; an
+   axis tilted in space; an inch file.
+   **(done)** `io/step/turnedProfile`: `turnedProfile(model, units)` and
+   `placeProfile(profile, {zeroAt, flip, full})`. Axis: the line the most
+   cylinders/cones/tori (and spheres) lie on, flat faces square to it
+   counting too; pointed along the model's positive direction. Points map
+   to (z, r); each face about the axis gives its generating curve over the
+   extent its boundary reaches (edges sampled along circles and ellipses,
+   so seams give a torus or sphere its full sweep): cylinder → line at R;
+   cone → line from its formula, to the apex when the boundary is one
+   circle; plane square to the axis → kept only when the axis passes
+   inside a loop (odd count: a disk from 0; even: from the innermost loop,
+   a bore), else not round (a flat's end walls); torus/sphere → the arc
+   covering every boundary angle (the circle less its widest gap); a ball
+   cap with one circle runs to the pole away from the rest of the part.
+   Collinear overlapping lines joined, repeated arcs dropped; lines run left
+   to right. Comparisons use the file's declared uncertainty (or TOL).
+   Tests: the pin exactly (10 curves, drill point apex), the tilted pin the
+   same, Z0 right/left, Flip, Full (19 curves, end face joined), the ball
+   end in an inch and an mm drawing, the cross hole and flat left out (4
+   faces), a duplicated face and freeform/unreadable counts, no axis
+   refused.
+3. Import STEP (toolbar, file group): pick a file, lathe mode on, preview
+   with Z0 at Right/Left, Flip, Half/Full; Place as one undo step on a new
+   layer named after the file; the left-out report. Browser test with a
+   fixture file.
+   **(done)** The 2D part moved to `model/profilePlacement` (ProfileCurve,
+   TurnedProfile, `placeProfile`, `merge`), so `commands/` doesn't import
+   `io/`. `commands/stepImportTool` (`createStepImportTool`, one-shot):
+   options Z0 at right end (default) / left end, Flip, Half / Full, kept
+   for the session; the part shown in place through a new
+   `PointRequest.shown` (drawn whatever the cursor, even off the canvas);
+   click or Enter places it: a new layer named after the file
+   (`layerNameFor`, next free name via `layers.freeLayerName`, black,
+   Visible) and its lines and arcs, one undo step "Import X"; message with
+   the count and what was left out (`leftOutMessage`). App: toolbar button
+   after Save As (`import-step`); `importStep` reads the file (any
+   .step/.stp), says why it can't, turns lathe mode on, clears a stale
+   status message so the prompt shows, and fits the view to every
+   placement the options allow. The reader checks the opening line before
+   tokenising (a non-STEP file gets the plain message) and takes a BOM.
+   Browser tests: the pin into an mm drawing (lathe on, Z0 right, 10
+   curves on layer pin-mm, the Ø10 reads Z-39 to Z-10 at X5, Undo); the
+   cross-hole bar's left-out message; a Python file refused.
+4. Done-when: a real Solid Edge file (spec, roadmap Phase 7).
+
+Three views (plan approved 2026-11-09, user: "yes go ahead, third-angle
+and use shaft as a test fixture"): so features that aren't round (cross
+holes, slots, flats) aren't lost. `test-fixtures/step/shaft.step` (an
+Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
+
+5. Projection: every edge of the model projected exactly onto the front,
+   top and right-end views (third-angle), and the outlines of curved faces
+   (silhouettes); seams and split-face edges dropped, smooth edges in the
+   tangent style. Lines and circles project exactly (a circle face-on as a
+   circle or arc, edge-on as a line); ellipses and B-spline edges are fitted
+   with arcs and lines and marked fitted. The reader learns edge ids,
+   edge/bound/face orientation and B-spline curves.
+6. Hidden lines: each projected curve split where material lies between it
+   and the viewer (ray against planes, cylinders, cones, spheres, tori,
+   with a point-in-face test on the surface); hidden pieces under visible
+   ones dropped.
+   **(done, 5 and 6)** `io/step/threeViews` (`threeViews(model, units,
+   {flip, turn})` → front, top, end as ProfileCurves with `style` and
+   `fitted`). Frame: the axis from `findAxis`, up the global Y (else Z,
+   else X) most square to it; Turn is a quarter turn about the axis, Flip
+   reverses it. Edges once each by id; seams and edges between two faces
+   on one surface dropped; an edge whose faces' normals agree is tangent.
+   Silhouettes: cylinder lines, cone generators, the sphere's great
+   circle, torus circles (axis along or across the view), clipped to the
+   face. A curve on a cylinder seen end-on (the cross hole's break-out)
+   is that cylinder's arc exactly; other curves not face-on or edge-on are
+   fitted with arcs and lines (within size × 1e-5). Visibility: a ray
+   toward the viewer against every face (`io/step/faceSolid`: the face's
+   boundary in its surface's parameters, a crossing test that knows seams
+   and poles, ray–surface hits); a change within the clearance of a
+   piece's end is at the end (tangent runs into a shoulder). The reader
+   learns edge ids, orientations (OpenCascade's backwards torus loops put
+   right by a neighbour vote) and B-splines (`geometry/bspline`).
+   `model/profilePlacement`: circles, arcs joined in `merge`, `sideView`
+   (hidden bores, edge lines). Timing: pin ~100 ms, shaft ~350 ms. Tests:
+   the pin's front view equals the Full profile and its end view the
+   circles with the far chamfer hidden; the shaft's cross hole (circle
+   from above, hidden walls ±1.18 from the side, Turn makes it the exact
+   circle in front, Flip moves it); slot walls 0.83 apart; the tang flat
+   across the end view; fitting; faceSolid's point-in-face cases.
+7. Import tool: Profile / 3 views, Turn 90°, the views laid out third-angle
+   with Z0 and Flip as now, a layer per view and one for fitted curves, one
+   undo step. Browser test.
+   **(done)** `commands/stepImportTool`: `load(name, profile, views?)`
+   takes a `ViewsFor(flip, turn)` callback (the app wraps io/step's
+   `threeViews`; commands don't import io), memoized per flip and turn.
+   Options Profile / 3 views (3 views disabled when the views can't be
+   taken), Z0 right/left, Flip, Turn 90° (views only), Half/Full (profile
+   only). `layoutViews(views, zeroAt)` lays them out third-angle (gap the
+   front view's height or length/8). Place: layers `<name> front/top/end`
+   and `<name> fitted` (each the next free name), one undo step; the
+   message names the layers and says the fitted ones are fitted. `reach()`
+   gives the app every curve the options can place, to fit the screen.
+   Found on the way: a fillet's rim (a torus outline seen edge-on) lies on
+   the face's boundary, so clipping it to the face was rounding either
+   way, and Node and Chromium drew different fragments; a rim the face's
+   boundary runs along is now left to that edge. Tests: tool (options per
+   mode, Turn/Flip reach the callback once each, layers, undo), layout,
+   the rim; browser: shaft.step as 3 views, 147 curves, the cross hole a
+   R0.56 circle on `shaft top`, Undo.
+   Fixed after the user's check of the slotted head: snapping a cut to a
+   piece's end took either end within the clearance, and a full circle's
+   two ends are one point, so the head's R0.5 round came out as a full
+   circle and the R0.15 round in the wrong style. It now snaps to the end
+   nearer along the piece. Test: the head's rounds are quarter arcs,
+   visible, in the front and top views.
+   Then: the shaft's spline edges (slot walls meeting the head's round, the
+   cross hole's break-out) run up to 0.0006 inside the solid, so a ray
+   leaving at a slant found the edge's own face and parts of the near
+   wall's curve came out hidden. A spline edge's points are now moved onto
+   both its faces (`faceSolid.nearestOn`, in turn) before the visibility
+   test. Shaft as 3 views: 129 curves. Tests: nearestOn on each surface;
+   the slot wall's curve at the round all visible.
+   Then (user: "any line that is an outside edge should only use the
+   visible style"): a smooth edge is tangent only where its faces are seen
+   at an angle; where they are seen edge-on (a shoulder or end face beside
+   its round) it is the outline and visible. Shaft as 3 views: 119 curves.
+   Tests: the shoulder one visible line; the end face visible in front and
+   top; the round's edge across the head stays tangent.
+8. Done-when: shaft.step with its cross hole, slot and tang flat in every
+   view, checked with List and dimensions.
+
 Phase 5 accepted by the user ("looks good for now", 2026-11-09).
 
 ## GUI tweaks (user, 2026-11-09), branch `gui-and-deploy`, merged with Phase 6
@@ -664,4 +831,4 @@ at `11eca54` (Worker version b958c8c1); checked live: the app loads at
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
   status bar restores mouse-wheel zoom (remembered per browser).
-- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 7 (Output).
+- Line weights: Visible 2px, the others 1px on screen. Print weights come in Phase 8 (Output).
