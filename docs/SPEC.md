@@ -154,7 +154,7 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 | Ordinate | Origin set once, then feature points | X or Z (Y) coordinate from the origin |
 | Baseline / Continue | Starts from an existing linear dimension | Stacked or chained linear dimensions |
 | Leader / note | Arrow point, then text | Free text, such as `.010 X 45°` or `2X` callouts |
-| Center mark / centerline | Circle or arc; two lines | Annotation lines |
+| Center mark / centerline | Circle or arc; two lines | Annotation lines; a centerline takes object snaps at its ends, middle and crossings, so a hole can be dimensioned to it |
 
 **Symmetric diameter (lathe)**
 
@@ -171,6 +171,7 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 - Each pick creates an X or Z ordinate, chosen by drag direction or forced. Leaders jog automatically when text would overlap.
 - Ordinate text lines up on a common baseline, and an "align ordinates" command restacks a set evenly.
 - Option to show ordinate X values as diameters in lathe mode.
+- The ordinate at the origin reads a bare `0` (ASME), whatever the zero rules.
 
 **Dimension styles**
 

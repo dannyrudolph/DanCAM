@@ -24,6 +24,23 @@ const base = { kind: 'dimension', layer: '0', dimStyle: 'INCH-3PL' } as const;
 const lengthOfL: Dim = { ...base, id: 'D', type: 'linear', dir: H, p1: v(0, 0), p2: v(2, 0), at: v(1, -0.5), anchors: { p1: { id: 'L', feature: 'start' }, p2: { id: 'L', feature: 'end' } } };
 
 describe('associative dimensions', () => {
+  it('an ordinate on a centerline\'s end follows the centerline as it follows its lines, in one undo step; it goes when they go', () => {
+    const cl: Dim = { ...base, id: 'C', type: 'centerline', p1: v(1, 0), p2: v(1, 1), at: v(1, 0.5), anchors: { lines: ['A', 'B'] } };
+    const o: Dim = { ...base, id: 'O', type: 'ordinate', p1: v(1, 1), origin: v(0, 0), axis: 'x', at: v(1, 2), anchors: { p1: { id: 'C', feature: 'end' } } };
+    const { d, undo } = setup(line('A', v(0.9, 0), v(0.9, 1)), line('B', v(1.1, 0), v(1.1, 1)), cl, o);
+    undo.commit({ label: 'Move', changes: [
+      { op: 'modify', before: d.entities.get('A')!, after: line('A', v(1.4, 0), v(1.4, 1)) },
+      { op: 'modify', before: d.entities.get('B')!, after: line('B', v(1.6, 0), v(1.6, 1)) },
+    ] });
+    expect(d.entities.get('C')).toMatchObject({ p1: v(1.5, 0), p2: v(1.5, 1) });
+    expect(d.entities.get('O')).toMatchObject({ p1: v(1.5, 1), anchors: { p1: { id: 'C', feature: 'end' } } });
+    undo.undo();
+    expect(d.entities.get('O')).toEqual(o);
+    expect(d.entities.get('C')).toEqual(cl);
+    undo.commit({ label: 'Erase', changes: [{ op: 'remove', entity: d.entities.get('A')! }] });
+    expect([...d.entities.keys()]).toEqual(['B']);
+  });
+
   it('a moved line takes its dimension along, dimension line and all; one undo puts both back', () => {
     const { d, undo, get, modify } = setup(line('L', v(0, 0), v(2, 0)), lengthOfL);
     modify(d.entities.get('L')!, line('L', v(1, 3), v(3, 3)));

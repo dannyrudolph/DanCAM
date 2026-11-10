@@ -5,7 +5,7 @@ import { TOL } from '../geometry/tolerance';
 import { type Vec2, distance } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
 import type { Drawing } from '../model/drawing';
-import { type EntityId, entityCurve } from '../model/entity';
+import { type EntityId, snapCurve } from '../model/entity';
 import { distanceToEntity } from '../model/pick';
 
 export type SnapKind = 'end' | 'mid' | 'cen' | 'quad' | 'int' | 'perp' | 'tan' | 'nea' | 'node';
@@ -75,14 +75,16 @@ export function findSnap(
   const hovered: Curve[] = [];
   const hoveredIds: EntityId[] = [];
   for (const e of d.entities.values()) {
-    // Dimensions are annotation, not geometry: nothing snaps to them.
-    if (d.layers.get(e.layer)?.visible === false || e.kind === 'dimension') continue;
+    // Dimensions are annotation, not geometry: nothing snaps to them but a centerline.
+    if (d.layers.get(e.layer)?.visible === false) continue;
+    const c = snapCurve(e);
+    if (!c && e.kind !== 'point') continue;
     const onIt = distanceToEntity(d, cursor, e) <= aperture;
     if (e.kind === 'point') {
       if (onIt) point('node', e.at, { id: e.id, feature: 'node' });
       continue;
     }
-    const c = entityCurve(e)!;
+    if (!c) continue;
     const id = e.id;
     if ((c.kind === 'circle' || c.kind === 'arc') && !onIt) point('cen', c.center, { id, feature: 'center' });
     if (!onIt) continue;

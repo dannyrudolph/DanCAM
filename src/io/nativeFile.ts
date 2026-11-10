@@ -3,7 +3,7 @@ import type { Vec2 } from '../geometry/vec';
 import type { Tolerance, ZeroRules } from '../model/dimFormat';
 import { type DimStyle, defaultDimStyle } from '../model/dimStyle';
 import { type Drawing, type Layer, type Units, createDrawing } from '../model/drawing';
-import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds } from '../model/anchor';
+import { type Anchor, type DimAnchors, anchorsFromRefs, dimAnchorIds, isAnchorable } from '../model/anchor';
 import type { DimensionEntity, Entity, EntityId } from '../model/entity';
 import { ensureCurrentLayer } from '../model/layers';
 import { LINE_STYLE_NAMES, type LineStyleName } from '../model/lineStyle';
@@ -179,7 +179,7 @@ function readCurrent(file: Record<string, unknown>): Drawing {
     for (const key of ['p1', 'p2', 'vertex', 'curve', 'lines', 'axis'] as const) {
       for (const a of e.anchors ? dimAnchorIds(e.anchors, key) : []) {
         const g = d.entities.get(a);
-        if (!g || g.kind === 'dimension') throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry in the drawing.`);
+        if (!isAnchorable(g)) throw new FileError(`entity ${id}: anchors.${key} names "${a}", which is not geometry or a centerline in the drawing.`);
       }
     }
   }

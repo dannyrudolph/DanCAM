@@ -175,7 +175,7 @@ describe('native file', () => {
     d.entities.set('e3', dim);
     const text = serializeDrawing(d);
     expect(reopen(text).entities.get('e3')).toEqual(dim);
-    expect(errorOf(text.replace('"other": "e2"', '"other": "e3"'))).toBe('entity e3: anchors.p2 names "e3", which is not geometry in the drawing.');
+    expect(errorOf(text.replace('"other": "e2"', '"other": "e3"'))).toBe('entity e3: anchors.p2 names "e3", which is not geometry or a centerline in the drawing.');
     expect(errorOf(text.replace('"deg": 90', '"deg": 45'))).toBe('entities[2].anchors.p1.deg must be 0, 90, 180 or 270.');
   });
 

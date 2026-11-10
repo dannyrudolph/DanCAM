@@ -3,7 +3,7 @@ import { arcEnd, arcStart } from '../geometry/arc';
 import { lineLine } from '../geometry/intersect';
 import { TOL, nearlyEqual } from '../geometry/tolerance';
 import { type Vec2, add, cross, distance, dot, scale, sub, vecNearlyEqual } from '../geometry/vec';
-import { type Anchor, type DimAnchorKey, type DimAnchors, anchorIds, anchorPoint, dimAnchorIds, withoutAnchors } from './anchor';
+import { type Anchor, type DimAnchorKey, type DimAnchors, anchorIds, anchorPoint, dimAnchorIds, isAnchorable, withoutAnchors } from './anchor';
 import type { Drawing } from './drawing';
 import { type ArcEntity, type DimensionEntity, type EntityId, type LineEntity, dimensionPoints, entityCurve } from './entity';
 import type { Change } from './undo';
@@ -84,10 +84,7 @@ function follow(d: Drawing, a: Anchor | undefined, was: Vec2): { at: Vec2; ancho
   return at ? { at, anchor: a } : { at: was };
 }
 
-const isGeometry = (d: Drawing, id: EntityId): boolean => {
-  const e = d.entities.get(id);
-  return e !== undefined && e.kind !== 'dimension';
-};
+const isGeometry = (d: Drawing, id: EntityId): boolean => isAnchorable(d.entities.get(id));
 
 /** The anchors with `key` set, or removed when `a` is undefined. */
 function setAnchor(anchors: DimAnchors, key: 'p1' | 'p2' | 'vertex', a: Anchor | undefined): DimAnchors {
@@ -269,8 +266,9 @@ export function dimensionFollowUp(d: Drawing, changes: readonly Change[]): Chang
     if (c.op === 'dimOrigin') out.push(...originFollowUp(d, c.before, c.after));
     const e = c.op === 'add' || c.op === 'remove' ? c.entity : c.op === 'modify' ? c.after : undefined;
     if (!e) continue;
-    if (e.kind !== 'dimension') geometry.add(e.id);
-    else if (c.op !== 'remove') dimensions.add(e.id);
+    // A centerline is measured and measured from: its dependents follow it.
+    if (isAnchorable(e)) geometry.add(e.id);
+    if (e.kind === 'dimension' && c.op !== 'remove') dimensions.add(e.id);
   }
   if (geometry.size === 0 && dimensions.size === 0) return out;
   for (const e of d.entities.values()) {

@@ -130,8 +130,15 @@ export class UndoStack {
   commit(tx: Transaction): void {
     if (tx.changes.length === 0) return;
     for (const c of tx.changes) apply(this.drawing, c);
-    const follow = dimensionFollowUp(this.drawing, tx.changes);
-    for (const c of follow) apply(this.drawing, c);
+    // Dimensions follow their geometry; a centerline that moved takes what is anchored to it along, so repeat.
+    const follow: Change[] = [];
+    let step: readonly Change[] = tx.changes;
+    for (let pass = 0; pass < 4; pass++) {
+      step = dimensionFollowUp(this.drawing, step);
+      if (step.length === 0) break;
+      for (const c of step) apply(this.drawing, c);
+      follow.push(...step);
+    }
     this.done.push(follow.length === 0 ? tx : { label: tx.label, changes: [...tx.changes, ...follow] });
     this.undone.length = 0;
   }

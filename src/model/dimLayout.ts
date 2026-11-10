@@ -5,7 +5,7 @@ import { curveTouchesBox } from '../geometry/curve';
 import { distanceToSegment } from '../geometry/distance';
 import { TOL } from '../geometry/tolerance';
 import type { Vec2 } from '../geometry/vec';
-import { type DimFormat, type DimText, formatDimension } from './dimFormat';
+import { type DimFormat, type DimText, formatDimension, roundDecimal } from './dimFormat';
 import { type DimStyle, angleFormat, dimStyleOf, lengthFormat } from './dimStyle';
 import type { Drawing } from './drawing';
 import type { DimensionEntity } from './entity';
@@ -497,7 +497,8 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
   }
   if (isAnnotation(e)) return { text: { main: '' }, ...annotationParts(e, style) };
   const value = measuredValue(e)! * (diameter && e.type === 'ordinate' ? 2 : 1);
-  const text = formatDimension(value, formatFor(e, style, altFactor, diameter));
+  const format = formatFor(e, style, altFactor, diameter);
+  const text = formatDimension(value, e.type === 'ordinate' && roundsToZero(value, format.precision) ? bareZero(format) : format);
   const block = textBlock(text, style.textHeight);
   switch (e.type) {
     case 'linear':
@@ -514,6 +515,11 @@ export function layoutDimension(e: DimensionEntity, style: DimStyle, altFactor: 
       return { value, text, ...ordinateParts(e, style, block) };
   }
 }
+
+const roundsToZero = (value: number, places: number): boolean => /^0(\.0*)?$/.test(roundDecimal(value, places));
+
+/** An ordinate at its origin reads a bare 0 (ASME), whatever the zero rules. */
+const bareZero = (f: DimFormat): DimFormat => ({ ...f, zeros: { ...f.zeros, leading: false, trailing: false } });
 
 /**
  * True for a dimension that reads a diameter in lathe view with Ø on: a

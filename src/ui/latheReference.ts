@@ -47,7 +47,9 @@ export const LATHE_END_VIEW = { x: -0.25, y: 0 };
 
 /** What each dimension reads, in the order they are made. */
 export const LATHE_TEXTS = [
-  '.000', // ordinates from the front face
+  '', // center mark on the end view
+  '', // the cross hole's centerline
+  '0', // ordinates from the front face (the origin reads a bare 0)
   '.150',
   '.275',
   '.400',
@@ -58,8 +60,6 @@ export const LATHE_TEXTS = [
   'Ø.125',
   '.005 X 45°', // chamfer note
   'Ø.030 THRU', // cross hole note
-  '', // center mark on the end view
-  '', // the cross hole's centerline
 ] as const;
 
 /** Builds the lathe reference part into `d` (an empty inch drawing). */
@@ -116,19 +116,26 @@ export function loadLatheReference(d: Drawing): void {
   runner.send({ kind: 'value', value: SHAFT.backTop.y, at: LATHE_END_VIEW });
   const od = lastId();
 
+  // A center mark on the end view, and the hole's centerline, which the
+  // hole's ordinate then snaps to.
+  use(createCenterMarkTool());
+  pick(od, { x: LATHE_END_VIEW.x + SHAFT.backTop.y, y: 0 });
+  use(createCenterMarkTool());
+  runner.send({ kind: 'option', key: 'method:lines' });
+  pick(holeSides[0]!, { x: HOLE.z - HOLE.radius, y: 0.03 });
+  pick(holeSides[1]!, { x: HOLE.z + HOLE.radius, y: 0.03 });
+
   // At 10:1 the text is .012 here; ordinates end .05 above the part, a little
   // ragged as clicked, and the common baseline lines them up.
   use(createOrdinateDimTool());
   const above = SHAFT.backTop.y + 0.05;
-  const ordinate = (feature: Vec2, dy: number, anchored = true): void => {
-    if (anchored) snapClick(feature);
-    else click(feature);
+  const ordinate = (feature: Vec2, dy: number): void => {
+    snapClick(feature);
     click({ x: feature.x, y: above + dy });
   };
   ordinate(SHAFT.frontTop, 0);
   ordinate(SHAFT.shoulderTop, 0.004);
-  // The hole's center is on its centerline, an annotation, so nothing snaps there.
-  ordinate({ x: HOLE.z, y: SHAFT.shoulderTop.y }, -0.003, false);
+  ordinate({ x: HOLE.z, y: SHAFT.shoulderTop.y }, -0.003); // the centerline's end
   ordinate(SHAFT.grooveStart, 0.002);
   ordinate(SHAFT.grooveEnd, -0.002); // .025 from .400: the text moves clear and the leader jogs
   ordinate(SHAFT.backTop, 0.001);
@@ -153,11 +160,5 @@ export function loadLatheReference(d: Drawing): void {
   click({ x: 0.33, y: -0.04 });
   runner.send({ kind: 'text', text: '%%c.030 THRU' });
 
-  use(createCenterMarkTool());
-  pick(od, { x: LATHE_END_VIEW.x + SHAFT.backTop.y, y: 0 });
-  use(createCenterMarkTool());
-  runner.send({ kind: 'option', key: 'method:lines' });
-  pick(holeSides[0]!, { x: HOLE.z - HOLE.radius, y: 0.03 });
-  pick(holeSides[1]!, { x: HOLE.z + HOLE.radius, y: 0.03 });
   runner.stop();
 }

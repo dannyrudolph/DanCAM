@@ -448,10 +448,15 @@ deferred (ray to Phase 2, autosave to Phase 6).
    dimension's lines, two geometry-only edits (back face +.050 → .650;
    groove → Ø.090) re-measured with one undo, file round-trip. Browser
    test reads each text from the properties panel.
-   Found while building it (for the user): the origin ordinate reads
-   `.000` (ASME shows `0`); the hole center's ordinate can't be anchored,
-   since centerlines and center marks aren't snappable; a narrow groove's
-   symmetric Ø text sits inside the part, wider than the groove.
+   User feedback (2026-11-09): the origin ordinate reads a bare `0` (done:
+   any ordinate that rounds to zero, in `dimLayout`); centerlines take
+   snaps (done: `entity.snapCurve`, End/Mid/Int/Nearest at its stored
+   ends, not the drawn extension; anchors may name a centerline,
+   `anchor.isAnchorable`, also in the file check; `UndoStack.commit`
+   repeats the follow-up so what is anchored to a centerline follows it
+   as it follows its lines, one undo step). The hole's ordinate is now
+   anchored to its centerline. Open: the narrow groove's Ø text sits
+   inside the part, wider than the groove; the user will look at it.
 
 Decisions (user, 2026-11-09): no reference part needed yet (feedback as
 we go); lathe mode supplies the centerline at Y = 0; symmetric diameter

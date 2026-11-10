@@ -8,7 +8,7 @@ import { dimensionLayout } from '../model/dimLayout';
 import { createDrawing, type Drawing } from '../model/drawing';
 import { type DimensionEntity, entityCurve } from '../model/entity';
 import { UndoStack } from '../model/undo';
-import { LATHE_TEXTS, SHAFT, loadLatheReference } from './latheReference';
+import { HOLE, LATHE_TEXTS, SHAFT, loadLatheReference } from './latheReference';
 
 const dims = (d: Drawing): DimensionEntity[] => [...d.entities.values()].filter((e): e is DimensionEntity => e.kind === 'dimension');
 const texts = (d: Drawing): string[] => dims(d).map((e) => flatText(dimensionLayout(d, e).text));
@@ -42,14 +42,25 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
 
   it('Z by ordinates from the front face, Ø by symmetric diameters, notes, a center mark and a centerline', () => {
     expect(texts(d)).toEqual([...LATHE_TEXTS]);
-    expect(dims(d).map((e) => e.type)).toEqual([...Array(6).fill('ordinate'), 'symmetric', 'symmetric', 'symmetric', 'leader', 'leader', 'centerMark', 'centerline']);
+    expect(dims(d).map((e) => e.type)).toEqual(['centerMark', 'centerline', ...Array(6).fill('ordinate'), 'symmetric', 'symmetric', 'symmetric', 'leader', 'leader']);
     expect(d.lathe && d.diameterMode).toBe(true);
     expect(d.sheetScale).toBe(10);
   });
 
-  it('everything measured off a snapped feature is anchored to it; only the hole center, on an annotation, is not', () => {
-    const anchored = dims(d).filter((e) => e.type !== 'leader').map((e) => e.anchors !== undefined);
-    expect(anchored).toEqual([true, true, false, true, true, true, true, true, true, true, true]);
+  it('everything measured is anchored, the hole\'s ordinate to the end of its centerline', () => {
+    expect(dims(d).filter((e) => e.type !== 'leader').every((e) => e.anchors !== undefined)).toBe(true);
+    const [, centerline, , , hole] = dims(d);
+    expect((hole as Ord).anchors?.p1).toEqual({ id: centerline!.id, feature: 'end' });
+  });
+
+  it('the cross hole moved .025 toward the back: its centerline follows the hidden lines and its ordinate follows the centerline, in one undo step', () => {
+    const e = lathePart();
+    const undo = new UndoStack(e);
+    const sides = [HOLE.z - HOLE.radius, HOLE.z + HOLE.radius].flatMap((z) => [{ x: z, y: 0 }, { x: z, y: SHAFT.shoulderTop.y }]);
+    moveEnds(e, undo, sides, { x: 0.025, y: 0 });
+    expect(texts(e)[4]).toBe('.300');
+    undo.undo();
+    expect(texts(e)).toEqual([...LATHE_TEXTS]);
   });
 
   it('the ordinates sit on one baseline; the .425 text moved clear of .400 and its leader jogs', () => {
@@ -87,8 +98,8 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
     const e = lathePart();
     const undo = new UndoStack(e);
     moveEnds(e, undo, [SHAFT.backTop, SHAFT.back], { x: 0.05, y: 0 });
-    expect(texts(e).slice(0, 9)).toEqual(['.000', '.150', '.275', '.400', '.425', '.650', 'Ø.080', 'Ø.100', 'Ø.125']);
-    const o650 = dims(e)[5] as Ord;
+    expect(texts(e).slice(2, 11)).toEqual(['0', '.150', '.275', '.400', '.425', '.650', 'Ø.080', 'Ø.100', 'Ø.125']);
+    const o650 = dims(e)[7] as Ord;
     expect(o650.p1).toEqual({ x: 0.65, y: SHAFT.backTop.y });
     expect(undo.undoLabel).toBe('Move ends');
     undo.undo();
@@ -99,7 +110,7 @@ describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () => {
     const e = lathePart();
     const undo = new UndoStack(e);
     moveEnds(e, undo, [SHAFT.grooveBottom, SHAFT.grooveBottomEnd], { x: 0, y: -0.005 });
-    expect(texts(e).slice(3, 9)).toEqual(['.400', '.425', '.600', 'Ø.080', 'Ø.090', 'Ø.125']);
+    expect(texts(e).slice(5, 11)).toEqual(['.400', '.425', '.600', 'Ø.080', 'Ø.090', 'Ø.125']);
   });
 
   it('saved and reopened, it reads the same, lathe and Ø on', () => {

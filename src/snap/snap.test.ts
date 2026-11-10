@@ -213,7 +213,17 @@ describe('findSnap deferred tangent and perpendicular', () => {
 });
 
 describe('findSnap and dimensions', () => {
-  it('never snaps to a dimension: it is annotation, not geometry', () => {
+  it('a centerline takes End, Mid and Int snaps at its own ends, anchored to it; the extension drawn past them does not', () => {
+    const d = drawing(line({ x: -1, y: 0.5 }, { x: 3, y: 0.5 })); // across its middle, its own middle elsewhere
+    d.entities.set('c', { kind: 'dimension', id: 'c', layer: '0', dimStyle: 'INCH-3PL', type: 'centerline', p1: { x: 0, y: 0 }, p2: { x: 0, y: 1 }, at: { x: 0, y: 0.5 }, anchors: { lines: ['a', 'b'] } });
+    expect(findSnap(d, { x: 0.01, y: 1.02 }, AP, DEFAULTS)).toEqual({ kind: 'end', at: { x: 0, y: 1 }, on: { id: 'c', feature: 'end' } });
+    expect(findSnap(d, { x: 0.01, y: 0.25 }, AP, only('mid'))).toBeUndefined(); // its middle is at .5
+    expect(findSnap(d, { x: 0.01, y: 0.52 }, AP, only('mid'))).toEqual({ kind: 'mid', at: { x: 0, y: 0.5 }, on: { id: 'c', feature: 'mid' } });
+    expect(findSnap(d, { x: 0.03, y: 0.52 }, AP, only('int'))?.at).toEqual({ x: 0, y: 0.5 });
+    expect(findSnap(d, { x: 0, y: 1.08 }, 0.05, only('end'))).toBeUndefined();
+  });
+
+  it('never snaps to other dimensions: they are annotation, not geometry', () => {
     const d = createDrawing('in');
     d.entities.set('d', { kind: 'dimension', id: 'd', layer: '0', dimStyle: 'INCH-3PL', type: 'linear', dir: { x: 1, y: 0 }, p1: { x: 0, y: 0 }, p2: { x: 2, y: 0 }, at: { x: 1, y: 0.5 } });
     expect(findSnap(d, { x: 0, y: 0.5 }, AP, ALL)).toBeUndefined(); // an arrow tip and the end of the dimension line

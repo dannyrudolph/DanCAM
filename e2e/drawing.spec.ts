@@ -1703,7 +1703,7 @@ test.describe('Phase 5 done-when: a lathe part dimensioned the lathe way', () =>
     // Extents and text centers from the layout (src/ui/latheReference.test.ts builds the same drawing).
     const at = await extentsMapper(page, { minX: -0.325, maxX: 0.6827632311977716, minY: -0.075, maxY: 0.13075 });
     const texts: [string, number, number][] = [
-      ['.000', 0, 0.1247],
+      ['0', 0, 0.1247],
       ['.150', 0.15, 0.1247],
       ['.275', 0.275, 0.1247],
       ['.400', 0.4, 0.1247],
