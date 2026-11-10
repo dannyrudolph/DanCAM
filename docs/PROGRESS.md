@@ -475,6 +475,11 @@ is on hold while the user tweaks the GUI.
   the checklist too, so hidden bars can come back). Saved per browser
   (`dancam.toolbars`), Inquiry hidden by default; hidden tools keep their
   shortcuts.
+- **Snaps toolbar (done).** A sixth bar, one button per snap kind with
+  its canvas marker as the icon: pressed (inset, blue) when it runs,
+  raised when not. Replaces the status bar's OSNAP button, its ▾ menu and
+  the global on/off (F3 is gone with it). Snap once… stays on the
+  right-click menu. Snap kinds are still not saved between sessions.
 - **Style menu (done).** Off the top bar, into the options bar while a
   Draw tool runs (user's choice).
 - **Colors (done).** Light theme after dannysdowelfactory.com: navy

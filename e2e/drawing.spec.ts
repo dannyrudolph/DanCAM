@@ -213,7 +213,7 @@ test.describe('toolbars', () => {
     await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
     await expect(page.getByTestId('toolbar-modify')).toBeVisible();
     await page.getByTestId('toolbar-grip-modify').click({ button: 'right' });
-    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar']);
+    await expect(page.locator('.context-menu button.checkable')).toHaveText(['Draw toolbar', 'Edit toolbar', 'Modify toolbar', 'Dimension toolbar', 'Inquiry toolbar', 'Snaps toolbar']);
     await expect(page.locator('.context-menu button', { hasText: 'Inquiry toolbar' })).toHaveAttribute('aria-checked', 'false');
     await page.locator('.context-menu button.checkable', { hasText: 'Modify toolbar' }).click();
     await expect(page.getByTestId('toolbar-modify')).toBeHidden();
@@ -226,11 +226,11 @@ test.describe('toolbars', () => {
     await expect(page.getByTestId('toolbar-modify')).toBeHidden();
     await expect(page.getByTestId('toolbar-inquiry')).toBeVisible();
     // Every bar hidden: the row's own right-click still brings them back.
-    for (const bar of ['Draw', 'Edit', 'Dimension', 'Inquiry']) await setToolbar(page, bar);
+    for (const bar of ['Draw', 'Edit', 'Dimension', 'Inquiry', 'Snaps']) await setToolbar(page, bar);
     await expect(page.locator('.toolbar-group:visible')).toHaveCount(0);
     await page.locator('#toolbar').click({ button: 'right', position: { x: 2, y: 2 } });
     await page.locator('.context-menu button', { hasText: 'Reset all toolbars' }).click();
-    await expect(page.locator('.toolbar-group:visible')).toHaveCount(4);
+    await expect(page.locator('.toolbar-group:visible')).toHaveCount(5);
   });
 
   test('a button hidden by right-click comes back with its toolbar\'s reset, and stays hidden across a reload', async ({ page }) => {
@@ -627,7 +627,7 @@ test('Shift+X starts the Ray tool and X still starts Xline', async ({ page }) =>
   await expect(page.getByTestId('tool-xline')).toHaveClass(/active/);
 });
 
-test('a click near a midpoint snaps to it exactly; F3 turns snaps off', async ({ page }) => {
+test('a click near a midpoint snaps to it exactly; the Snaps toolbar turns kinds off', async ({ page }) => {
   await page.keyboard.press('l');
   await typeValues(page, '0', '0');
   await typeValues(page, '1', '0');
@@ -651,10 +651,29 @@ test('a click near a midpoint snaps to it exactly; F3 turns snaps off', async ({
   await page.mouse.move(c.x + 4, c.y + 3);
   // the new line starts there too, and Endpoint wins a tie with Midpoint
   await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
-  await page.keyboard.press('F3');
-  await expect(page.getByTestId('osnap')).not.toHaveClass(/\bon\b/);
+  await page.getByTestId('snap-end').click();
+  await expect(page.getByTestId('snap-end')).toHaveAttribute('aria-pressed', 'false');
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'mid'); // Endpoint off: Midpoint now
+  await page.getByTestId('snap-mid').click();
+  await page.mouse.move(c.x + 4, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'int'); // where the two lines meet
+  await page.getByTestId('snap-int').click();
   await page.mouse.move(c.x + 5, c.y + 3);
   await expect(page.locator('#canvas')).toHaveAttribute('data-snap', '');
+  await page.getByTestId('snap-end').click(); // back on: the line tool still waiting, the snap returns
+  await page.mouse.move(c.x + 5, c.y + 3);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+});
+
+test('the Snaps toolbar shows the running snaps pressed, the others raised; there is no OSNAP button', async ({ page }) => {
+  const pressed = async (kind: string) => page.getByTestId(`snap-${kind}`).getAttribute('aria-pressed');
+  for (const k of ['end', 'mid', 'cen', 'quad', 'int', 'node']) expect(await pressed(k), k).toBe('true');
+  for (const k of ['perp', 'tan', 'nea']) expect(await pressed(k), k).toBe('false');
+  await page.getByTestId('snap-tan').click();
+  expect(await pressed('tan')).toBe('true');
+  await expect(page.getByTestId('osnap')).toHaveCount(0);
+  await expect(page.getByTestId('snap-types')).toHaveCount(0);
 });
 
 test('a one-time Endpoint snap from the right-click menu ignores the midpoint under the cursor', async ({ page }) => {

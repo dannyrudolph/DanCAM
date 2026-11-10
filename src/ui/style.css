@@ -191,6 +191,21 @@ input {
   border-color: var(--border);
 }
 
+/* Snaps: pressed in when on, raised when off. */
+.snap-button {
+  border-color: var(--border);
+  background: var(--bg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+  color: var(--muted);
+}
+
+.snap-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
+  color: var(--brand);
+}
+
 .tool-button.active {
   background: var(--accent-soft);
   border-color: var(--accent);

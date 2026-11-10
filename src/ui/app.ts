@@ -36,9 +36,9 @@ import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
 import { DEFAULT_SNAP_KINDS, NEEDS_BASE, SNAP_KINDS, SNAP_LABEL, type Snap, type SnapKind, findSnap } from '../snap/snap';
 import { ContextMenu, type MenuItem } from './contextMenu';
-import { type ToolbarGroup, Toolbars } from './toolbars';
+import { type ToolbarGroup, type ToolbarItem, Toolbars } from './toolbars';
 import { DrawingFile } from './fileAccess';
-import { ICONS } from './icons';
+import { ICONS, SNAP_ICONS } from './icons';
 import { type EnterAction, InputBoxes } from './inputBoxes';
 import { type ScrollMode, bindCanvasInput } from './input';
 import { InquiryPanel } from './inquiryPanel';
@@ -71,12 +71,14 @@ export const MODIFY_TOOLS: readonly ToolDef[] = [trimTool, extendTool, createFil
 export const DIMENSION_TOOLS: readonly ToolDef[] = [createLinearDimTool(), createAlignedDimTool(), createRadiusDimTool(), createDiameterDimTool(), createAngularDimTool(), createSymmetricDimTool(), createBaselineDimTool(), createContinueDimTool(), createOrdinateDimTool(), alignOrdinatesTool, createCenterMarkTool(), createLeaderTool()];
 export const INQUIRY_TOOLS: readonly ToolDef[] = [distTool, idTool, listTool, angleTool];
 export const TOOLS: readonly ToolDef[] = [...DRAW_TOOLS, ...EDIT_TOOLS, ...MODIFY_TOOLS, ...DIMENSION_TOOLS, ...INQUIRY_TOOLS];
+const SNAP_ITEM_KIND = new Map<string, SnapKind>(SNAP_KINDS.map((k) => [`snap-${k}`, k]));
 const TOOLBARS: readonly ToolbarGroup[] = [
-  { id: 'draw', label: 'Draw', tools: DRAW_TOOLS },
-  { id: 'edit', label: 'Edit', tools: EDIT_TOOLS },
-  { id: 'modify', label: 'Modify', tools: MODIFY_TOOLS },
-  { id: 'dimension', label: 'Dimension', tools: DIMENSION_TOOLS },
-  { id: 'inquiry', label: 'Inquiry', tools: INQUIRY_TOOLS },
+  { id: 'draw', label: 'Draw', items: DRAW_TOOLS },
+  { id: 'edit', label: 'Edit', items: EDIT_TOOLS },
+  { id: 'modify', label: 'Modify', items: MODIFY_TOOLS },
+  { id: 'dimension', label: 'Dimension', items: DIMENSION_TOOLS },
+  { id: 'inquiry', label: 'Inquiry', items: INQUIRY_TOOLS },
+  { id: 'snaps', label: 'Snaps', items: SNAP_KINDS.map((k) => ({ id: `snap-${k}`, label: `${SNAP_LABEL[k]} snap` })) },
 ];
 
 /** Keys that start typing a value into the input boxes. */
@@ -189,6 +191,7 @@ export class App {
   private readonly menu = new ContextMenu(document.body);
   private readonly optionsBar = el('options');
   private readonly toolButtons = new Map<string, HTMLButtonElement>();
+  private readonly snapButtons = new Map<SnapKind, HTMLButtonElement>();
   private selectButton: HTMLButtonElement | undefined;
   private readonly unitsButton = document.createElement('button');
   private readonly sidePanelButton = document.createElement('button');
@@ -198,7 +201,6 @@ export class App {
     polar: true,
     polarIncrementDeg: 15,
     precision: DEFAULT_PRECISION,
-    osnap: true,
     snapKinds: new Set(DEFAULT_SNAP_KINDS),
   };
   /** A snap picked from the right-click menu for the next point only; it replaces the running snaps. */
@@ -240,7 +242,6 @@ export class App {
         saveScrollMode(this.settings.scrollMode);
         this.refresh();
       },
-      (anchor) => this.openSnapMenu(anchor),
       (scale) => this.setSheetScale(scale),
       (lathe, diameter) => {
         // Settings like the current layer: saved with the drawing, not undoable.
@@ -564,31 +565,11 @@ export class App {
   private currentSnap(): Snap | undefined {
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value') || !this.cursorScreen) return undefined;
-    const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.osnap ? this.settings.snapKinds : undefined;
-    if (!kinds) return undefined;
+    const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.snapKinds;
+    if (kinds.size === 0) return undefined;
     // Typed values pin the point, so a sliding (deferred) end can't apply.
     const deferOk = req.kind === 'point' && req.acceptsDeferred === true && !this.boxes.hasLocks;
     return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base, deferOk);
-  }
-
-  /** The status bar's snap list; stays open while kinds are switched on and off. */
-  private openSnapMenu(anchor: DOMRect): void {
-    const kinds = this.settings.snapKinds;
-    this.menu.open(
-      anchor.left,
-      anchor.top,
-      SNAP_KINDS.map((k) => ({
-        label: SNAP_LABEL[k],
-        enabled: true,
-        checked: kinds.has(k),
-        run: () => {
-          if (kinds.has(k)) kinds.delete(k);
-          else kinds.add(k);
-          this.refresh();
-          this.openSnapMenu(anchor);
-        },
-      })),
-    );
   }
 
   /**
@@ -643,6 +624,7 @@ export class App {
     this.status.setPrompt(req?.prompt ?? 'Pick an object to see its properties, or choose a tool');
     this.status.refreshToggles();
     for (const [id, b] of this.toolButtons) b.classList.toggle('active', this.runner.tool?.id === id);
+    for (const [kind, b] of this.snapButtons) b.setAttribute('aria-pressed', String(this.settings.snapKinds.has(kind)));
     if (this.runner.tool?.id !== 'grip') this.hotGrip = undefined;
     const selecting = !this.runner.tool || req?.kind === 'selection';
     this.selectButton?.classList.toggle('active', !this.runner.tool && !this.panMode);
@@ -778,7 +760,15 @@ export class App {
     const row = el('toolbar');
     this.selectButton = button(ICONS.select, 'Select (Esc): pick objects, or drag a window', () => this.selectMode(), 'tool-select');
     row.append(this.selectButton);
-    const makeButton = (def: ToolDef): HTMLButtonElement => {
+    const makeButton = (item: ToolbarItem): HTMLButtonElement => {
+      const kind = SNAP_ITEM_KIND.get(item.id);
+      if (kind) {
+        const b = button(SNAP_ICONS[kind], `${SNAP_LABEL[kind]} snap: on or off`, () => this.toggleSnap(kind), `snap-${kind}`);
+        b.classList.add('snap-button');
+        this.snapButtons.set(kind, b);
+        return b;
+      }
+      const def = TOOLS.find((t) => t.id === item.id)!;
       const icon = ICONS[def.id as keyof typeof ICONS];
       const keys = def.id === 'erase' ? 'E or Delete' : shortcutLabel(def.shortcut);
       const tip = keys ? `${def.label} (${keys})` : def.label;
@@ -796,6 +786,14 @@ export class App {
     u.textContent = this.drawing.units;
     u.addEventListener('click', () => this.openUnitsMenu(u.getBoundingClientRect()));
     row.append(u);
+  }
+
+  /** A Snaps toolbar button: that snap kind on or off. */
+  private toggleSnap(kind: SnapKind): void {
+    const kinds = this.settings.snapKinds;
+    if (kinds.has(kind)) kinds.delete(kind);
+    else kinds.add(kind);
+    this.refresh();
   }
 
   private setSidePanel(shown: boolean): void {
@@ -1001,10 +999,9 @@ export class App {
         this.spaceHeld = true;
         this.updateCanvasCursor(false);
       }
-    } else if (e.key === 'F3' || e.key === 'F8' || e.key === 'F10') {
+    } else if (e.key === 'F8' || e.key === 'F10') {
       e.preventDefault();
-      if (e.key === 'F3') this.settings.osnap = !this.settings.osnap;
-      else if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
+      if (e.key === 'F8') this.settings.ortho = !this.settings.ortho;
       else this.settings.polar = !this.settings.polar;
       this.refresh();
     } else if (e.key === 'Escape') {

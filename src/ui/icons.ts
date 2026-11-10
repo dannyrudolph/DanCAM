@@ -56,3 +56,16 @@ export const ICONS = {
   pan: svg('<path d="M10 2 V18 M2 10 H18"/><path d="M7 5 L10 2 L13 5 M7 15 L10 18 L13 15 M5 7 L2 10 L5 13 M15 7 L18 10 L15 13"/>'),
   extents: svg('<path d="M3 7 V3 H7 M13 3 H17 V7 M17 13 V17 H13 M7 17 H3 V13"/><rect x="7" y="7" width="6" height="6"/>'),
 } as const;
+
+/** The Snaps toolbar: each kind's marker, as the canvas draws it at a snap. */
+export const SNAP_ICONS = {
+  end: svg('<path d="M2 15 L10 7" stroke-width="1"/><rect x="6" y="3" width="8" height="8"/>'),
+  mid: svg('<path d="M2 14 H18" stroke-width="1"/><path d="M10 5 L14.5 14 H5.5 Z"/>'),
+  cen: svg('<circle cx="10" cy="10" r="7" stroke-width="1"/><circle cx="10" cy="10" r="3.5"/>'),
+  quad: svg('<path d="M3 17 A14 14 0 0 1 17 3" stroke-width="1"/><path d="M7.1 3.1 L11.1 7.1 L7.1 11.1 L3.1 7.1 Z"/>'),
+  int: svg('<path d="M2 16 L18 4 M2 4 L18 16" stroke-width="1"/><path d="M6.5 6.5 L13.5 13.5 M13.5 6.5 L6.5 13.5"/>'),
+  perp: svg('<path d="M2 16 H18" stroke-width="1"/><path d="M6 4 V16 M6 11 H11 V16"/>'),
+  tan: svg('<path d="M2 3 H18" stroke-width="1"/><circle cx="10" cy="8" r="5"/><path d="M5 3 H15"/>'),
+  nea: svg('<path d="M2 15 L18 9" stroke-width="1"/><path d="M6 8 H14 L6 16 H14 Z"/>'),
+  node: svg('<circle cx="10" cy="10" r="5"/><path d="M6.5 6.5 L13.5 13.5 M13.5 6.5 L6.5 13.5"/>'),
+} as const;

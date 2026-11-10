@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolDef } from '../commands/tool';
 import { DEFAULT_TOOLBAR_PREFS, hideButton, parseToolbarPrefs, resetBar, setBarShown } from './toolbars';
 
-const tool = (id: string) => ({ id }) as ToolDef;
-const modify = { id: 'modify', label: 'Modify', tools: [tool('trim'), tool('extend')] };
+const modify = { id: 'modify', label: 'Modify', items: [{ id: 'trim', label: 'Trim' }, { id: 'extend', label: 'Extend' }] };
 
 describe('toolbar settings', () => {
   it('a fresh or unreadable setting gives the defaults: everything shown but Inquiry', () => {

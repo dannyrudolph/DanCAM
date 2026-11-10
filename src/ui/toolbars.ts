@@ -1,8 +1,10 @@
-import type { ToolDef } from '../commands/tool';
 import type { ContextMenu, MenuItem } from './contextMenu';
 
-/** One toolbar: a named group of tool buttons. */
-export type ToolbarGroup = { readonly id: string; readonly label: string; readonly tools: readonly ToolDef[] };
+/** A button on a toolbar: a tool, or a toggle such as a snap kind. */
+export type ToolbarItem = { readonly id: string; readonly label: string };
+
+/** One toolbar: a named group of buttons. */
+export type ToolbarGroup = { readonly id: string; readonly label: string; readonly items: readonly ToolbarItem[] };
 
 /**
  * Which toolbars and buttons the user has hidden. A per-browser
@@ -35,7 +37,7 @@ export const hideButton = (p: ToolbarPrefs, toolId: string): ToolbarPrefs =>
 
 /** Every button of `group` shown again. */
 export const resetBar = (p: ToolbarPrefs, group: ToolbarGroup): ToolbarPrefs => {
-  const ids = new Set(group.tools.map((t) => t.id));
+  const ids = new Set(group.items.map((t) => t.id));
   return { ...p, hiddenButtons: p.hiddenButtons.filter((id) => !ids.has(id)) };
 };
 
@@ -74,7 +76,7 @@ export class Toolbars {
   constructor(
     row: HTMLElement,
     private readonly groups: readonly ToolbarGroup[],
-    makeButton: (def: ToolDef) => HTMLButtonElement,
+    makeButton: (item: ToolbarItem) => HTMLButtonElement,
     private readonly menu: ContextMenu,
   ) {
     for (const g of groups) {
@@ -87,10 +89,10 @@ export class Toolbars {
       grip.dataset.testid = `toolbar-grip-${g.id}`;
       grip.addEventListener('contextmenu', (e) => this.openMenu(e, [this.resetItem(g)]));
       bar.append(grip);
-      for (const def of g.tools) {
-        const b = makeButton(def);
-        b.addEventListener('contextmenu', (e) => this.openMenu(e, [{ label: `Hide ${def.label}`, enabled: true, run: () => this.update(hideButton(this.prefs, def.id)) }], false));
-        this.buttons.set(def.id, b);
+      for (const item of g.items) {
+        const b = makeButton(item);
+        b.addEventListener('contextmenu', (e) => this.openMenu(e, [{ label: `Hide ${item.label}`, enabled: true, run: () => this.update(hideButton(this.prefs, item.id)) }], false));
+        this.buttons.set(item.id, b);
         bar.append(b);
       }
       this.bars.set(g.id, bar);
@@ -103,7 +105,7 @@ export class Toolbars {
   }
 
   private resetItem(g: ToolbarGroup): MenuItem {
-    const hidden = g.tools.some((t) => this.prefs.hiddenButtons.includes(t.id));
+    const hidden = g.items.some((t) => this.prefs.hiddenButtons.includes(t.id));
     return { label: `Reset ${g.label} toolbar`, enabled: hidden, run: () => this.update(resetBar(this.prefs, g)) };
   }
 
