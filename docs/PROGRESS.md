@@ -761,6 +761,12 @@ Autodesk export: cross hole, slotted head, D-flat tang) is a fixture.
    both its faces (`faceSolid.nearestOn`, in turn) before the visibility
    test. Shaft as 3 views: 129 curves. Tests: nearestOn on each surface;
    the slot wall's curve at the round all visible.
+   Then (user: "any line that is an outside edge should only use the
+   visible style"): a smooth edge is tangent only where its faces are seen
+   at an angle; where they are seen edge-on (a shoulder or end face beside
+   its round) it is the outline and visible. Shaft as 3 views: 119 curves.
+   Tests: the shoulder one visible line; the end face visible in front and
+   top; the round's edge across the head stays tangent.
 8. Done-when: shaft.step with its cross hole, slot and tang flat in every
    view, checked with List and dimensions.
 

@@ -299,9 +299,23 @@ function seen(d: Draw, v: View, ctx: Ctx): { piece: Piece3; style: Style }[] {
   // meeting its round, 0.0006 inside), where a ray leaving at a slant would find the edge's own face in the way.
   const exact = d.piece.curve.kind === 'spline' ? onFaces(d.on) : (q: Vec3): Vec3 => q;
   const hidden = (q: Vec3): boolean => blocked(exact(q), v.e, ctx);
-  const shown = clip(d.piece, (q) => !hidden(q), ctx).map((piece) => ({ piece, style: d.style as Style }));
+  const visible = clip(d.piece, (q) => !hidden(q), ctx);
   const behind = clip(d.piece, hidden, ctx).map((piece) => ({ piece, style: 'hidden' as Style }));
+  if (d.style !== 'tangent') return [...visible.map((piece) => ({ piece, style: 'visible' as Style })), ...behind];
+  // A smooth edge where its faces are seen edge-on (a shoulder or end face beside its round) is the part's outline: visible.
+  const outline = onOutline(d.on, v.e);
+  const shown = visible.flatMap((p) => [
+    ...clip(p, outline, ctx).map((piece) => ({ piece, style: 'visible' as Style })),
+    ...clip(p, (q) => !outline(q), ctx).map((piece) => ({ piece, style: 'tangent' as Style })),
+  ]);
   return [...shown, ...behind];
+}
+
+/** Whether, at a point of a smooth edge, its faces (which share a normal there) are seen edge-on from `e`. */
+function onOutline(on: readonly StepSurface[], e: Vec3): (q: Vec3) => boolean {
+  const s = on.find((x): x is Exclude<StepSurface, { kind: 'other' }> => x.kind !== 'other');
+  if (!s) return () => false;
+  return (q) => Math.abs(dot3(normalAt(s, q), e)) <= PARALLEL;
 }
 
 /**

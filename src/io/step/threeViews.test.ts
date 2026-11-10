@@ -76,7 +76,7 @@ describe('three views', () => {
     expect(flat?.style).toBeUndefined();
   });
 
-  it('a fillet\'s rim is its tangent edge with the flat face, drawn once: whole pieces, not rounding\'s fragments', () => {
+  it('a fillet\'s rim is its edge with the flat face, drawn once: whole pieces, not rounding\'s fragments', () => {
     const v = views(shaft);
     const [, , right] = curvesBox(v.front);
     // The R0.15 fillet where the Ø3.97 meets the face 3.76 from the head end, seen edge-on: the tangent edge in two pieces
@@ -85,12 +85,21 @@ describe('three views', () => {
       .filter((l) => near(l.start.x, l.end.x) && near(l.start.x - right, -3.76))
       .map((l) => [Math.round(Math.min(l.start.y, l.end.y) * 1e4) / 1e4, Math.round(Math.max(l.start.y, l.end.y) * 1e4) / 1e4, l.style ?? 'visible'])
       .sort((p, q) => (p[0] as number) - (q[0] as number));
-    expect(at).toEqual([
-      [-1.985, -0.925, 'tangent'],
-      [-0.925, 0.925, 'visible'],
-      [0.925, 1.1, 'tangent'],
-      [1.1, 1.9411, 'visible'],
-    ]);
+    // It is the shoulder seen edge-on, the part's outline, so visible: one line from the round to the slot's wall.
+    expect(at).toEqual([[-1.985, 1.9411, 'visible']]);
+  });
+
+  it('an outside edge is visible even where it is also a smooth edge: the end face beside the tang, seen edge-on', () => {
+    const v = views(shaft);
+    const [, , right] = curvesBox(v.front);
+    for (const view of [v.front, v.top]) {
+      const endFace = lines(view).filter((l) => near(l.start.x, l.end.x) && near(l.start.x - right, -0.82));
+      expect(endFace.length).toBeGreaterThan(0);
+      expect(endFace.filter((l) => l.style !== undefined)).toEqual([]);
+    }
+    // A smooth edge across a face seen at an angle stays tangent: where the head's round meets its diameter.
+    const across = lines(v.front).filter((l) => near(l.start.x, l.end.x) && near(l.start.x - right, -1.32));
+    expect(across.map((l) => l.style)).toEqual(['tangent']);
   });
 
   it('the head\'s rounds are quarter arcs, visible: no full circles, none in the tangent style (a full circle\'s two ends are one point)', () => {
