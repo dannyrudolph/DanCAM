@@ -209,6 +209,12 @@ async function setToolbar(page: Page, label: string): Promise<void> {
 }
 
 test.describe('toolbars', () => {
+  test('the header carries the name, before the file buttons', async ({ page }) => {
+    await expect(page.getByTestId('brand')).toHaveText('DDF CAD LAB');
+    const brand = (await page.getByTestId('brand').boundingBox())!;
+    expect(brand.x + brand.width).toBeLessThan((await page.getByTestId('new').boundingBox())!.x);
+  });
+
   test('Inquiry starts hidden; a toolbar is hidden and shown from the grip menu, and that is remembered', async ({ page }) => {
     await expect(page.getByTestId('toolbar-inquiry')).toBeHidden();
     await expect(page.getByTestId('toolbar-modify')).toBeVisible();

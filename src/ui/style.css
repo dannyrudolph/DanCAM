@@ -65,6 +65,16 @@ input {
   color: #fff;
 }
 
+.brand {
+  margin: 0 10px 0 4px;
+  color: var(--cta);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  user-select: none;
+}
+
 #topbar .tool-button:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.3);

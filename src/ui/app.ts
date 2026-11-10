@@ -824,7 +824,12 @@ export class App {
       },
       'new',
     );
+    const brand = document.createElement('span');
+    brand.className = 'brand';
+    brand.textContent = 'DDF CAD LAB';
+    brand.dataset.testid = 'brand';
     bar.append(
+      brand,
       newButton,
       button(ICONS.open, 'Open (Ctrl+O)', () => void this.openDrawing(), 'open'),
       button(ICONS.save, 'Save (Ctrl+S)', () => void this.saveDrawing(false), 'save'),
