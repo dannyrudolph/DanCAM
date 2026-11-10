@@ -435,6 +435,23 @@ deferred (ray to Phase 2, autosave to Phase 6).
    (a second mark on one refused) or Two lines; sticky; one undo step
    each. They follow their geometry and are deleted with it.
 7. Done-when: a real lathe part, with the user's feedback along the way.
+   **(built, awaiting the user's feedback)** `ui/latheReference`
+   (`/?lathe`): a turned pin, upper half on the lathe axis, lathe + Ø on,
+   10:1. .005 × 45° chamfer to Ø.080, shoulder at Z .150 to Ø.125, Ø.030
+   cross hole (hidden) at Z .275, .025 groove to Ø.100 at Z .400, back
+   face Z .600, end view with a center mark. Built with the tools, clicks
+   landing on object snaps so the dimensions anchor as in the app: six Z
+   ordinates from the front face (common baseline; .425 jogs clear of
+   .400), three Half symmetric diameters, chamfer and hole notes, a center
+   mark and the hole's centerline. `latheReference.test.ts`: exact texts,
+   anchors, baseline and jog, no text over text, part or another
+   dimension's lines, two geometry-only edits (back face +.050 → .650;
+   groove → Ø.090) re-measured with one undo, file round-trip. Browser
+   test reads each text from the properties panel.
+   Found while building it (for the user): the origin ordinate reads
+   `.000` (ASME shows `0`); the hole center's ordinate can't be anchored,
+   since centerlines and center marks aren't snappable; a narrow groove's
+   symmetric Ø text sits inside the part, wider than the groove.
 
 Decisions (user, 2026-11-09): no reference part needed yet (feedback as
 we go); lathe mode supplies the centerline at Y = 0; symmetric diameter
