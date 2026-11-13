@@ -73,6 +73,17 @@ describe('Join', () => {
     expect([...t.drawing.entities.values()]).toEqual([arc('A2', 0, 180)]);
   });
 
+  it('closes one arc on its own into its circle, keeping its id, layer and style, as one undo step', () => {
+    const a = { ...arc('A', 30, 300), layer: 'P', style: 'hidden' as const };
+    const t = withShapes(a);
+    t.select('A');
+    t.runner.start(joinTool);
+    expect([...t.drawing.entities.values()]).toEqual([{ kind: 'circle', id: 'A', layer: 'P', style: 'hidden', center: a.center, radius: a.radius }]);
+    expect(t.messages).toEqual(['Closed the arc into a circle.']);
+    t.undo.undo();
+    expect(t.drawing.entities.get('A')).toEqual(a);
+  });
+
   it('says so when nothing joins', () => {
     const t = withShapes(ln('L1', 0, 0, 1, 0), ln('X', 0, 1, 1, 2));
     t.select('L1', 'X');

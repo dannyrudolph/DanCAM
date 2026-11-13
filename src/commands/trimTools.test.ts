@@ -124,6 +124,27 @@ describe('Trim', () => {
 });
 
 describe('Extend', () => {
+  it('a trimmed circle is an arc, and either of its ends extends along the circle', () => {
+    const c: CircleEntity = { kind: 'circle', id: 'C', layer: '0', center: v(0, 0), radius: 1 };
+    // Boundaries on the right half, crossing the circle at 45° and 315°.
+    const t = withShapes(c, xl('Y', 0, 0, 0, 1), ln('B1', 0, 0, 2, 2), ln('B2', 0, 0, 2, -2));
+    t.select('Y'); // trim at the vertical only
+    t.runner.start(trimTool);
+    t.pick('C', 1, 0);
+    expect(t.drawing.entities.get('C')).toEqual({ kind: 'arc', id: 'C', layer: '0', center: v(0, 0), radius: 1, startDeg: 90, endDeg: 270 });
+    t.runner.stop();
+    t.select();
+    t.runner.start(extendTool);
+    t.pick('C', -0.2, -0.98); // near the end at 270°: on counterclockwise to B2
+    const afterEnd = t.drawing.entities.get('C');
+    expect(afterEnd).toMatchObject({ kind: 'arc', startDeg: 90 });
+    expect(afterEnd?.kind === 'arc' && afterEnd.endDeg).toBeCloseTo(315, 12);
+    t.pick('C', -0.2, 0.98); // near the start at 90°: on clockwise to B1
+    const afterStart = t.drawing.entities.get('C');
+    expect(afterStart?.kind === 'arc' && afterStart.startDeg).toBeCloseTo(45, 12);
+    expect(afterStart?.kind === 'arc' && afterStart.endDeg).toBeCloseTo(315, 12);
+  });
+
   it('extends the picked end to the boundary, again to the next one, and trims on Shift-pick', () => {
     const t = withShapes(xl('V1', 3, 0, 0, 1), xl('V2', 6, 0, 0, 1), ln('L', 0, 0, 2, 0));
     t.runner.start(extendTool);

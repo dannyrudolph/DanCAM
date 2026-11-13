@@ -125,7 +125,7 @@ Trim, extend and fillet are the core of the tool and get the most tests. Every c
 | Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45° |
 | Offset | O | By distance or through a point; arcs and circles offset concentrically |
 | Break | BR | At a point, or between two points |
-| Join | J | Collinear lines into one line; arcs on the same circle into one arc |
+| Join | J | Collinear lines into one line; arcs on the same circle into one arc (a circle when they close it); one arc on its own closes into its circle |
 | Lengthen | LEN | Delta, total length or percent, for lines and arcs |
 | Move / Copy | M / CO | Base point and second point, with full snap and typed entry |
 | Rotate | RO | Base point and angle, or a reference angle |

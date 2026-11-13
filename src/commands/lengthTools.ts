@@ -91,7 +91,8 @@ export function createBreakTool(): ToolDef {
 /**
  * Join (J): of the objects given (selection first), joins every pair that can
  * be: collinear lines, across gaps; arcs on one circle, bridging the smaller
- * gap (a circle when they close it). One undo step.
+ * gap (a circle when they close it). One arc on its own closes into its
+ * circle. One undo step.
  */
 export const joinTool: ToolDef = {
   id: 'join',
@@ -101,6 +102,13 @@ export const joinTool: ToolDef = {
   *run(ctx): ToolGen {
     const es = yield* objects(ctx, 'Join');
     if (!es) return;
+    // One arc on its own closes into its circle, as AutoCAD's Join does.
+    const only = es.length === 1 ? es[0]! : undefined;
+    if (only?.kind === 'arc') {
+      ctx.undo.commit({ label: 'Join', changes: [{ op: 'modify', before: only, after: entityFromCurve(only, { kind: 'circle', center: only.center, radius: only.radius }) }] });
+      ctx.message('Closed the arc into a circle.');
+      return;
+    }
     const pool = es.flatMap((e) => {
       const c = entityCurve(e);
       return c ? [{ e, c, gone: false, grew: false }] : [];
