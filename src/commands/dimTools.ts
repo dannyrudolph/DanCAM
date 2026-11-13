@@ -1,9 +1,10 @@
 import { TOL } from '../geometry/tolerance';
-import { type Vec2, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
+import { arcEnd, arcStart } from '../geometry/arc';
+import { type Vec2, cross, distance, dot, sub, vecNearlyEqual } from '../geometry/vec';
 import type { Anchor, DimAnchors } from '../model/anchor';
 import { angleBetweenLines, arcArms } from '../model/associate';
 import { expandSymbols } from '../model/dimFormat';
-import type { DimensionEntity, EntityId, LineEntity } from '../model/entity';
+import type { DimensionEntity, Entity, EntityId, LineEntity } from '../model/entity';
 
 export { angleBetweenLines } from '../model/associate';
 import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption } from './tool';
@@ -30,21 +31,76 @@ const ORIENTATIONS: readonly { key: Orientation; label: string }[] = [
   { key: 'v', label: 'Vertical' },
 ];
 
+/** What a linear or aligned dimension measures: two points, what they are anchored to, and a fixed direction when it measures square to a line. */
+export type Measure = { readonly p1: Vec2; readonly p2: Vec2; readonly anchors?: DimAnchors; readonly normal?: Vec2 };
+
+/** A picked object and where it was clicked. */
+export type Picked = { readonly entity: Entity; readonly at: Vec2 };
+
+/** The objects a linear or aligned dimension measures: lines (chamfers too), arcs (fillets) and circles. */
+export const isMeasurable = (e: Entity): boolean => e.kind === 'line' || e.kind === 'arc' || e.kind === 'circle';
+
+/** One object on its own: a line end to end, an arc end to end (its chord). A circle needs a second object. */
+export function measureObject(e: Entity): Measure | undefined {
+  if (e.kind === 'line') return { p1: e.start, p2: e.end, anchors: { p1: { id: e.id, feature: 'start' }, p2: { id: e.id, feature: 'end' } } };
+  if (e.kind === 'arc') return { p1: arcStart(e), p2: arcEnd(e), anchors: { p1: { id: e.id, feature: 'start' }, p2: { id: e.id, feature: 'end' } } };
+  return undefined;
+}
+
+/** Where a picked object is measured from in a pair: a line's end nearest the click, an arc's or circle's center. */
+function pairPoint(p: Picked): { at: Vec2; anchor: Anchor } | undefined {
+  const e = p.entity;
+  if (e.kind === 'line') {
+    const start = distance(e.start, p.at) <= distance(e.end, p.at);
+    return { at: start ? e.start : e.end, anchor: { id: e.id, feature: start ? 'start' : 'end' } };
+  }
+  if (e.kind === 'arc' || e.kind === 'circle') return { at: e.center, anchor: { id: e.id, feature: 'center' } };
+  return undefined;
+}
+
+const lineDir = (e: Entity): Vec2 | undefined => (e.kind === 'line' ? unit(sub(e.end, e.start)) : undefined);
+
 /**
- * Linear and Aligned dimensions: two points (snaps apply) or one line, then
- * the dimension line's position, previewed as the cursor moves. Each
- * dimension is its own undo step; the tool starts again for the next.
- * Linear is horizontal or vertical by drag direction, or forced by the
- * options bar; both choices are remembered for the session.
+ * Two objects (as Solid Edge's Smart Dimension): a line is measured from
+ * its end nearest the click, an arc or circle from its center. An aligned
+ * dimension between a line and a parallel line, or a line and a center,
+ * measures square to the line (`normal`); otherwise, as a linear one, it
+ * goes horizontal or vertical. Undefined when both are the same point.
+ */
+export function measureBetween(type: 'linear' | 'aligned', a: Picked, b: Picked): Measure | undefined {
+  const pa = pairPoint(a);
+  const pb = pairPoint(b);
+  if (!pa || !pb || vecNearlyEqual(pa.at, pb.at)) return undefined;
+  const m: Measure = { p1: pa.at, p2: pb.at, anchors: { p1: pa.anchor, p2: pb.anchor } };
+  if (type !== 'aligned') return m;
+  const da = lineDir(a.entity);
+  const db = lineDir(b.entity);
+  const square = da && db ? (Math.abs(cross(da, db)) <= TOL ? da : undefined) : (da ?? db);
+  if (!square) return m;
+  const normal = { x: -square.y || 0, y: square.x || 0 };
+  // Points level with each other along the line: nothing square to it to measure.
+  return Math.abs(dot(sub(m.p2, m.p1), normal)) <= TOL ? m : { ...m, normal };
+}
+
+/**
+ * Linear and Aligned dimensions. The default, Objects: a line, arc or
+ * circle under the cursor is picked (it highlights), then either a second
+ * object to measure between them or the dimension line's position; off the
+ * geometry, a click, snap or typed values give a first point instead.
+ * Two points: points only, with snaps. The dimension line's position is
+ * previewed as the cursor moves. Each dimension is its own undo step; the
+ * tool starts again for the next. Linear is horizontal or vertical by drag
+ * direction, or forced by the options bar; both choices are remembered for
+ * the session.
  */
 function createDimTool(type: 'linear' | 'aligned'): ToolDef {
   const name = type === 'linear' ? 'Linear' : 'Aligned';
-  const method = new MethodChoice<'points' | 'object'>(
+  const method = new MethodChoice<'object' | 'points'>(
     [
+      { key: 'object', label: 'Objects' },
       { key: 'points', label: 'Two points' },
-      { key: 'object', label: 'Pick a line' },
     ],
-    'points',
+    'object',
   );
   let orientation: Orientation = 'auto';
 
@@ -53,43 +109,52 @@ function createDimTool(type: 'linear' | 'aligned'): ToolDef {
     label: `${name} dimension`,
     shortcut: type === 'linear' ? 'shift+d' : 'g',
     *run(ctx): ToolGen {
-      let p1: Vec2 | undefined;
-      let p2: Vec2 | undefined;
-      let anchors: DimAnchors | undefined;
+      let m: Measure | undefined;
+      /** The object picked first, while a second can still be picked at the placement step. */
+      let first: Picked | undefined;
+      const points = function* (from?: { at: Vec2; anchor?: Anchor }): Generator<Request, Measure | undefined, ToolInput> {
+        const p = from ?? (yield* method.anchoredPoint({ prompt: `${name}: pick the first point to measure from` }));
+        if (!p) return undefined;
+        const q = yield* method.anchoredPoint({ prompt: `${name}: pick the second point`, base: p.at });
+        if (!q) return undefined;
+        const anchors = pointAnchors({ p1: p.anchor, p2: q.anchor });
+        return { p1: p.at, p2: q.at, ...(anchors && { anchors }) };
+      };
       if (method.current === 'points') {
-        const first = yield* method.anchoredPoint({ prompt: `${name}: pick the first point to measure from` });
-        if (!first) return;
-        p1 = first.at;
-        const second = yield* method.anchoredPoint({ prompt: `${name}: pick the second point`, base: first.at });
-        if (!second) return;
-        p2 = second.at;
-        anchors = pointAnchors({ p1: first.anchor, p2: second.anchor });
+        m = yield* points();
+        if (!m) return;
       } else {
-        const pick = yield* method.entity(ctx, { prompt: `${name}: pick a line to dimension`, accepts: (e) => e.kind === 'line' });
-        if (!pick || pick.entity.kind !== 'line') return;
-        p1 = pick.entity.start;
-        p2 = pick.entity.end;
-        anchors = { p1: { id: pick.entity.id, feature: 'start' }, p2: { id: pick.entity.id, feature: 'end' } };
+        const pick = yield* method.objectOrPoint(ctx, { prompt: `${name}: pick a line, arc or circle (or a point)`, pick: isMeasurable });
+        if (!pick) return;
+        if (pick.kind === 'point') {
+          m = yield* points(pick);
+          if (!m) return;
+        } else {
+          first = { entity: pick.entity, at: pick.at };
+          m = measureObject(pick.entity);
+        }
       }
-      if (vecNearlyEqual(p1, p2)) {
+      if (m && vecNearlyEqual(m.p1, m.p2)) {
         ctx.message('The two points are the same; there is nothing to measure.');
         return;
       }
-      const a = p1;
-      const b = p2;
-      const dimension = (id: EntityId, at: Vec2): DimensionEntity => {
-        const base = { kind: 'dimension' as const, id, layer: ctx.newProps().layer, dimStyle: ctx.drawing.currentDimStyle, p1: a, p2: b, at, ...(anchors && { anchors }) };
+      const dimension = (meas: Measure, id: EntityId, at: Vec2): DimensionEntity => {
+        const base = { kind: 'dimension' as const, id, layer: ctx.newProps().layer, dimStyle: ctx.drawing.currentDimStyle, p1: meas.p1, p2: meas.p2, at, ...(meas.anchors && { anchors: meas.anchors }) };
+        if (meas.normal) return { ...base, type: 'linear', dir: meas.normal };
         if (type === 'aligned') return { ...base, type };
-        const dir = orientation === 'h' ? H : orientation === 'v' ? V : linearDirFor(a, b, at);
+        const dir = orientation === 'h' ? H : orientation === 'v' ? V : linearDirFor(meas.p1, meas.p2, at);
         return { ...base, type, dir };
       };
       for (;;) {
         const options: ToolOption[] =
           type === 'linear' ? ORIENTATIONS.map((o) => ({ key: ORIENT_PREFIX + o.key, label: o.label, enabled: true, active: o.key === orientation })) : [];
+        const one = first;
+        const meas = m;
         const input = yield {
           kind: 'point',
-          prompt: `${name}: pick where the dimension line goes`,
-          preview: (p) => [dimension(PREVIEW_ID, p)],
+          prompt: !meas ? `${name}: pick a second object to measure to` : one ? `${name}: pick where the dimension line goes, or a second object` : `${name}: pick where the dimension line goes`,
+          ...(meas && { preview: (p: Vec2) => [dimension(meas, PREVIEW_ID, p)] }),
+          ...(one && { pick: (e: Entity) => isMeasurable(e) && e.id !== one.entity.id }),
           options,
         };
         if (input.kind === 'finish') return;
@@ -98,8 +163,24 @@ function createDimTool(type: 'linear' | 'aligned'): ToolDef {
           if (o) orientation = o.key;
           continue;
         }
+        if (input.kind === 'entity' && one) {
+          const second = ctx.drawing.entities.get(input.id);
+          if (!second || second.id === one.entity.id || !isMeasurable(second)) continue;
+          const between = measureBetween(type, one, { entity: second, at: input.at });
+          if (!between) {
+            ctx.message('Those are measured from the same point; there is nothing between them.');
+            continue;
+          }
+          m = between;
+          first = undefined;
+          continue;
+        }
         if (input.kind !== 'point') continue;
-        addEntity(ctx, `${name} dimension`, (id) => dimension(id, input.at));
+        if (!meas) {
+          ctx.message('A circle needs a second object to measure to; for its size use Diameter.');
+          continue;
+        }
+        addEntity(ctx, `${name} dimension`, (id) => dimension(meas, id, input.at));
         return;
       }
     },
@@ -183,7 +264,8 @@ function pointAnchors(ps: Partial<Record<'p1' | 'p2' | 'vertex', Anchor | undefi
 }
 
 /**
- * Angular: two lines (the quadrant follows the cursor), an arc (its
+ * Angular: two lines (the quadrant follows the cursor; an arc picked
+ * first gives its angle, as the Arc method does), an arc (its
  * included angle, or the rest of the turn on the other side), or a vertex
  * and two points (snaps apply; the reflex angle on the far side). Then the
  * arc's position. Sticky; the method is remembered for the session.
@@ -217,8 +299,14 @@ export function createAngularDimTool(): ToolDef {
       const prompt = 'pick where the dimension arc goes';
       if (method.current === 'lines') {
         const isLine = (e: { kind: string }): boolean => e.kind === 'line';
-        const first = yield* method.entity(ctx, { prompt: `${name}: pick the first line`, accepts: isLine });
+        const first = yield* method.entity(ctx, { prompt: `${name}: pick the first line, or an arc`, accepts: (e) => isLine(e) || e.kind === 'arc' });
         if (!first) return;
+        if (first.entity.kind === 'arc') {
+          const a = first.entity;
+          const arms = arcArms(a);
+          yield* place(ctx, name, prompt, (id, at) => dim(id, at, arms, { curve: a.id }));
+          return;
+        }
         const second = yield* method.entity(ctx, { prompt: `${name}: pick the second line`, accepts: (e) => isLine(e) && e.id !== first.entity.id });
         if (!second) return;
         const l1 = first.entity as LineEntity;

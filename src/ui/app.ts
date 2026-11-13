@@ -571,6 +571,11 @@ export class App {
     const req = this.runner.request;
     if (!req) return;
     const cursor = this.cursorWorld();
+    const object = this.objectUnderCursor();
+    if (object !== undefined) {
+      this.send({ kind: 'entity', id: object, at: cursor, shift });
+      return;
+    }
     if (req.kind === 'point' || req.kind === 'value') {
       const snap = this.currentSnap();
       if (this.onceSnap && !snap) {
@@ -720,11 +725,23 @@ export class App {
   private currentSnap(): Snap | undefined {
     const req = this.runner.request;
     if (!req || (req.kind !== 'point' && req.kind !== 'value') || !this.cursorScreen) return undefined;
+    if (this.objectUnderCursor() !== undefined) return undefined; // the object wins over snaps
     const kinds = this.onceSnap ? new Set([this.onceSnap]) : this.settings.snapKinds;
     if (kinds.size === 0) return undefined;
     // Typed values pin the point, so a sliding (deferred) end can't apply.
     const deferOk = req.kind === 'point' && req.acceptsDeferred === true && !this.boxes.hasLocks;
     return findSnap(this.drawing, this.cursorWorld(), SNAP_APERTURE_PX / this.view.scale, kinds, req.base, deferOk);
+  }
+
+  /**
+   * The object a click would pick at a point step that takes objects
+   * (`PointRequest.pick`). None while values are typed or a one-time snap is
+   * chosen: those ask for a point.
+   */
+  private objectUnderCursor(): EntityId | undefined {
+    const req = this.runner.request;
+    if (req?.kind !== 'point' || !req.pick || !this.cursorScreen || this.onceSnap || this.boxes.hasLocks) return undefined;
+    return this.pickAt(this.cursorWorld(), req.pick);
   }
 
   /**
@@ -867,7 +884,11 @@ export class App {
     let preview: readonly Entity[] = [];
     let snap = this.currentSnap();
     if (req && cursor) {
-      if (req.kind === 'point') {
+      const object = this.objectUnderCursor();
+      const hit = object !== undefined ? this.drawing.entities.get(object) : undefined;
+      if (hit) {
+        preview = [hit]; // highlight what a click would pick
+      } else if (req.kind === 'point') {
         next = snap?.deferred ? snap.at : this.nextPoint(snap);
         preview = req.preview?.(next, snap?.deferred) ?? [];
         // Locked values moved the point off the snap, so the snap isn't what a click gives.

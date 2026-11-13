@@ -1140,6 +1140,8 @@ test.describe('dimensions', () => {
     const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
 
     await page.keyboard.press('Shift+D');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick a line, arc or circle (or a point)');
+    await page.locator('[data-option="method:points"]').click(); // snaps, not objects
     await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick the first point to measure from');
     const near = (x: number, dx: number, dy: number) => ({ x: at(x, 0).x + dx, y: at(x, 0).y + dy }); // a few pixels off an end
     for (const p of [near(0, 4, -3), near(1, -4, 3), at(0.5, 0.3)]) await page.mouse.click(p.x, p.y); // Endpoint snaps take both
@@ -1166,6 +1168,38 @@ test.describe('dimensions', () => {
     await page.mouse.click(zeroText.x, zeroText.y);
     await expect(prop(page, 'Text')).toHaveText('.000');
   });
+});
+
+test('a linear dimension picks objects first: two faces of a step, highlighted under the cursor, measure between them', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '90'); // length, angle: a face at Z 0
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('l');
+  await typeValues(page, '0.75', '0');
+  await typeValues(page, '0.5', '90'); // a face at Z .75
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: 0, maxX: 0.75, minY: 0, maxY: 1 });
+
+  await page.keyboard.press('Shift+D');
+  await expect(page.locator('[data-option="method:object"]')).toHaveClass(/active/);
+  const face1 = at(0, 0.8);
+  await page.mouse.move(face1.x, face1.y);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', ''); // the object, not a snap
+  await page.mouse.click(face1.x, face1.y);
+  await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick where the dimension line goes, or a second object');
+  const face2 = at(0.75, 0.25);
+  await page.mouse.click(face2.x, face2.y);
+  await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick where the dimension line goes');
+  const above = at(0.4, 0.75); // between the faces' ends: horizontal
+  await page.mouse.click(above.x, above.y);
+  await expect(prop(page, 'entity-count')).toHaveText('3');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(above.x, above.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+  await expect(prop(page, 'Measured')).toHaveText('0.7500');
 });
 
 test.describe('dimension overrides in the properties panel', () => {
@@ -1388,6 +1422,7 @@ test('a dimension snapped to a line follows when the line is edited, and is eras
   };
 
   await page.keyboard.press('Shift+D');
+  await page.locator('[data-option="method:points"]').click(); // snaps, not objects
   await clickAt(0, 0, 'end');
   await clickAt(2, 0, 'end');
   await clickAt(1, 0.5);
@@ -2001,6 +2036,7 @@ test.describe('blocks', () => {
     };
 
     await page.keyboard.press('Shift+D');
+    await page.locator('[data-option="method:points"]').click(); // snaps, not objects
     await click(0, 0); // Endpoint snap on the block's edge: its base end
     await click(3, 0.5); // the face's top end
     await click(1.5, 1); // dimension line above

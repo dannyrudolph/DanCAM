@@ -31,6 +31,13 @@ export type PointRequest = {
    * end is known).
    */
   readonly acceptsDeferred?: boolean;
+  /**
+   * Objects a click can pick instead of giving a point. Over one of them the
+   * object is highlighted and a click sends an `entity` input; elsewhere, or
+   * with values typed, the step takes a point as usual (dimension tools pick
+   * the geometry first, snaps second).
+   */
+  readonly pick?: (e: Entity) => boolean;
   readonly options?: readonly ToolOption[];
   /** True when Enter with nothing locked finishes the tool, as in a line chain. */
   readonly canFinish?: boolean;

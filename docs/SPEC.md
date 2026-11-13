@@ -145,11 +145,11 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 
 | Type | Picks | Shows |
 | --- | --- | --- |
-| Linear | Two points or one line; horizontal or vertical decided by drag direction, or forced | Distance along the axis |
-| Aligned | Two points or one line | True length |
+| Linear | Objects first: a line or arc (end to end), or two objects (line ends nearest the picks, arc and circle centers); or two points with snaps. Horizontal or vertical decided by drag direction, or forced | Distance along the axis |
+| Aligned | As Linear; between a line and a parallel line or a center, square to the line | True length |
 | Radius | Arc or circle | `R.015` |
 | Diameter | Circle or arc | `Ø.125` |
-| Angular | Two lines, an arc, or vertex + two points | Angle, with quadrant chosen by cursor |
+| Angular | Two lines (or an arc picked first), an arc, or vertex + two points | Angle, with quadrant chosen by cursor |
 | Symmetric diameter | Centerline (axis), then one or more feature points or edges | `Ø` + twice the distance from the axis |
 | Ordinate | Origin set once, then feature points | X or Z (Y) coordinate from the origin |
 | Baseline / Continue | Starts from an existing linear dimension | Stacked or chained linear dimensions |
