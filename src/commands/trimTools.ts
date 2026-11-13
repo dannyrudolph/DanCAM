@@ -1,7 +1,8 @@
-import { type Curve, intersectCurves } from '../geometry/curve';
+import { type Curve, intersectCurves, nearestOnCurve } from '../geometry/curve';
 import { extendCurve } from '../geometry/extend';
 import { trimCurve } from '../geometry/trim';
-import type { Vec2 } from '../geometry/vec';
+import { TOL } from '../geometry/tolerance';
+import { type Vec2, distance } from '../geometry/vec';
 import { instanceEntities } from '../model/block';
 import { newEntityId } from '../model/drawing';
 import { type Entity, type EntityId, entityCurve, entityFromCurve } from '../model/entity';
@@ -50,6 +51,50 @@ function trimOutcome(e: Entity, edges: readonly Curve[], at: Vec2, newId: () => 
   return { changes, preview: [entityFromCurve({ ...e, id: PREVIEW_ID }, r.removed)] };
 }
 
+/**
+ * Trim by scribble: every piece the path crosses is removed, each up to the
+ * nearest edges either way, all measured against the drawing as it was
+ * before the path (so the order of the crossings doesn't matter). An object
+ * crossed more than once loses each piece crossed. Objects the path crosses
+ * where no edge cuts them are left alone. Undefined when nothing is trimmed.
+ */
+export function strokeOutcome(ctx: ToolContext, edges: readonly EntityId[] | undefined, path: readonly Vec2[], newId: () => EntityId): Outcome | undefined {
+  const d = ctx.drawing;
+  const changes: Change[] = [];
+  const preview: Entity[] = [];
+  for (const e of d.entities.values()) {
+    if (d.layers.get(e.layer)?.visible === false) continue;
+    const c = entityCurve(e);
+    if (!c) continue;
+    const hits: Vec2[] = [];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1]!;
+      const b = path[i]!;
+      if (distance(a, b) <= TOL) continue;
+      hits.push(...intersectCurves({ kind: 'segment', a, b }, c));
+    }
+    if (hits.length === 0) continue;
+    const cuts = edgeCurves(ctx, edges, e.id).flatMap((edge) => intersectCurves(c, edge));
+    let pieces: Curve[] = [c];
+    const removed: Curve[] = [];
+    for (const p of hits) {
+      // The kept piece the crossing is on; none when an earlier crossing already removed it.
+      const i = pieces.findIndex((piece) => distance(nearestOnCurve(piece, p), p) <= TOL);
+      if (i < 0) continue;
+      const r = trimCurve(pieces[i]!, cuts, p);
+      if (!r) continue;
+      pieces = [...pieces.slice(0, i), ...r.kept, ...pieces.slice(i + 1)];
+      removed.push(r.removed);
+    }
+    if (removed.length === 0) continue;
+    const [first, ...rest] = pieces;
+    changes.push(first ? { op: 'modify', before: e, after: entityFromCurve(e, first) } : { op: 'remove', entity: e });
+    for (const k of rest) changes.push({ op: 'add', entity: entityFromCurve({ ...e, id: newId() }, k) });
+    for (const r of removed) preview.push(entityFromCurve({ ...e, id: PREVIEW_ID }, r));
+  }
+  return changes.length > 0 ? { changes, preview } : undefined;
+}
+
 function extendOutcome(e: Entity, edges: readonly Curve[], at: Vec2): Outcome | undefined {
   const c = entityCurve(e);
   const r = c && extendCurve(c, edges, at);
@@ -72,7 +117,8 @@ const EDGE_METHODS: readonly { key: EdgeMethod; label: string }[] = [
  * bar asks for the edges first (Enter alone: all objects); objects selected
  * when the tool starts are the edges without asking. Picks go on until
  * Enter. Shift-pick does the other one. Each pick is its own undo step; the
- * edge method is remembered for the session.
+ * edge method is remembered for the session. Trim also takes a path dragged
+ * across the drawing, removing every piece it crosses as one undo step.
  */
 function trimExtendTool(mode: Mode): ToolDef {
   const label = LABEL[mode];
@@ -116,10 +162,17 @@ function trimExtendTool(mode: Mode): ToolDef {
           prompt: `${label}: pick the part to ${mode === 'trim' ? 'remove' : 'extend'} (Shift: ${other}), Enter to finish`,
           accepts: (e) => entityCurve(e) !== undefined,
           preview: (id, at, shift) => outcome(id, at, shift, () => PREVIEW_ID)?.preview ?? [],
+          ...(mode === 'trim' && { stroke: (path: readonly Vec2[]) => strokeOutcome(ctx, edges, path, () => PREVIEW_ID)?.preview ?? [] }),
           canFinish: true,
           options: options(),
         };
         if (input.kind === 'finish') return;
+        if (input.kind === 'stroke') {
+          const o = mode === 'trim' ? strokeOutcome(ctx, edges, input.points, () => newEntityId(ctx.drawing)) : undefined;
+          if (o) ctx.undo.commit({ label: 'Trim', changes: o.changes });
+          else ctx.message('Nothing to trim along that path: it crosses no piece that an edge cuts.');
+          continue;
+        }
         if (input.kind === 'option') {
           const m = chosen(input.key);
           if (m === 'all') {

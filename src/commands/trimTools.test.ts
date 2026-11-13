@@ -123,6 +123,81 @@ describe('Trim', () => {
   });
 });
 
+describe('Trim by a dragged path', () => {
+  const stroke = (t: ReturnType<typeof setup>, ...pts: [number, number][]) => t.runner.send({ kind: 'stroke', points: pts.map(([x, y]) => v(x, y)) });
+  const req = (t: ReturnType<typeof setup>) => t.runner.request;
+
+  it('removes every piece the path crosses, up to the edges either way, as one undo step, and previews it while dragging', () => {
+    const t = withShapes(xl('V1', 1, 0, 0, 1), xl('V2', 3, 0, 0, 1), ln('L1', 0, 0, 4, 0), ln('L2', 0, 1, 4, 1), ln('L3', 0, 2, 4, 2));
+    t.runner.start(trimTool);
+    const r = req(t);
+    expect(r?.kind === 'entity' && r.stroke?.([v(2, -0.5), v(2, 1.5)])).toEqual([ln('preview', 1, 0, 3, 0), ln('preview', 1, 1, 3, 1)]);
+    stroke(t, [2, -0.5], [2.2, 1], [2, 2.5]);
+    expect(t.lines()).toEqual([
+      [0, 0, 1, 0],
+      [0, 1, 1, 1],
+      [0, 2, 1, 2],
+      [3, 0, 4, 0],
+      [3, 1, 4, 1],
+      [3, 2, 4, 2],
+    ]);
+    expect(t.undo.undoLabel).toBe('Trim');
+    t.undo.undo();
+    expect(t.lines()).toEqual([
+      [0, 0, 4, 0],
+      [0, 1, 4, 1],
+      [0, 2, 4, 2],
+    ]);
+    expect(req(t)?.kind).toBe('entity'); // still picking
+  });
+
+  it('an object crossed in two pieces loses both; a piece crossed twice is removed once', () => {
+    const t = withShapes(xl('V1', 1, 0, 0, 1), xl('V2', 2, 0, 0, 1), xl('V3', 3, 0, 0, 1), ln('L', 0, 0, 4, 0), ln('M', 0, 5, 4, 5));
+    t.runner.start(trimTool);
+    stroke(t, [0.5, 1], [0.5, -1], [3.5, -1], [3.5, 1]);
+    expect(t.drawing.entities.get('L')).toEqual(ln('L', 1, 0, 3, 0));
+    stroke(t, [1.4, 6], [1.5, 4], [1.6, 6]);
+    expect(t.lines().filter(([, y]) => y === 5)).toEqual([
+      [0, 5, 1, 5],
+      [2, 5, 4, 5],
+    ]);
+  });
+
+  it('measures every crossing against the drawing before the path, so two objects that cut each other both lose the crossed piece', () => {
+    const t = withShapes(ln('H', 0, 0, 4, 0), ln('V', 2, -2, 2, 2), xl('X', 1, 0, 0, 1), xl('Y', 0, 1, 1, 0));
+    t.runner.start(trimTool);
+    stroke(t, [1.5, -0.5], [1.5, 0.5], [2.5, 0.5]); // crosses H between X and V, then V between H and Y
+    expect(t.drawing.entities.get('H')).toEqual(ln('H', 0, 0, 1, 0));
+    expect(t.lines()).toContainEqual([2, 0, 4, 0]);
+    expect(t.drawing.entities.get('V')).toEqual(ln('V', 2, -2, 2, 0));
+    expect(t.lines()).toContainEqual([2, 1, 2, 2]);
+  });
+
+  it('cuts only at the chosen edges in Select edges', () => {
+    const t = withShapes(xl('V1', 1, 0, 0, 1), xl('V2', 3, 0, 0, 1), ln('L', 0, 0, 4, 0));
+    t.select('V2');
+    t.runner.start(trimTool);
+    stroke(t, [0.5, 1], [0.5, -1]);
+    expect(t.drawing.entities.get('L')).toEqual(ln('L', 3, 0, 4, 0));
+  });
+
+  it('says so when the path trims nothing, and Extend takes no path', () => {
+    const t = withShapes(ln('L', 0, 0, 4, 0));
+    t.runner.start(trimTool);
+    stroke(t, [1, 1], [1, -1]); // crosses L, but nothing cuts it
+    stroke(t, [9, 9], [10, 10]); // crosses nothing
+    expect(t.messages).toEqual([
+      'Nothing to trim along that path: it crosses no piece that an edge cuts.',
+      'Nothing to trim along that path: it crosses no piece that an edge cuts.',
+    ]);
+    expect(t.undo.undoLabel).toBeUndefined();
+    t.finish();
+    t.runner.start(extendTool);
+    const r = req(t);
+    expect(r?.kind === 'entity' && r.stroke).toBeUndefined();
+  });
+});
+
 describe('Extend', () => {
   it('a trimmed circle is an arc, and either of its ends extends along the circle', () => {
     const c: CircleEntity = { kind: 'circle', id: 'C', layer: '0', center: v(0, 0), radius: 1 };

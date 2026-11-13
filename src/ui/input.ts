@@ -60,6 +60,10 @@ export type CanvasHandlers = {
   dragEnd(screen: Vec2): void;
   /** True when a left drag should draw a selection box (no tool waiting for input). */
   leftDragSelects(): boolean;
+  /** True when a left drag should draw a path across the objects (Trim by scribble). */
+  leftDragStrokes(): boolean;
+  /** The path dragged so far, canvas-local pixels; `done` on release. */
+  stroke(points: readonly Vec2[], done: boolean): void;
   /** A selection box being dragged from `from` to `to`; `done` on release. */
   box(from: Vec2, to: Vec2, done: boolean, shift: boolean): void;
   /** Right click, in page coordinates for placing a menu. */
@@ -88,6 +92,8 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
   let boxFrom: Vec2 | undefined;
   /** A press that grabbed a grip: where it started, in client pixels. */
   let grabbed: Vec2 | undefined;
+  /** A path being dragged, canvas-local, once it has moved past the click slop. */
+  let path: Vec2[] | undefined;
 
   const local = (e: MouseEvent): Vec2 => {
     const r = canvas.getBoundingClientRect();
@@ -125,6 +131,7 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
         return;
       }
       boxFrom = undefined;
+      path = undefined;
       if (h.pressStartsDrag(local(e), e.shiftKey)) {
         grabbed = { x: e.clientX, y: e.clientY };
         canvas.setPointerCapture(e.pointerId);
@@ -149,7 +156,16 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
     h.cursor(local(e));
     if (leftDown && !pan) {
       const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
-      if (!boxFrom && moved > CLICK_SLOP_PX && h.leftDragSelects()) {
+      if (!boxFrom && !path && moved > CLICK_SLOP_PX && h.leftDragStrokes()) {
+        const r = canvas.getBoundingClientRect();
+        path = [{ x: leftDown.x - r.left, y: leftDown.y - r.top }];
+        canvas.setPointerCapture(e.pointerId);
+      }
+      if (path) {
+        path.push(local(e));
+        h.stroke(path, false);
+      }
+      if (!boxFrom && !path && moved > CLICK_SLOP_PX && h.leftDragSelects()) {
         const r = canvas.getBoundingClientRect();
         boxFrom = { x: leftDown.x - r.left, y: leftDown.y - r.top };
         canvas.setPointerCapture(e.pointerId); // keep the box going outside the canvas
@@ -176,7 +192,12 @@ export function bindCanvasInput(canvas: HTMLCanvasElement, h: CanvasHandlers): v
     if (e.button !== 0 || !leftDown) return;
     const moved = Math.hypot(e.clientX - leftDown.x, e.clientY - leftDown.y);
     leftDown = undefined;
-    if (boxFrom) {
+    if (path) {
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+      const done = [...path, local(e)];
+      path = undefined;
+      h.stroke(done, true);
+    } else if (boxFrom) {
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
       const from = boxFrom;
       boxFrom = undefined;

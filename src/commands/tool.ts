@@ -77,6 +77,12 @@ export type EntityRequest = {
    * entity under the cursor is highlighted.
    */
   readonly preview?: (id: EntityId, at: Vec2, shift: boolean) => readonly Entity[];
+  /**
+   * Present when the step also takes a path dragged across the objects (Trim
+   * by scribble): a left drag draws the path, and releasing sends a `stroke`
+   * input. Gives what the path so far would do, drawn while dragging.
+   */
+  readonly stroke?: (points: readonly Vec2[]) => readonly Entity[];
   /** No base point; declared so `request.base` reads on any request. */
   readonly base?: never;
   readonly options?: readonly ToolOption[];
@@ -123,6 +129,8 @@ export type ToolInput =
   /** `at` is where the entity was clicked; `shift` is true for a Shift-click. */
   | { readonly kind: 'entity'; readonly id: EntityId; readonly at: Vec2; readonly shift?: boolean }
   | { readonly kind: 'selection'; readonly ids: readonly EntityId[] }
+  /** A path dragged with the left button, in world coordinates (an `entity` step with `stroke`). */
+  | { readonly kind: 'stroke'; readonly points: readonly Vec2[] }
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'option'; readonly key: string }
   | { readonly kind: 'finish' };

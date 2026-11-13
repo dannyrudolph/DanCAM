@@ -272,6 +272,8 @@ export class App {
   private hotGrip: { id: EntityId; grip: Grip } | undefined;
   /** A selection box being dragged, screen pixels. */
   private selectBox: { from: Vec2; to: Vec2; mode: BoxMode } | undefined;
+  /** A path being dragged at a step that takes one (Trim), screen pixels. */
+  private strokePath: readonly Vec2[] | undefined;
   private currentStyle: LineStyleName | undefined;
   private frameRequested = false;
   /** Space held: left-drag pans. */
@@ -898,6 +900,9 @@ export class App {
         const at = snap?.at ?? cursor;
         const value = this.boxes.resolveValue(at);
         if (value !== undefined) preview = req.preview?.(value, at) ?? [];
+      } else if (req.kind === 'entity' && req.stroke && this.strokePath) {
+        // What the path dragged so far would trim.
+        preview = req.stroke(this.strokePath.map((p) => vp.screenToWorld(this.view, p)));
       } else if (req.kind === 'entity') {
         // Highlight what a click would pick.
         const hit = this.pickAt(cursor, req.accepts);
@@ -918,6 +923,7 @@ export class App {
           .map((g) => g.grip.at),
         hotGrip: this.hotGrip?.grip.at,
         selectBox: this.selectBox,
+        ...(this.strokePath && { stroke: this.strokePath }),
         nextPoint: next,
         snap,
         ...(this.blockEdit && { basePoint: { x: 0, y: 0 } }),
@@ -1103,6 +1109,16 @@ export class App {
         if (this.runner.tool?.id === 'grip') this.place();
       },
       leftDragSelects: () => !this.runner.request || this.runner.request.kind === 'selection',
+      leftDragStrokes: () => this.runner.request?.kind === 'entity' && this.runner.request.stroke !== undefined,
+      stroke: (points, done) => {
+        if (!done) {
+          this.strokePath = points;
+          this.requestRedraw();
+          return;
+        }
+        this.strokePath = undefined;
+        this.send({ kind: 'stroke', points: points.map((p) => vp.screenToWorld(this.view, p)) });
+      },
       box: (from, to, done, shift) => {
         const mode = boxModeFor(from.x, to.x);
         if (!done) {

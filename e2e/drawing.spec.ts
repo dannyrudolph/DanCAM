@@ -1123,6 +1123,33 @@ test.describe('trim and extend', () => {
     await expect(prop(page, 'Start Y')).toHaveText('-1.00000000');
     await expect(prop(page, 'End Y')).toHaveText('0.00000000');
   });
+
+  test('a path dragged across the drawing trims every piece it crosses, as one undo step', async ({ page }) => {
+    const line = async (x: string, y: string, len: string, deg: string) => {
+      await page.keyboard.press('l');
+      await typeValues(page, x, y);
+      await typeValues(page, len, deg); // length, angle
+      await page.keyboard.press('Escape');
+    };
+    await line('0', '-0.5', '2', '90'); // edges at X 0 and 2
+    await line('2', '-0.5', '2', '90');
+    await line('-1', '0', '4', '0'); // two lines across them
+    await line('-1', '1', '4', '0');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -1, maxX: 3, minY: -0.5, maxY: 1.5 });
+
+    await page.keyboard.press('t');
+    const path = [at(1, -0.3), at(1.2, 0.5), at(0.9, 1.3)];
+    await page.mouse.move(path[0]!.x, path[0]!.y);
+    await page.mouse.down();
+    for (const p of path.slice(1)) await page.mouse.move(p.x, p.y, { steps: 8 });
+    await page.mouse.up();
+    await expect(prop(page, 'entity-count')).toHaveText('6'); // each line across lost its middle
+    await expect(page.locator('#status .status-prompt')).toHaveText(/^Trim: pick the part to remove/);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('4');
+  });
 });
 
 test.describe('dimensions', () => {
