@@ -1086,7 +1086,7 @@ test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
 });
 
 test.describe('trim and extend', () => {
-  test('Enter takes every object as an edge; a click trims and a Shift-click extends', async ({ page }) => {
+  test('every object is an edge from the start; a click trims and a Shift-click extends', async ({ page }) => {
     await page.keyboard.press('l');
     await typeValues(page, '0', '0');
     await typeValues(page, '0.5', '0');
@@ -1102,10 +1102,9 @@ test.describe('trim and extend', () => {
     const c = await canvasCenter(page);
     const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
 
-    await page.keyboard.press('t');
-    await expect(page.locator('#status .status-prompt')).toHaveText('Trim: select cutting edges, then Enter (Enter alone: all objects)');
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('t'); // every object is a cutting edge: straight to picking
     await expect(page.locator('#status .status-prompt')).toHaveText(/^Trim: pick the part to remove/);
+    await expect(page.locator('[data-option="method:all"]')).toHaveClass(/active/);
     const short = at(0.4, 0);
     await page.keyboard.down('Shift');
     await page.mouse.click(short.x, short.y);
@@ -1720,8 +1719,7 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
       await page.mouse.click(p.x, p.y);
     };
 
-    await page.keyboard.press('t');
-    await page.keyboard.press('Enter'); // every object is a cutting edge
+    await page.keyboard.press('t'); // every object is a cutting edge
     // Each xline: one far side, then inward from that side, then the other far side.
     const picks: [number, number][] = [
       [-0.05, 0], [1.05, 0], // centerline: Z 0 to 1

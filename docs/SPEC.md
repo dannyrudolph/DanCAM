@@ -119,8 +119,8 @@ Trim, extend and fillet are the core of the tool and get the most tests. Every c
 
 | Command | Short name (toolbar tooltip) | Behavior |
 | --- | --- | --- |
-| Trim | TR | Select cutting edges (Enter = all), then pick the pieces to remove. Shift-pick extends instead. Trimming a circle turns it into an arc. |
-| Extend | EX | Select boundaries (Enter = all), then pick near the end to extend. Arcs extend along their circle. Shift-pick trims instead. |
+| Trim | TR | Every object is a cutting edge by default: hovering highlights the piece up to the nearest crossings both ways, and a click removes it. "Select edges" (or a selection made first) limits the edges. Shift-pick extends instead. Trimming a circle turns it into an arc. |
+| Extend | EX | Every object is a boundary by default; pick near the end to extend. "Select edges" (or a selection made first) limits them. Arcs extend along their circle. Shift-pick trims instead. |
 | Fillet | F | Radius option; picks two entities and keeps the picked sides. Radius 0 makes a sharp corner. Trim mode on/off. |
 | Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45° |
 | Offset | O | By distance or through a point; arcs and circles offset concentrically |
