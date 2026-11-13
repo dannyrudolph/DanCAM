@@ -1,6 +1,7 @@
 import { type ChamferSpec, type Corner, chamferLines, filletCurves } from '../geometry/corner';
-import type { Curve } from '../geometry/curve';
-import type { Vec2 } from '../geometry/vec';
+import { type Curve, intersectCurves } from '../geometry/curve';
+import { TOL } from '../geometry/tolerance';
+import { type Vec2, distance } from '../geometry/vec';
 import { newEntityId } from '../model/drawing';
 import { type Entity, type EntityId, type EntityProps, entityCurve, entityFromCurve } from '../model/entity';
 import type { Change } from '../model/undo';
@@ -36,6 +37,30 @@ function previewOf(changes: readonly Change[]): Entity[] {
 
 const num = (n: number): string => String(n);
 
+/**
+ * The first two objects a dragged path crosses, in the order it crosses them,
+ * each with where it crosses (that side is kept). Undefined until it has
+ * crossed two.
+ */
+export function firstTwoCrossed(ctx: ToolContext, path: readonly Vec2[], accepts: (e: Entity) => boolean): [{ e: Entity; at: Vec2 }, { e: Entity; at: Vec2 }] | undefined {
+  const d = ctx.drawing;
+  const found: { e: Entity; at: Vec2 }[] = [];
+  for (let i = 1; i < path.length && found.length < 2; i++) {
+    const a = path[i - 1]!;
+    const b = path[i]!;
+    if (distance(a, b) <= TOL) continue;
+    const hits: { e: Entity; at: Vec2 }[] = [];
+    for (const e of d.entities.values()) {
+      if (d.layers.get(e.layer)?.visible === false || !accepts(e)) continue;
+      const c = entityCurve(e);
+      if (c) for (const at of intersectCurves({ kind: 'segment', a, b }, c)) hits.push({ e, at });
+    }
+    hits.sort((h, k) => distance(a, h.at) - distance(a, k.at));
+    for (const h of hits) if (found.length < 2 && !found.some((f) => f.e.id === h.e.id)) found.push(h);
+  }
+  return found.length === 2 ? [found[0]!, found[1]!] : undefined;
+}
+
 type CornerTool = {
   readonly id: string;
   readonly label: string;
@@ -61,6 +86,8 @@ type CornerTool = {
  * The shared run of Fillet and Chamfer: the size is asked for first (until it
  * has been typed once this session), then two objects are picked, the second
  * previewing the corner, and the corner is committed as one undo step.
+ * Instead of the two picks, a path dragged across two objects makes the
+ * corner between the first two it crosses, keeping the sides it crosses.
  * Sticky, so corner after corner can be made; the size and the trim mode are
  * remembered, and the "Change size" button asks again.
  */
@@ -89,11 +116,34 @@ function cornerTool(t: CornerTool): ToolDef {
         yield* t.askSize(ctx);
         if (!t.hasSize()) return;
       }
+      /** The corner a path makes: the first two objects it crosses, kept on the sides it crosses. */
+      const strokeChanges = (path: readonly Vec2[], jointId: () => EntityId): Change[] | undefined => {
+        const two = firstTwoCrossed(ctx, path, t.accepts);
+        if (!two) return undefined;
+        const [p, q] = two;
+        const k = t.make(entityCurve(p.e)!, p.at, entityCurve(q.e)!, q.at);
+        return k && cornerChanges(ctx, p.e, q.e, k, trim, k.joint ? jointId() : PREVIEW_ID);
+      };
       let first: { e: Entity; at: Vec2 } | undefined;
       for (;;) {
-        const input = yield { kind: 'entity', prompt: `${t.label} ${t.sizes()}: pick the first object`, accepts: t.accepts, options: allOptions() };
+        const input = yield {
+          kind: 'entity',
+          prompt: `${t.label} ${t.sizes()}: pick the first object, or drag across two`,
+          accepts: t.accepts,
+          options: allOptions(),
+          stroke: (path) => previewOf(strokeChanges(path, () => PREVIEW_ID) ?? []),
+        };
         if (input.kind === 'finish') return;
         if (yield* handled(ctx, input)) continue;
+        if (input.kind === 'stroke') {
+          const changes = strokeChanges(input.points, () => newEntityId(ctx.drawing));
+          if (!changes) {
+            ctx.message(firstTwoCrossed(ctx, input.points, t.accepts) ? t.fails : `Drag across two objects to ${t.label.toLowerCase()} the corner between them.`);
+            continue;
+          }
+          if (changes.length > 0) ctx.undo.commit({ label: t.label, changes });
+          return;
+        }
         const e = input.kind === 'entity' ? ctx.drawing.entities.get(input.id) : undefined;
         if (e && input.kind === 'entity') {
           first = { e, at: input.at };

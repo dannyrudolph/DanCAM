@@ -333,8 +333,7 @@ describe('reaching inside instances', () => {
     t.drawing.blocks.set('Tool', { ...TOOL, entities: TOOL.entities.slice(0, 1) });
     t.add(insert({ layer: '0', at: v(2, 1), rotationDeg: 90 })); // edge (2, 1)-(2, 2)
     t.add({ kind: 'line', id: 'X', layer: '0', start: v(1, 1.5), end: v(3, 1.5) });
-    t.runner.start(trimTool);
-    t.finish(); // every object is an edge
+    t.runner.start(trimTool); // every object is an edge
     t.pick('X', 2.5, 1.5);
     expect(t.drawing.entities.get('X')).toMatchObject({ start: v(1, 1.5), end: v(2, 1.5) });
     const req = t.runner.request;

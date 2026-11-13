@@ -70,6 +70,8 @@ export type Overlay = {
   readonly nextPoint: Vec2 | undefined;
   /** The object snap the cursor is on; drawn instead of the next-point marker. */
   readonly snap: Snap | undefined;
+  /** A path being dragged across the drawing (Trim by scribble), screen pixels. */
+  readonly stroke?: readonly Vec2[];
   /** Edit block: the block's base point (the origin), marked like the ordinate origin. */
   readonly basePoint?: Vec2;
 };
@@ -102,8 +104,23 @@ export function render(
   for (const g of overlay.grips) drawGrip(ctx, worldToScreen(v, g), COLORS.grip);
   if (overlay.hotGrip) drawGrip(ctx, worldToScreen(v, overlay.hotGrip), COLORS.hotGrip);
   if (overlay.selectBox) drawSelectBox(ctx, overlay.selectBox);
+  if (overlay.stroke) drawStroke(ctx, overlay.stroke);
   if (overlay.snap) drawSnapMark(ctx, worldToScreen(v, overlay.snap.at), overlay.snap.kind, overlay.snap.deferred !== undefined);
   else if (overlay.nextPoint) drawCursorMark(ctx, worldToScreen(v, overlay.nextPoint));
+}
+
+/** The scribble path: a thin line in the preview color. */
+function drawStroke(ctx: CanvasRenderingContext2D, points: readonly Vec2[]): void {
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = COLORS.preview;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(points[0]!.x, points[0]!.y);
+  for (const p of points.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawEntities(ctx: CanvasRenderingContext2D, v: Viewport, drawing: Drawing, selected: ReadonlySet<EntityId>): void {

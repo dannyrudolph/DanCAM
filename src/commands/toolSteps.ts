@@ -51,6 +51,24 @@ export class MethodChoice<K extends string> {
     }
   }
 
+  /**
+   * An object under the cursor that `req.pick` takes, or else a point (a
+   * click off the objects, a snap, or typed values).
+   */
+  *objectOrPoint(
+    ctx: ToolContext,
+    req: Ask<PointRequest> & { readonly pick: (e: Entity) => boolean },
+  ): Step<{ kind: 'object'; entity: Entity; at: Vec2 } | { kind: 'point'; at: Vec2; anchor?: Anchor }> {
+    for (;;) {
+      const input = yield* this.ask({ ...req, kind: 'point' });
+      if (!input) return undefined;
+      if (input.kind === 'point') return input.anchor ? { kind: 'point', at: input.at, anchor: input.anchor } : { kind: 'point', at: input.at };
+      if (input.kind !== 'entity') continue;
+      const entity = ctx.drawing.entities.get(input.id);
+      if (entity && req.pick(entity)) return { kind: 'object', entity, at: input.at };
+    }
+  }
+
   *value(req: Ask<ValueRequest>): Step<{ value: number; at: Vec2 }> {
     for (;;) {
       const input = yield* this.ask({ ...req, kind: 'value' });

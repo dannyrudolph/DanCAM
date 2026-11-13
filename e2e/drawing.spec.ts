@@ -1086,7 +1086,7 @@ test.describe('Phase 2 done-when: snaps land exactly, checked with ID', () => {
 });
 
 test.describe('trim and extend', () => {
-  test('Enter takes every object as an edge; a click trims and a Shift-click extends', async ({ page }) => {
+  test('every object is an edge from the start; a click trims and a Shift-click extends', async ({ page }) => {
     await page.keyboard.press('l');
     await typeValues(page, '0', '0');
     await typeValues(page, '0.5', '0');
@@ -1102,10 +1102,9 @@ test.describe('trim and extend', () => {
     const c = await canvasCenter(page);
     const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
 
-    await page.keyboard.press('t');
-    await expect(page.locator('#status .status-prompt')).toHaveText('Trim: select cutting edges, then Enter (Enter alone: all objects)');
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('t'); // every object is a cutting edge: straight to picking
     await expect(page.locator('#status .status-prompt')).toHaveText(/^Trim: pick the part to remove/);
+    await expect(page.locator('[data-option="method:all"]')).toHaveClass(/active/);
     const short = at(0.4, 0);
     await page.keyboard.down('Shift');
     await page.mouse.click(short.x, short.y);
@@ -1124,6 +1123,60 @@ test.describe('trim and extend', () => {
     await expect(prop(page, 'Start Y')).toHaveText('-1.00000000');
     await expect(prop(page, 'End Y')).toHaveText('0.00000000');
   });
+
+  test('a path dragged across the drawing trims every piece it crosses, as one undo step', async ({ page }) => {
+    const line = async (x: string, y: string, len: string, deg: string) => {
+      await page.keyboard.press('l');
+      await typeValues(page, x, y);
+      await typeValues(page, len, deg); // length, angle
+      await page.keyboard.press('Escape');
+    };
+    await line('0', '-0.5', '2', '90'); // edges at X 0 and 2
+    await line('2', '-0.5', '2', '90');
+    await line('-1', '0', '4', '0'); // two lines across them
+    await line('-1', '1', '4', '0');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -1, maxX: 3, minY: -0.5, maxY: 1.5 });
+
+    await page.keyboard.press('t');
+    const path = [at(1, -0.3), at(1.2, 0.5), at(0.9, 1.3)];
+    await page.mouse.move(path[0]!.x, path[0]!.y);
+    await page.mouse.down();
+    for (const p of path.slice(1)) await page.mouse.move(p.x, p.y, { steps: 8 });
+    await page.mouse.up();
+    await expect(prop(page, 'entity-count')).toHaveText('6'); // each line across lost its middle
+    await expect(page.locator('#status .status-prompt')).toHaveText(/^Trim: pick the part to remove/);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('4');
+  });
+
+  test('a path dragged across two lines fillets the corner between them', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '-1', '0');
+    await typeValues(page, '3', '0'); // length, angle: Z -1 to 2
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '-1');
+    await typeValues(page, '3', '90');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -1, maxX: 2, minY: -1, maxY: 2 });
+
+    await page.keyboard.press('f');
+    await typeValues(page, '0.25');
+    const path = [at(0.6, -0.3), at(0.6, 0.6), at(-0.3, 0.6)];
+    await page.mouse.move(path[0]!.x, path[0]!.y);
+    await page.mouse.down();
+    for (const p of path.slice(1)) await page.mouse.move(p.x, p.y, { steps: 8 });
+    await page.mouse.up();
+    await expect(prop(page, 'entity-count')).toHaveText('3'); // the two lines and the arc
+    await page.keyboard.press('Escape');
+    const arc = at(0.25 - 0.25 * Math.SQRT1_2, 0.25 - 0.25 * Math.SQRT1_2);
+    await page.mouse.click(arc.x, arc.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Arc /);
+    await expect(prop(page, 'Radius')).toHaveText('0.2500');
+  });
 });
 
 test.describe('dimensions', () => {
@@ -1140,6 +1193,8 @@ test.describe('dimensions', () => {
     const at = (x: number, y: number) => ({ x: c.x + (x - 0.5) * scale, y: c.y - y * scale });
 
     await page.keyboard.press('Shift+D');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick a line, arc or circle (or a point)');
+    await page.locator('[data-option="method:points"]').click(); // snaps, not objects
     await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick the first point to measure from');
     const near = (x: number, dx: number, dy: number) => ({ x: at(x, 0).x + dx, y: at(x, 0).y + dy }); // a few pixels off an end
     for (const p of [near(0, 4, -3), near(1, -4, 3), at(0.5, 0.3)]) await page.mouse.click(p.x, p.y); // Endpoint snaps take both
@@ -1166,6 +1221,38 @@ test.describe('dimensions', () => {
     await page.mouse.click(zeroText.x, zeroText.y);
     await expect(prop(page, 'Text')).toHaveText('.000');
   });
+});
+
+test('a linear dimension picks objects first: two faces of a step, highlighted under the cursor, measure between them', async ({ page }) => {
+  await page.keyboard.press('l');
+  await typeValues(page, '0', '0');
+  await typeValues(page, '1', '90'); // length, angle: a face at Z 0
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('l');
+  await typeValues(page, '0.75', '0');
+  await typeValues(page, '0.5', '90'); // a face at Z .75
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: 0, maxX: 0.75, minY: 0, maxY: 1 });
+
+  await page.keyboard.press('Shift+D');
+  await expect(page.locator('[data-option="method:object"]')).toHaveClass(/active/);
+  const face1 = at(0, 0.8);
+  await page.mouse.move(face1.x, face1.y);
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', ''); // the object, not a snap
+  await page.mouse.click(face1.x, face1.y);
+  await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick where the dimension line goes, or a second object');
+  const face2 = at(0.75, 0.25);
+  await page.mouse.click(face2.x, face2.y);
+  await expect(page.locator('#status .status-prompt')).toHaveText('Linear: pick where the dimension line goes');
+  const above = at(0.4, 0.75); // between the faces' ends: horizontal
+  await page.mouse.click(above.x, above.y);
+  await expect(prop(page, 'entity-count')).toHaveText('3');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(above.x, above.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Dimension /);
+  await expect(prop(page, 'Measured')).toHaveText('0.7500');
 });
 
 test.describe('dimension overrides in the properties panel', () => {
@@ -1388,6 +1475,7 @@ test('a dimension snapped to a line follows when the line is edited, and is eras
   };
 
   await page.keyboard.press('Shift+D');
+  await page.locator('[data-option="method:points"]').click(); // snaps, not objects
   await clickAt(0, 0, 'end');
   await clickAt(2, 0, 'end');
   await clickAt(1, 0.5);
@@ -1685,8 +1773,7 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
       await page.mouse.click(p.x, p.y);
     };
 
-    await page.keyboard.press('t');
-    await page.keyboard.press('Enter'); // every object is a cutting edge
+    await page.keyboard.press('t'); // every object is a cutting edge
     // Each xline: one far side, then inward from that side, then the other far side.
     const picks: [number, number][] = [
       [-0.05, 0], [1.05, 0], // centerline: Z 0 to 1
@@ -1706,7 +1793,7 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
     await page.locator('[data-option="angle"]').click();
     await typeValues(page, '0.010');
     await typeValues(page, '45');
-    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer 0.01 × 45°: pick the first object');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer 0.01 × 45°: pick the first object, or drag across two');
     await click(0.2, 0.125); // the Ø.250 line, measured along it
     await click(0, 0.06); // the front face
     await page.keyboard.press('Escape');
@@ -2001,6 +2088,7 @@ test.describe('blocks', () => {
     };
 
     await page.keyboard.press('Shift+D');
+    await page.locator('[data-option="method:points"]').click(); // snaps, not objects
     await click(0, 0); // Endpoint snap on the block's edge: its base end
     await click(3, 0.5); // the face's top end
     await click(1.5, 1); // dimension line above

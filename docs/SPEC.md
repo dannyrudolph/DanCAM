@@ -119,13 +119,13 @@ Trim, extend and fillet are the core of the tool and get the most tests. Every c
 
 | Command | Short name (toolbar tooltip) | Behavior |
 | --- | --- | --- |
-| Trim | TR | Select cutting edges (Enter = all), then pick the pieces to remove. Shift-pick extends instead. Trimming a circle turns it into an arc. |
-| Extend | EX | Select boundaries (Enter = all), then pick near the end to extend. Arcs extend along their circle. Shift-pick trims instead. |
-| Fillet | F | Radius option; picks two entities and keeps the picked sides. Radius 0 makes a sharp corner. Trim mode on/off. |
-| Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45° |
+| Trim | TR | Every object is a cutting edge by default: hovering highlights the piece up to the nearest crossings both ways, and a click removes it. "Select edges" (or a selection made first) limits the edges. A path dragged across the drawing (a scribble) removes every piece it crosses, as one undo step. Shift-pick extends instead. Trimming a circle turns it into an arc. |
+| Extend | EX | Every object is a boundary by default; pick near the end to extend. "Select edges" (or a selection made first) limits them. Arcs extend along their circle. Shift-pick trims instead. |
+| Fillet | F | Radius option; picks two entities and keeps the picked sides, or a path dragged across two (the first two it crosses; the sides it crosses are kept). Radius 0 makes a sharp corner. Trim mode on/off. |
+| Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45°. Picks two lines, or a path dragged across two (the first distance goes on the first one crossed) |
 | Offset | O | By distance or through a point; arcs and circles offset concentrically |
 | Break | BR | At a point, or between two points |
-| Join | J | Collinear lines into one line; arcs on the same circle into one arc |
+| Join | J | Collinear lines into one line; arcs on the same circle into one arc (a circle when they close it); one arc on its own closes into its circle |
 | Lengthen | LEN | Delta, total length or percent, for lines and arcs |
 | Move / Copy | M / CO | Base point and second point, with full snap and typed entry |
 | Rotate | RO | Base point and angle, or a reference angle |
@@ -145,11 +145,11 @@ Dimensions are annotation entities linked to the geometry they measure. When a m
 
 | Type | Picks | Shows |
 | --- | --- | --- |
-| Linear | Two points or one line; horizontal or vertical decided by drag direction, or forced | Distance along the axis |
-| Aligned | Two points or one line | True length |
+| Linear | Objects first: a line or arc (end to end), or two objects (line ends nearest the picks, arc and circle centers); or two points with snaps. Horizontal or vertical decided by drag direction, or forced | Distance along the axis |
+| Aligned | As Linear; between a line and a parallel line or a center, square to the line | True length |
 | Radius | Arc or circle | `R.015` |
 | Diameter | Circle or arc | `Ø.125` |
-| Angular | Two lines, an arc, or vertex + two points | Angle, with quadrant chosen by cursor |
+| Angular | Two lines (or an arc picked first), an arc, or vertex + two points | Angle, with quadrant chosen by cursor |
 | Symmetric diameter | Centerline (axis), then one or more feature points or edges | `Ø` + twice the distance from the axis |
 | Ordinate | Origin set once, then feature points | X or Z (Y) coordinate from the origin |
 | Baseline / Continue | Starts from an existing linear dimension | Stacked or chained linear dimensions |
