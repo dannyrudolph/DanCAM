@@ -121,8 +121,8 @@ Trim, extend and fillet are the core of the tool and get the most tests. Every c
 | --- | --- | --- |
 | Trim | TR | Every object is a cutting edge by default: hovering highlights the piece up to the nearest crossings both ways, and a click removes it. "Select edges" (or a selection made first) limits the edges. A path dragged across the drawing (a scribble) removes every piece it crosses, as one undo step. Shift-pick extends instead. Trimming a circle turns it into an arc. |
 | Extend | EX | Every object is a boundary by default; pick near the end to extend. "Select edges" (or a selection made first) limits them. Arcs extend along their circle. Shift-pick trims instead. |
-| Fillet | F | Radius option; picks two entities and keeps the picked sides. Radius 0 makes a sharp corner. Trim mode on/off. |
-| Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45° |
+| Fillet | F | Radius option; picks two entities and keeps the picked sides, or a path dragged across two (the first two it crosses; the sides it crosses are kept). Radius 0 makes a sharp corner. Trim mode on/off. |
+| Chamfer | CHA | Distance-distance or distance-angle, for edge breaks like .010 x 45°. Picks two lines, or a path dragged across two (the first distance goes on the first one crossed) |
 | Offset | O | By distance or through a point; arcs and circles offset concentrically |
 | Break | BR | At a point, or between two points |
 | Join | J | Collinear lines into one line; arcs on the same circle into one arc (a circle when they close it); one arc on its own closes into its circle |

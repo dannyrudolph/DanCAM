@@ -1150,6 +1150,33 @@ test.describe('trim and extend', () => {
     await page.keyboard.press('Control+z');
     await expect(prop(page, 'entity-count')).toHaveText('4');
   });
+
+  test('a path dragged across two lines fillets the corner between them', async ({ page }) => {
+    await page.keyboard.press('l');
+    await typeValues(page, '-1', '0');
+    await typeValues(page, '3', '0'); // length, angle: Z -1 to 2
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('l');
+    await typeValues(page, '0', '-1');
+    await typeValues(page, '3', '90');
+    await page.keyboard.press('Escape');
+    await page.getByTestId('zoom-extents').click();
+    const at = await extentsMapper(page, { minX: -1, maxX: 2, minY: -1, maxY: 2 });
+
+    await page.keyboard.press('f');
+    await typeValues(page, '0.25');
+    const path = [at(0.6, -0.3), at(0.6, 0.6), at(-0.3, 0.6)];
+    await page.mouse.move(path[0]!.x, path[0]!.y);
+    await page.mouse.down();
+    for (const p of path.slice(1)) await page.mouse.move(p.x, p.y, { steps: 8 });
+    await page.mouse.up();
+    await expect(prop(page, 'entity-count')).toHaveText('3'); // the two lines and the arc
+    await page.keyboard.press('Escape');
+    const arc = at(0.25 - 0.25 * Math.SQRT1_2, 0.25 - 0.25 * Math.SQRT1_2);
+    await page.mouse.click(arc.x, arc.y);
+    await expect(page.locator('#properties h2')).toHaveText(/^Arc /);
+    await expect(prop(page, 'Radius')).toHaveText('0.2500');
+  });
 });
 
 test.describe('dimensions', () => {
@@ -1766,7 +1793,7 @@ test.describe('Phase 3 done-when: a turned profile built from construction lines
     await page.locator('[data-option="angle"]').click();
     await typeValues(page, '0.010');
     await typeValues(page, '45');
-    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer 0.01 × 45°: pick the first object');
+    await expect(page.locator('#status .status-prompt')).toHaveText('Chamfer 0.01 × 45°: pick the first object, or drag across two');
     await click(0.2, 0.125); // the Ø.250 line, measured along it
     await click(0, 0.06); // the front face
     await page.keyboard.press('Escape');
