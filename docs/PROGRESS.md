@@ -827,6 +827,37 @@ dependency (the user agreed). First deployed 2026-11-10 from `phase-2`
 at `11eca54` (Worker version b958c8c1); checked live: the app loads at
 `/?lathe` with no page errors.
 
+## Drafting tweaks (user, 2026-11-12), on `phase-2`
+
+All done, committed one per item, not yet pushed or deployed.
+
+- **Dimensions pick objects first.** Linear and Aligned start in
+  "Objects": the line, arc or circle under the cursor highlights
+  (`PointRequest.pick`; the object wins over snaps) and a click takes it,
+  a line or arc end to end. A second object before placing measures
+  between them (line ends nearest the picks, arc and circle centers;
+  Aligned square to a line against a parallel line or a center). Off the
+  geometry, a click or typed values still give two points; "Two points"
+  is the snap-only way. Angular's "Two lines" takes an arc first.
+- **Trim and Extend start at the pick step**, every visible object an
+  edge, the piece under the cursor highlighted. "Select edges" brings back
+  edges-first (remembered for the session); a selection made first still
+  sets the edges.
+- **Join closes one arc into its circle** (as AutoCAD), so a trimmed
+  circle can be made whole. Extend deliberately never closes an arc.
+- **Scribble trim** (as Solid Edge): a path dragged at Trim's pick step
+  removes every piece it crosses, one undo step, previewed while dragging
+  (`EntityRequest.stroke`, a `stroke` input; `ui/input` draws the path).
+  Crossings are measured against the drawing before the path. Objects
+  crossed where no edge cuts them are left alone.
+- **Scribble fillet and chamfer:** a path across two objects at the first
+  pick makes the corner between the first two it crosses, keeping the
+  sides crossed. One corner per path.
+
+Open: whether a scribble should fillet every consecutive pair it crosses
+(a whole profile in one drag); whether scribble trim should delete crossed
+objects that nothing cuts (AutoCAD's quick trim does).
+
 ## Open questions
 
 - Trackpad: done. Two-finger scroll pans, pinch zooms; "Scroll: Zoom" in the
