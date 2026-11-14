@@ -1,5 +1,8 @@
+import { nearlyZero } from '../geometry/tolerance';
 import type { Vec2 } from '../geometry/vec';
-import type { Drawing } from './drawing';
+import { DEFAULT_LAYER, type Drawing, newEntityId } from './drawing';
+import type { XlineEntity } from './entity';
+import { UndoStack } from './undo';
 import type { Row } from './properties';
 
 /**
@@ -52,4 +55,33 @@ export function viewRow(r: Row, v: AxisView): Row {
 /** A point as the view shows it: [horizontal, vertical]. */
 export function viewPoint(p: Vec2, v: AxisView): readonly [number, number] {
   return [p.x, p.y * radialFactor(v)];
+}
+
+/**
+ * Lathe mode's centerline: an ordinary xline along Y = 0 in the Center
+ * style, so it can be picked, snapped to, trimmed to or offset like any
+ * other line. Any horizontal xline through Y = 0 counts.
+ */
+export function latheAxis(d: Drawing): XlineEntity | undefined {
+  for (const e of d.entities.values()) {
+    if (e.kind === 'xline' && nearlyZero(e.base.y) && nearlyZero(e.dir.y)) return e;
+  }
+  return undefined;
+}
+
+/** A new lathe centerline for `d` when it has none (lathe mode just turned on), else undefined. */
+export function missingLatheAxis(d: Drawing): XlineEntity | undefined {
+  if (!d.lathe || latheAxis(d)) return undefined;
+  const layer = d.layers.has(d.currentLayer) ? d.currentLayer : DEFAULT_LAYER;
+  return { kind: 'xline', id: newEntityId(d), layer, style: 'center', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } };
+}
+
+/**
+ * A drawing as loaded (a file from before the centerline was geometry, or a
+ * demo) given its lathe centerline as initial state: the caller starts a
+ * fresh undo history afterwards.
+ */
+export function withLatheAxis(d: Drawing): void {
+  const axis = missingLatheAxis(d);
+  if (axis) new UndoStack(d).commit({ label: 'Lathe centerline', changes: [{ op: 'add', entity: axis }] });
 }

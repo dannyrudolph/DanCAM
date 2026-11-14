@@ -1501,7 +1501,7 @@ test('a dimension snapped to a line follows when the line is edited, and is eras
   await expect(prop(page, 'Measured')).toHaveText('2.5000');
 });
 
-test('Symmetric diameter in lathe mode: a snapped shoulder reads Ø twice its height, and follows the profile', async ({ page }) => {
+test('Symmetric diameter in lathe mode: a picked edge reads Ø twice its height, and follows the profile', async ({ page }) => {
   await page.getByTestId('lathe').click();
   await page.keyboard.press('l');
   await typeValues(page, '0', '0.5');
@@ -1518,13 +1518,13 @@ test('Symmetric diameter in lathe mode: a snapped shoulder reads Ø twice its he
   await expect(page.getByTestId('tool-dimSymmetric')).toHaveClass(/active/);
   let p = at(1, 0.5);
   await page.mouse.move(p.x - 2, p.y + 2);
-  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', ''); // the edge wins over the End snap: its nearer end, anchored
   await page.mouse.click(p.x - 2, p.y + 2);
   p = at(1.3, 0.2);
   await page.mouse.click(p.x, p.y);
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
-  await expect(prop(page, 'entity-count')).toHaveText('3');
+  await expect(prop(page, 'entity-count')).toHaveText('4'); // the line, the point, the lathe centerline and the dimension
 
   const dim = at(1.3, 0.45); // on the dimension line, between the arrow and the text
   await page.mouse.click(dim.x, dim.y);
@@ -1596,7 +1596,7 @@ test('Ordinate in lathe mode: Z by a vertical leader, X as Ø by a sideways one;
   await expect(option('Z ordinate')).toBeVisible();
   let p = at(1, 0.125);
   await page.mouse.move(p.x - 2, p.y + 2);
-  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', 'end');
+  await expect(page.locator('#canvas')).toHaveAttribute('data-snap', ''); // the edge wins over the End snap: its nearer end
   await page.mouse.click(p.x - 2, p.y + 2);
   p = at(1, 0.6); // straight up: a Z ordinate
   await page.mouse.click(p.x, p.y);
@@ -1611,7 +1611,7 @@ test('Ordinate in lathe mode: Z by a vertical leader, X as Ø by a sideways one;
   await page.mouse.click(p.x, p.y + 2);
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
-  await expect(prop(page, 'entity-count')).toHaveText('5');
+  await expect(prop(page, 'entity-count')).toHaveText('6'); // with the lathe centerline
 
   p = at(1, 0.4); // on the Z ordinate's leader
   await page.mouse.click(p.x, p.y);
@@ -1644,7 +1644,7 @@ test('Align ordinates puts the selected ordinates\' leader ends on one level', a
   await page.keyboard.press('Shift+Z');
   await click(1, 0); // the line's end
   await click(1, 0.6);
-  await click(0.5, 0); // its midpoint
+  await typeValues(page, '0.5', '0'); // its midpoint, typed: over the line a click picks the line (its nearer end)
   await click(0.5, 1.2); // too far above the first to snap to its baseline
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
@@ -1865,7 +1865,7 @@ test.describe('Phase 5: a second lathe part, the shaft, dimensioned the lathe wa
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/?shaft');
-    await expect(prop(page, 'entity-count')).toHaveText('26');
+    await expect(prop(page, 'entity-count')).toHaveText('27'); // with the lathe centerline
     await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
@@ -1901,7 +1901,7 @@ test.describe('Phase 5 done-when: a turned pin in lathe mode, checked text by te
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/?lathe');
-    await expect(prop(page, 'entity-count')).toHaveText('23');
+    await expect(prop(page, 'entity-count')).toHaveText('24'); // with the lathe centerline
     await expect(page.getByTestId('sheet-scale')).toHaveValue('10');
     await expect(page.getByTestId('lathe')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId('diameter')).toHaveAttribute('aria-pressed', 'true');
@@ -2293,6 +2293,27 @@ test.describe('blocks', () => {
   });
 });
 
+test('lathe mode\'s centerline is a real line: it can be picked, it is one undo step, and turning lathe mode on again adds no second one', async ({ page }) => {
+  await page.keyboard.press('c');
+  await typeValues(page, '0', '1');
+  await typeValues(page, '2');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('zoom-extents').click();
+  const at = await extentsMapper(page, { minX: -2, maxX: 2, minY: -1, maxY: 3 });
+  await page.getByTestId('lathe').click();
+  await expect(prop(page, 'entity-count')).toHaveText('2');
+  await page.getByTestId('lathe').click();
+  await page.getByTestId('lathe').click();
+  await expect(prop(page, 'entity-count')).toHaveText('2');
+  await page.getByTestId('zoom-extents').click(); // the centerline is infinite: the extents stay the circle's
+  const p = at(-2.5, 0); // left of the circle, on the axis
+  await page.mouse.click(p.x, p.y);
+  await expect(page.locator('#properties h2')).toHaveText(/^Xline /);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z');
+  await expect(prop(page, 'entity-count')).toHaveText('1');
+});
+
 test('lathe mode marks Z0 X0 with a faint center mark, and a click near it starts a line exactly there', async ({ page }) => {
   await page.keyboard.press('c');
   await typeValues(page, '3', '3');
@@ -2347,7 +2368,7 @@ test.describe('Import STEP', () => {
     await expect(page.locator('[data-option="zero:right"]')).toHaveClass(/active/);
     await expect(status).toHaveText('Import pin-mm.step: choose the profile or three views, where Z0 goes and how it turns, then click or press Enter to place it');
     await page.keyboard.press('Enter');
-    await expect(prop(page, 'entity-count')).toHaveText('14');
+    await expect(prop(page, 'entity-count')).toHaveText('15'); // with the lathe centerline
     await expect(status).toHaveText('Imported pin-mm.step: 14 lines and arcs on layer pin-mm.');
     await expect(page.locator('#layers')).toContainText('pin-mm');
 
@@ -2371,6 +2392,8 @@ test.describe('Import STEP', () => {
 
     await page.keyboard.press('Escape');
     await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('1'); // the lathe centerline, its own step
+    await page.keyboard.press('Control+z');
     await expect(prop(page, 'entity-count')).toHaveText('0');
   });
 
@@ -2383,7 +2406,7 @@ test.describe('Import STEP', () => {
 
     await importFile(page, 'test-fixtures/step/make_fixtures.py');
     await expect(status).toHaveText("Can't import make_fixtures.py: This is not a STEP file (it should start with ISO-10303-21;).");
-    await expect(prop(page, 'entity-count')).toHaveText('3');
+    await expect(prop(page, 'entity-count')).toHaveText('4'); // with the lathe centerline
   });
 
   test('3 views: the shaft laid out third-angle, its cross hole a circle in the top view, a layer per view', async ({ page }) => {
@@ -2411,6 +2434,8 @@ test.describe('Import STEP', () => {
     await expect(prop(page, 'Layer').locator('select')).toHaveValue('shaft top');
 
     await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+z');
+    await expect(prop(page, 'entity-count')).toHaveText('1'); // the lathe centerline, its own step
     await page.keyboard.press('Control+z');
     await expect(prop(page, 'entity-count')).toHaveText('0');
   });

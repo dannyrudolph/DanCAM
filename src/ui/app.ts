@@ -32,7 +32,7 @@ import { type BoxMode, boxModeFor, selectInBox } from '../model/selection';
 import { type Transaction, UndoStack } from '../model/undo';
 import { ensureCurrentLayer } from '../model/layers';
 import { ensureCurrentDimStyle } from '../model/dimStyles';
-import { axisView } from '../model/latheView';
+import { axisView, missingLatheAxis, withLatheAxis } from '../model/latheView';
 import { MM_PER_INCH, UNIT_LABEL, convertUnits, relabelUnits } from '../model/units';
 import { GRIP_PX, render } from '../render/renderer';
 import * as vp from '../render/viewport';
@@ -288,6 +288,7 @@ export class App {
     const g = this.canvas.getContext('2d');
     if (!g) throw new Error('Canvas 2D is not available');
     this.g = g;
+    withLatheAxis(drawing);
     this.drawing = drawing;
     this.undo = new UndoStack(drawing);
     this.runner = this.makeRunner();
@@ -309,6 +310,10 @@ export class App {
           d.lathe = lathe;
           d.diameterMode = diameter;
         }
+        // The centerline is real geometry (pickable, snappable): adding it is a drawing change, so it is undoable.
+        const top = this.blockEdit ? { d: this.blockEdit.outer, undo: this.blockEdit.outerUndo } : { d: this.drawing, undo: this.undo };
+        const axis = missingLatheAxis(top.d);
+        if (axis) top.undo.commit({ label: 'Lathe centerline', changes: [{ op: 'add', entity: axis }] });
         this.status.showMessage(lathe ? `Lathe mode: Z and X${diameter ? ', X as diameter' : ''}` : 'Lathe mode off');
         this.boxes.relabel();
         this.refresh();
@@ -351,6 +356,7 @@ export class App {
   private setDrawing(d: Drawing): void {
     this.runner.stop();
     this.menu.close();
+    withLatheAxis(d);
     this.drawing = d;
     this.undo = new UndoStack(d);
     this.runner = this.makeRunner();
@@ -449,6 +455,8 @@ export class App {
       return;
     }
     this.drawing.lathe = true; // a setting, like the Lathe button: not undoable
+    const axis = missingLatheAxis(this.drawing);
+    if (axis) this.undo.commit({ label: 'Lathe centerline', changes: [{ op: 'add', entity: axis }] });
     const stepModel = model.ok ? model.model : undefined;
     const units = this.drawing.units;
     const views: ViewsFor | undefined = stepModel

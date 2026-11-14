@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatReadout } from '../ui/statusBar';
-import { axisNames, radialFactor, viewLabel, viewRow } from './latheView';
+import { createDrawing } from './drawing';
+import { axisNames, latheAxis, missingLatheAxis, radialFactor, viewLabel, viewRow, withLatheAxis } from './latheView';
 
 const plain = { lathe: false, diameter: false };
 const lathe = { lathe: true, diameter: false };
@@ -36,5 +37,29 @@ describe('lathe view', () => {
     expect(formatReadout(p, 4)).toBe('1.2500, 0.0625');
     expect(formatReadout(p, 4, lathe)).toBe('Z 1.2500  X 0.0625');
     expect(formatReadout(p, 4, dia)).toBe('Z 1.2500  Ø 0.1250');
+  });
+});
+
+describe('lathe centerline', () => {
+  it('is a real xline at Y = 0 in the Center style, added once, only in lathe mode', () => {
+    const d = createDrawing('in');
+    withLatheAxis(d);
+    expect(d.entities.size).toBe(0);
+    d.lathe = true;
+    withLatheAxis(d);
+    expect([...d.entities.values()]).toEqual([{ kind: 'xline', id: 'e1', layer: '0', style: 'center', base: { x: 0, y: 0 }, dir: { x: 1, y: 0 } }]);
+    withLatheAxis(d);
+    expect(d.entities.size).toBe(1);
+    expect(missingLatheAxis(d)).toBeUndefined();
+  });
+
+  it('any horizontal xline through Y = 0 counts; one elsewhere or sloped does not', () => {
+    const d = createDrawing('in');
+    d.lathe = true;
+    d.entities.set('A', { kind: 'xline', id: 'A', layer: '0', base: { x: 2, y: 0.5 }, dir: { x: 1, y: 0 } });
+    d.entities.set('B', { kind: 'xline', id: 'B', layer: '0', base: { x: 0, y: 0 }, dir: { x: 0.6, y: 0.8 } });
+    expect(latheAxis(d)).toBeUndefined();
+    d.entities.set('C', { kind: 'xline', id: 'C', layer: '0', base: { x: 3, y: 0 }, dir: { x: -1, y: 0 } });
+    expect(latheAxis(d)?.id).toBe('C');
   });
 });

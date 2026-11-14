@@ -8,7 +8,7 @@ import type { DimensionEntity, Entity, EntityId, LineEntity } from '../model/ent
 
 export { angleBetweenLines } from '../model/associate';
 import type { Request, ToolContext, ToolDef, ToolGen, ToolInput, ToolOption } from './tool';
-import { MethodChoice, PREVIEW_ID, addEntity } from './toolSteps';
+import { MethodChoice, PREVIEW_ID, addEntity, nearerEnd } from './toolSteps';
 
 const H: Vec2 = { x: 1, y: 0 };
 const V: Vec2 = { x: 0, y: 1 };
@@ -351,6 +351,12 @@ export function createAngularDimTool(): ToolDef {
   };
 }
 
+/** A line running parallel to the axis through `base` along `dir`, off it: one diameter all along. */
+function isParallelEdge(e: LineEntity, base: Vec2, dir: Vec2): boolean {
+  if (distance(e.start, e.end) <= TOL || Math.abs(cross(unit(sub(e.end, e.start)), dir)) > TOL) return false;
+  return Math.abs(cross(sub(e.start, base), dir)) > TOL;
+}
+
 /** The lathe centerline: Y = 0, Z increasing. */
 const LATHE_AXIS = { base: { x: 0, y: 0 }, dir: H } as const;
 
@@ -359,7 +365,9 @@ const LATHE_AXIS = { base: { x: 0, y: 0 }, dir: H } as const;
  * mode, or a picked line, ray or xline), then feature after feature, each
  * followed by where its dimension line goes, until Enter. Each reads Ø
  * twice the feature's distance from the axis; snapped features are
- * anchored, and so is a picked centerline.
+ * anchored, and so is a picked centerline. An edge parallel to the axis
+ * under the cursor is picked before snaps, measured at its end nearer the
+ * click (spec, "feature points or edges").
  */
 export function createSymmetricDimTool(): ToolDef {
   const name = 'Symmetric diameter';
@@ -391,8 +399,11 @@ export function createSymmetricDimTool(): ToolDef {
       const { base, dir } = axis;
       const layer = ctx.newProps().layer;
       for (;;) {
-        const feature = yield* method.anchoredPoint({ prompt: `${name}: pick a feature (Enter to finish)`, canFinish: true });
-        if (!feature) return;
+        const isEdge = (e: Entity): boolean => e.kind === 'line' && e.id !== axisId && isParallelEdge(e, base, dir);
+        const got = yield* method.objectOrPoint(ctx, { prompt: `${name}: pick an edge or a feature (Enter to finish)`, pick: isEdge, canFinish: true });
+        if (!got) return;
+        if (got.kind === 'object' && got.entity.kind !== 'line') continue;
+        const feature: { at: Vec2; anchor?: Anchor } = got.kind === 'object' && got.entity.kind === 'line' ? nearerEnd(got.entity, got.at) : got;
         const p1 = feature.at;
         const along = dot(sub(p1, base), dir);
         const axisBase = { x: base.x + dir.x * along, y: base.y + dir.y * along };

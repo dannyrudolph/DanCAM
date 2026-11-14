@@ -113,7 +113,7 @@ describe('Symmetric diameter tool', () => {
     t.drawing.lathe = true;
     t.add({ kind: 'line', id: 'P', layer: '0', start: v(0, 0.0625), end: v(0.2, 0.0625) });
     t.runner.start(createSymmetricDimTool());
-    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick a feature (Enter to finish)');
+    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick an edge or a feature (Enter to finish)');
     t.runner.send({ kind: 'point', at: v(0.2, 0.0625), anchor: { id: 'P', feature: 'end' } });
     t.click(0.25, 0.03);
     t.click(0.5, 0.094); // typed: not anchored
@@ -123,9 +123,26 @@ describe('Symmetric diameter tool', () => {
     expect(dims.map((e) => dimensionLayout(t.drawing, e).text.main)).toEqual(['Ø.125', 'Ø.188']);
     expect(dims[0]).toMatchObject({ axisBase: v(0.2, 0), axisDir: v(1, 0), at: v(0.25, 0.03), anchors: { p1: { id: 'P', feature: 'end' } } });
     expect('anchors' in dims[1]!).toBe(false);
-    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick a feature (Enter to finish)'); // sticky: ready for the next profile
+    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick an edge or a feature (Enter to finish)'); // sticky: ready for the next profile
     t.undo.undo();
     expect(t.entities().filter((e) => e.kind === 'dimension')).toHaveLength(1);
+  });
+
+  it('an edge parallel to the axis is picked before snaps, measured at its end nearer the click and anchored; others are left to snaps', () => {
+    const t = setup();
+    t.drawing.lathe = true;
+    const nose: Entity = { kind: 'line', id: 'N', layer: '0', start: v(0.01, 0.0625), end: v(0.25, 0.0625) };
+    const shoulder: Entity = { kind: 'line', id: 'S', layer: '0', start: v(0.25, 0.0625), end: v(0.25, 0.094) };
+    const onAxis: Entity = { kind: 'line', id: 'A', layer: '0', start: v(0, 0), end: v(0.75, 0) };
+    for (const e of [nose, shoulder, onAxis]) t.add(e);
+    t.runner.start(createSymmetricDimTool());
+    const pick = t.runner.request?.kind === 'point' ? t.runner.request.pick : undefined;
+    expect([nose, shoulder, onAxis].map((e) => pick?.(e))).toEqual([true, false, false]);
+    t.pick('N', 0.05, 0.0625);
+    t.click(0.14, 0.03);
+    const dim = t.entities().find((e): e is Sym => e.kind === 'dimension')!;
+    expect(dimensionLayout(t.drawing, dim).text.main).toBe('Ø.125');
+    expect(dim).toMatchObject({ p1: v(0.01, 0.0625), anchors: { p1: { id: 'N', feature: 'start' } } });
   });
 
   it('a point on the centerline is refused', () => {
@@ -134,7 +151,7 @@ describe('Symmetric diameter tool', () => {
     t.runner.start(createSymmetricDimTool());
     t.click(0.3, 0);
     expect(t.messages).toEqual(['That point is on the centerline; pick a feature off it.']);
-    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick a feature (Enter to finish)');
+    expect(t.runner.request?.prompt).toBe('Symmetric diameter: pick an edge or a feature (Enter to finish)');
   });
 
   it('outside lathe mode it asks for the centerline first, and anchors to it', () => {
