@@ -1,7 +1,7 @@
-import type { Vec2 } from '../geometry/vec';
+import { type Vec2, distance } from '../geometry/vec';
 import type { Anchor } from '../model/anchor';
 import { newEntityId } from '../model/drawing';
-import type { Entity, EntityId } from '../model/entity';
+import type { Entity, EntityId, LineEntity } from '../model/entity';
 import type { EntityRequest, PointRequest, Request, ToolContext, ToolInput, ToolOption, ValueRequest } from './tool';
 
 /** A creation method a tool offers as a button in its options bar. */
@@ -105,6 +105,15 @@ export function addEntity<E extends Entity>(ctx: ToolContext, label: string, mak
   const e = make(newEntityId(ctx.drawing));
   ctx.undo.commit({ label, changes: [{ op: 'add', entity: e }] });
   return e;
+}
+
+/**
+ * A picked edge as a measured point: its end nearer where it was clicked,
+ * anchored there so the dimension follows the line.
+ */
+export function nearerEnd(e: LineEntity, click: Vec2): { at: Vec2; anchor: Anchor } {
+  const start = distance(click, e.start) <= distance(click, e.end);
+  return { at: start ? e.start : e.end, anchor: { id: e.id, feature: start ? 'start' : 'end' } };
 }
 
 /** Id given to preview entities, which never enter the drawing. */

@@ -68,7 +68,7 @@ describe('Ordinate tool', () => {
   it('feature after feature from the origin: X by a vertical drag, Y by a sideways one; each one undo step until Enter', () => {
     const t = setup();
     t.runner.start(createOrdinateDimTool());
-    expect(t.runner.request?.prompt).toBe('Ordinate: pick a feature (Enter to finish)');
+    expect(t.runner.request?.prompt).toBe('Ordinate: pick an edge or a feature (Enter to finish)');
     expect(t.runner.request?.options?.map((o) => o.label)).toEqual(['Auto', 'X ordinate', 'Y ordinate', 'Set origin']);
     t.click(0.5, 0.25);
     t.click(0.5, 1);
@@ -77,7 +77,7 @@ describe('Ordinate tool', () => {
     t.finish();
     expect(texts(t)).toEqual(['.500', '.250']);
     expect(ords(t)[0]).toMatchObject({ axis: 'x', origin: v(0, 0), at: v(0.5, 1) });
-    expect(t.runner.request?.prompt).toBe('Ordinate: pick a feature (Enter to finish)'); // sticky
+    expect(t.runner.request?.prompt).toBe('Ordinate: pick an edge or a feature (Enter to finish)'); // sticky
     t.undo.undo();
     expect(texts(t)).toEqual(['.500']);
   });
@@ -124,6 +124,31 @@ describe('Ordinate tool', () => {
     t.undo.commit({ label: 'Edit', changes: [{ op: 'modify', before: line, after: { ...line, end: v(0.625, 0.25) } }] });
     expect(texts(t)).toEqual(['.625']);
     expect(ords(t)[0]!.at).toEqual(v(0.625, 1));
+  });
+
+  it('a vertical or horizontal edge is picked before snaps, measured at its end nearer the click and anchored; the drag still says Z or X', () => {
+    const t = setup();
+    t.drawing.lathe = true;
+    t.drawing.diameterMode = true;
+    const shoulder: Entity = { kind: 'line', id: 'S', layer: '0', start: v(0.25, 0.0625), end: v(0.25, 0.094) };
+    const body: Entity = { kind: 'line', id: 'B', layer: '0', start: v(0.25, 0.094), end: v(0.6, 0.094) };
+    const slope: Entity = { kind: 'line', id: 'C', layer: '0', start: v(0, 0.05), end: v(0.01, 0.06) };
+    for (const e of [shoulder, body, slope]) t.add(e);
+    t.runner.start(createOrdinateDimTool());
+    const pick = t.runner.request?.kind === 'point' ? t.runner.request.pick : undefined;
+    expect([shoulder, body, slope].map((e) => pick?.(e))).toEqual([true, true, false]); // a sloped edge is left to snaps
+    t.pick('S', 0.25, 0.09);
+    t.click(0.25, 0.3); // up: the shoulder's Z
+    t.pick('B', 0.5, 0.094);
+    t.click(0.8, 0.094); // sideways: the body's Ø
+    t.pick('B', 0.3, 0.094);
+    t.click(0.25, 0.3); // up from the near end: its Z
+    expect(texts(t)).toEqual(['.250', 'Ø.188', '.250']);
+    expect(ords(t).map((o) => [o.axis, o.p1, o.anchors?.p1])).toEqual([
+      ['x', v(0.25, 0.094), { id: 'S', feature: 'end' }],
+      ['y', v(0.6, 0.094), { id: 'B', feature: 'end' }],
+      ['x', v(0.25, 0.094), { id: 'B', feature: 'start' }],
+    ]);
   });
 
   it('the text cannot go on the feature', () => {
